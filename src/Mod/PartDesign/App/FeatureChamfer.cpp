@@ -172,9 +172,12 @@ App::DocumentObjectExecReturn* Chamfer::execute()
             flipDirection ? Part::Flip::flip : Part::Flip::none
         );
         if (shape.isNull()) {
-            return new App::DocumentObjectExecReturn(
-                QT_TRANSLATE_NOOP("Exception", "Failed to create chamfer")
-            );
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP(
+                "Exception",
+                "Chamfer produced an empty (null) shape.\n"
+                "The OCC kernel accepted the parameters but generated no geometry.\n"
+                "Fix: try a smaller chamfer size or select different edges."
+            ));
         }
 
         TopTools_ListOfShape aLarg;
@@ -203,13 +206,22 @@ App::DocumentObjectExecReturn* Chamfer::execute()
         this->Shape.setValue(shape);
         return App::DocumentObject::StdReturn;
     }
+    catch (Base::Exception& e) {
+        return new App::DocumentObjectExecReturn(e.what());
+    }
     catch (Standard_Failure& e) {
-        return new App::DocumentObjectExecReturn(e.GetMessageString());
+        std::string msg = std::string("Chamfer failed: ") + e.GetMessageString()
+            + "\nThe OCC geometry kernel rejected the chamfer parameters."
+            + "\nFix: try a smaller size or select different edges.";
+        return new App::DocumentObjectExecReturn(msg.c_str());
     }
     catch (...) {
-        return new App::DocumentObjectExecReturn(
-            QT_TRANSLATE_NOOP("Exception", "Chamfer failed: OCC kernel error in chamfer computation")
-        );
+        return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP(
+            "Exception",
+            "Chamfer operation failed with an unexpected error.\n"
+            "The OCC kernel encountered an error during chamfer computation.\n"
+            "Fix: try a smaller chamfer size or select different edges."
+        ));
     }
 }
 

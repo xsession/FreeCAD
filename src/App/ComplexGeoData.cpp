@@ -349,6 +349,9 @@ void ComplexGeoData::setElementMap(const std::vector<MappedElement>& map)
     _elementMap = std::make_shared<Data::ElementMap>();  // Get rid of the old one, if any, but make
                                                          // sure the memory exists for the new data.
     for (auto& element : map) {
+        if (!element.index) {
+            continue;  // skip null elements from corrupted/incompatible data
+        }
         _elementMap->setElementName(element.index, element.name, Tag);
     }
 }

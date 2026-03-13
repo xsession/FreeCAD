@@ -141,7 +141,24 @@ INSTALL(TARGETS Path DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_library(tsp_solver SHARED tsp_solver_pybind.cpp tsp_solver.cpp)
 target_include_directories(tsp_solver PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${pybind11_INCLUDE_DIR})
-target_link_libraries(tsp_solver PRIVATE pybind11::module Python3::Python)
+target_link_libraries(tsp_solver PRIVATE pybind11::headers ${Python3_LIBRARIES})
+target_include_directories(tsp_solver PRIVATE ${Python3_INCLUDE_DIRS})
+if(MSVC)
+    target_link_libraries(tsp_solver PRIVATE
+        debug MSVCRTD.LIB
+        debug MSVCPRTD.LIB
+        optimized MSVCRT.LIB
+        optimized MSVCPRT.LIB
+    )
+    if (NOT (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "19"))
+        target_link_libraries(tsp_solver PRIVATE
+            debug vcruntimed.lib
+            debug ucrtd.lib
+            optimized vcruntime.lib
+            optimized ucrt.lib
+        )
+    endif()
+endif()
 if (FREECAD_WARN_ERROR)
     target_compile_warn_error(tsp_solver)
 endif()

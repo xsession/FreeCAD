@@ -41,7 +41,10 @@ SET(Import_SRCS
     SketchExportHelper.cpp
     SketchExportHelper.h
     dxf/ImpExpDxf.cpp
+    dxf/ImpExpDxfCallbacks.cpp
+    dxf/ImpExpDxfWrite.cpp
     dxf/ImpExpDxf.h
+    dxf/ImpExpDxfHelpers.h
     dxf/dxf.cpp
     dxf/dxf.h
 )

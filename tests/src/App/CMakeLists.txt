@@ -9,6 +9,7 @@ add_executable(App_tests_run
         Document.cpp
         DocumentObject.cpp
         DocumentObserver.cpp
+        DocumentRecompute.cpp
         Expression.cpp
         ExpressionParser.cpp
         ElementMap.cpp

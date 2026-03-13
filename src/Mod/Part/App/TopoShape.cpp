@@ -417,21 +417,19 @@ static inline std::vector<T> _getSubShapes(const TopoDS_Shape& s, TopAbs_ShapeEn
     return shapes;
 }
 
-static std::array<std::string, TopAbs_SHAPE> _ShapeNames;
-
-static void initShapeNameMap()
-{
-    if (_ShapeNames[TopAbs_VERTEX].empty()) {
-        _ShapeNames[TopAbs_VERTEX] = "Vertex";
-        _ShapeNames[TopAbs_EDGE] = "Edge";
-        _ShapeNames[TopAbs_FACE] = "Face";
-        _ShapeNames[TopAbs_WIRE] = "Wire";
-        _ShapeNames[TopAbs_SHELL] = "Shell";
-        _ShapeNames[TopAbs_SOLID] = "Solid";
-        _ShapeNames[TopAbs_COMPOUND] = "Compound";
-        _ShapeNames[TopAbs_COMPSOLID] = "CompSolid";
-    }
-}
+// Use const char* array to avoid static initialization order issues with std::string in DLLs.
+// The previous mutable std::array<std::string, 8> could be corrupted in certain DLL loading scenarios.
+static const char* const _ShapeNamesCStr[] = {
+    "Compound",   // TopAbs_COMPOUND  = 0
+    "CompSolid",  // TopAbs_COMPSOLID = 1
+    "Solid",      // TopAbs_SOLID     = 2
+    "Shell",      // TopAbs_SHELL     = 3
+    "Face",       // TopAbs_FACE      = 4
+    "Wire",       // TopAbs_WIRE      = 5
+    "Edge",       // TopAbs_EDGE      = 6
+    "Vertex",     // TopAbs_VERTEX    = 7
+};
+static constexpr size_t _ShapeNamesCount = sizeof(_ShapeNamesCStr) / sizeof(_ShapeNamesCStr[0]);
 
 std::pair<TopAbs_ShapeEnum, int> TopoShape::shapeTypeAndIndex(const char* name)
 {
@@ -478,9 +476,8 @@ std::pair<TopAbs_ShapeEnum, int> TopoShape::shapeTypeAndIndex(const Data::Indexe
 TopAbs_ShapeEnum TopoShape::shapeType(const char* type, bool silent)
 {
     if (type) {
-        initShapeNameMap();
-        for (size_t idx = 0; idx < _ShapeNames.size(); ++idx) {
-            if (!_ShapeNames[idx].empty() && boost::starts_with(type, _ShapeNames[idx])) {
+        for (size_t idx = 0; idx < _ShapeNamesCount; ++idx) {
+            if (boost::starts_with(type, _ShapeNamesCStr[idx])) {
                 return static_cast<TopAbs_ShapeEnum>(idx);
             }
         }
@@ -524,9 +521,18 @@ TopAbs_ShapeEnum TopoShape::shapeType(bool silent) const
 
 const std::string& TopoShape::shapeName(TopAbs_ShapeEnum type, bool silent)
 {
-    initShapeNameMap();
-    if (type >= 0 && type < _ShapeNames.size() && !_ShapeNames[type].empty()) {
-        return _ShapeNames[type];
+    static const std::array<std::string, TopAbs_SHAPE> _ShapeNameStrings = {{
+        "Compound",   // TopAbs_COMPOUND  = 0
+        "CompSolid",  // TopAbs_COMPSOLID = 1
+        "Solid",      // TopAbs_SOLID     = 2
+        "Shell",      // TopAbs_SHELL     = 3
+        "Face",       // TopAbs_FACE      = 4
+        "Wire",       // TopAbs_WIRE      = 5
+        "Edge",       // TopAbs_EDGE      = 6
+        "Vertex",     // TopAbs_VERTEX    = 7
+    }};
+    if (type >= 0 && static_cast<size_t>(type) < _ShapeNameStrings.size()) {
+        return _ShapeNameStrings[type];
     }
     if (!silent) {
         FC_THROWM(Base::CADKernelError, "invalid shape type '" << type << "'");

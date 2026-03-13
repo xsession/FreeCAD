@@ -428,8 +428,11 @@ void AssemblyObject::doDragStep()
             }
         }
     }
+    catch (const std::exception& e) {
+        Base::Console().Warning("Assembly drag step failed: %s\n", e.what());
+    }
     catch (...) {
-        // We do nothing if a solve step fails.
+        Base::Console().Warning("Assembly drag step failed: unknown exception\n");
     }
 }
 
@@ -478,8 +481,43 @@ bool AssemblyObject::validateNewPlacements()
         }
     }
 
-    // TODO: We could do further tests
-    // For example check if the joints connectors are correctly aligned.
+    // Validate that no placement contains NaN or Infinity values
+    for (auto& pair : objectPartMap) {
+        App::DocumentObject* obj = pair.first;
+        std::shared_ptr<MbD::ASMTPart> mbdPart = pair.second.part;
+        if (!obj || !mbdPart) {
+            continue;
+        }
+
+        Base::Placement newPlacement = getMbdPlacement(mbdPart);
+        if (!pair.second.offsetPlc.isIdentity()) {
+            newPlacement = newPlacement * pair.second.offsetPlc;
+        }
+
+        Base::Vector3d pos = newPlacement.getPosition();
+        if (std::isnan(pos.x) || std::isnan(pos.y) || std::isnan(pos.z)
+            || std::isinf(pos.x) || std::isinf(pos.y) || std::isinf(pos.z)) {
+            Base::Console().Warning(
+                "Assembly: Ignoring bad solve — solver produced NaN/Infinity "
+                "position for '%s'. The assembly may be under-constrained.\n",
+                obj->getFullLabel()
+            );
+            return false;
+        }
+
+        double q0, q1, q2, q3;
+        newPlacement.getRotation().getValue(q0, q1, q2, q3);
+        if (std::isnan(q0) || std::isnan(q1) || std::isnan(q2) || std::isnan(q3)
+            || std::isinf(q0) || std::isinf(q1) || std::isinf(q2) || std::isinf(q3)) {
+            Base::Console().Warning(
+                "Assembly: Ignoring bad solve — solver produced NaN/Infinity "
+                "rotation for '%s'. The assembly may be under-constrained.\n",
+                obj->getFullLabel()
+            );
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -521,7 +559,7 @@ void AssemblyObject::undoSolve()
 
     for (auto& pair : previousPositions) {
         App::DocumentObject* obj = pair.first;
-        if (!obj) {
+        if (!obj || !obj->isAttachedToDocument()) {
             continue;
         }
 

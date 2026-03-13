@@ -1850,7 +1850,16 @@ TopoShape& TopoShape::makeShapeWithElementMap(
                      ++submapIndex) {
                     ss.str("");
                     int elementIndex = next.find(submap(submapIndex));
-                    assert(elementIndex);
+                    if (elementIndex == 0) {
+                        // Sub-shape not found in parent topology map — can
+                        // happen with certain BRep configurations.  Skip
+                        // rather than producing an invalid IndexedName.
+                        if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG)) {
+                            FC_WARN("mapSubElement reverse pass: sub-shape not found in "
+                                    << next.shapetype << " map, skipping");  // NOLINT
+                        }
+                        continue;
+                    }
                     Data::IndexedName indexedName
                         = Data::IndexedName::fromConst(next.shapetype, elementIndex);
                     if (getMappedName(indexedName)) {
@@ -1905,7 +1914,17 @@ TopoShape& TopoShape::makeShapeWithElementMap(
                 }
                 for (; xp.More(); xp.Next()) {
                     int previousElementIndex = prev.find(xp.Current());
-                    assert(previousElementIndex);
+                    if (previousElementIndex == 0) {
+                        // Sub-shape not found in lower-level topology map.
+                        // This can happen with degenerate or unusual BRep
+                        // structures.  Skip this sub-shape — we cannot
+                        // construct a valid element name without a valid index.
+                        if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG)) {
+                            FC_WARN("mapSubElement forward pass: sub-shape not found in "
+                                    << prev.shapetype << " map, skipping");  // NOLINT
+                        }
+                        continue;
+                    }
                     Data::IndexedName prevElement
                         = Data::IndexedName::fromConst(prev.shapetype, previousElementIndex);
                     if (!delayed && (newNames.count(prevElement) != 0U)) {
