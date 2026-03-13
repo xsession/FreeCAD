@@ -27,6 +27,8 @@
 #include <BRepAlgo.hxx>
 #include <BRepFilletAPI_MakeFillet.hxx>
 #include <BRep_Tool.hxx>
+#include <GCPnts_AbscissaPoint.hxx>
+#include <BRepAdaptor_Curve.hxx>
 #include <Geom_Circle.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
@@ -106,6 +108,26 @@ App::DocumentObjectExecReturn* Fillet::execute()
         );
     }
 
+    // Pre-validate radius against edge lengths to prevent OCC kernel crash
+    for (const auto& edgeShape : edges) {
+        try {
+            TopoDS_Edge edge = TopoDS::Edge(edgeShape.getShape());
+            BRepAdaptor_Curve curve(edge);
+            double edgeLen = GCPnts_AbscissaPoint::Length(curve);
+            if (radius > edgeLen * 0.5) {
+                return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP(
+                    "Exception",
+                    "Fillet radius is too large for at least one selected edge.\n"
+                    "The radius exceeds half the edge length, which would produce invalid geometry.\n"
+                    "Fix: reduce the fillet radius or deselect short edges."
+                ));
+            }
+        }
+        catch (...) {
+            // If we can't measure an edge, skip validation for it
+        }
+    }
+
     this->positionByBaseFeature();
 
     try {
@@ -118,9 +140,12 @@ App::DocumentObjectExecReturn* Fillet::execute()
 
         shape.makeElementFillet(baseShape, edges, Radius.getValue(), Radius.getValue());
         if (shape.isNull()) {
-            return new App::DocumentObjectExecReturn(
-                QT_TRANSLATE_NOOP("Exception", "Resulting shape is null")
-            );
+            return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP(
+                "Exception",
+                "Fillet produced an empty (null) shape.\n"
+                "The OCC kernel accepted the parameters but generated no geometry.\n"
+                "Fix: try a smaller fillet radius or select different edges."
+            ));
         }
 
         TopTools_ListOfShape aLarg;
@@ -153,14 +178,17 @@ App::DocumentObjectExecReturn* Fillet::execute()
         return new App::DocumentObjectExecReturn(e.what());
     }
     catch (Standard_Failure& e) {
-        return new App::DocumentObjectExecReturn(e.GetMessageString());
+        std::string msg = std::string("Fillet failed: ") + e.GetMessageString()
+            + "\nThe OCC geometry kernel rejected the fillet parameters."
+            + "\nFix: try a smaller radius or select different edges.";
+        return new App::DocumentObjectExecReturn(msg.c_str());
     }
     catch (...) {
         return new App::DocumentObjectExecReturn(QT_TRANSLATE_NOOP(
             "Exception",
-            "Fillet operation failed. The selected edges may contain geometry that cannot be "
-            "filleted together. "
-            "Try filleting edges individually or with a smaller radius."
+            "Fillet operation failed with an unexpected error.\n"
+            "The selected edges may contain geometry that cannot be filleted together.\n"
+            "Fix: try filleting edges individually or with a smaller radius."
         ));
     }
 }

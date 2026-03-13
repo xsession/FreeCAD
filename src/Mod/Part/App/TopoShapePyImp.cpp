@@ -1291,42 +1291,26 @@ PyObject* TopoShapePy::makeChamfer(PyObject* args) const
     }
     PY_CATCH_OCC
     PyErr_Clear();
-    // use one radius for all edges
-    // TODO: Should this be using makeElementChamfer to support Toponaming fixes?
+    // Single-radius path: use makeElementChamfer for Toponaming (TNP) support
     double radius;
     if (PyArg_ParseTuple(args, "dO", &radius, &obj)) {
-        try {
-            const TopoDS_Shape& shape = this->getTopoShapePtr()->getShape();
-            BRepFilletAPI_MakeChamfer mkChamfer(shape);
-            TopTools_IndexedMapOfShape mapOfEdges;
-            TopTools_IndexedDataMapOfShapeListOfShape mapEdgeFace;
-            TopExp::MapShapesAndAncestors(shape, TopAbs_EDGE, TopAbs_FACE, mapEdgeFace);
-            TopExp::MapShapes(shape, TopAbs_EDGE, mapOfEdges);
-            Py::Sequence list(obj);
-            for (Py::Sequence::iterator it = list.begin(); it != list.end(); ++it) {
-                if (PyObject_TypeCheck((*it).ptr(), &(Part::TopoShapePy::Type))) {
-                    const TopoDS_Shape& edge
-                        = static_cast<TopoShapePy*>((*it).ptr())->getTopoShapePtr()->getShape();
-                    if (edge.ShapeType() == TopAbs_EDGE) {
-                        // Add edge to fillet algorithm
-                        const TopoDS_Face& face = TopoDS::Face(mapEdgeFace.FindFromKey(edge).First());
-                        mkChamfer.Add(radius, radius, TopoDS::Edge(edge), face);
-                    }
-                }
-            }
-            return new TopoShapePy(new TopoShape(mkChamfer.Shape()));
+        PY_TRY
+        {
+            return Py::new_reference_to(shape2pyshape(
+                getTopoShapePtr()
+                    ->makeElementChamfer(getPyShapes(obj), Part::ChamferType::twoDistances, radius, radius)
+            ));
         }
-        catch (Standard_Failure& e) {
-            PyErr_SetString(PartExceptionOCCError, e.GetMessageString());
-            return nullptr;
-        }
+        PY_CATCH_OCC
     }
 
     PyErr_SetString(
         PyExc_TypeError,
-        "This method accepts:\n"
-        "-- one radius and a list of edges\n"
-        "-- two radii and a list of edges"
+        "makeChamfer(radius, edgeList) — single equal-distance chamfer\n"
+        "makeChamfer(radius1, radius2, edgeList) — two-distance chamfer\n"
+        "Parameters:\n"
+        "  radius/radius1/radius2: chamfer distances (float, > 0)\n"
+        "  edgeList: list of Part.Edge shapes to chamfer"
     );
     return nullptr;
 }

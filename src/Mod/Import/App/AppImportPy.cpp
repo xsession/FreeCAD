@@ -171,6 +171,16 @@ private:
                 try {
                     Import::ReaderStep reader(file);
                     reader.read(hDoc);
+
+                    // Log timing information for STEP imports
+                    Base::Console().Message(
+                        "[STEP Import] File: %s (%.1f MB)\n"
+                        "[STEP Import] Parse: %.1fs, Transfer: %.1fs, Total: %.1fs\n",
+                        Utf8Name.c_str(),
+                        reader.getFileSizeBytes() / (1024.0 * 1024.0),
+                        reader.getParseTimeMs() / 1000.0,
+                        reader.getTransferTimeMs() / 1000.0,
+                        reader.getTotalTimeMs() / 1000.0);
                 }
                 catch (OSD_Exception& e) {
                     Base::Console().error("%s\n", e.GetMessageString());

@@ -2887,9 +2887,12 @@ int Document::recompute(const std::vector<DocumentObject*>& objs,
                 if (obj->isTouched() || doRecompute) {
                     signalRecomputedObject(*obj);
                     obj->purgeTouched();
-                    // set all dependent object touched to force recompute
-                    for (auto inObjIt : obj->getInList()) {
-                        inObjIt->enforceRecompute();
+                    // set all dependent objects touched to force recompute
+                    // but only if this object actually recomputed successfully
+                    if (doRecompute) {
+                        for (auto inObjIt : obj->getInList()) {
+                            inObjIt->enforceRecompute();
+                        }
                     }
                 }
                 if (seq) {

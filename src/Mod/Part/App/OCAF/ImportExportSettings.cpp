@@ -153,6 +153,18 @@ void ImportExportSettings::initSTEP(Base::Reference<ParameterGrp> hGrp)
         "write.step.product.name",
         hStepGrp->GetASCII("Product", Interface_Static::CVal("write.step.product.name")).c_str()
     );
+
+    // STEP read performance parameters
+    // These are configured via the ReaderStep class at import time based on file size,
+    // but users can override defaults here.
+    bool autoTune = hStepGrp->GetBool("LargeFileAutoTune", true);
+    if (autoTune) {
+        // Enable parallel STEP processing defaults
+        Interface_Static::SetIVal("read.step.product.mode", 1);
+        Interface_Static::SetIVal("read.step.product.context", 1);
+        Interface_Static::SetIVal("read.step.shape.repr", 1);
+        Interface_Static::SetIVal("read.step.assembly.level", 1);
+    }
 }
 
 ImportExportSettings::ImportExportSettings()

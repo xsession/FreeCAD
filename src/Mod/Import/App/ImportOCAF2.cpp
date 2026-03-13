@@ -527,8 +527,17 @@ App::DocumentObject* ImportOCAF2::loadShapes()
     myNames.clear();
     myCollapsedObjects.clear();
 
-    std::vector<App::DocumentObject*> objs;
+    // Pre-allocate hash maps for large models to avoid rehashing memory spikes
     aShapeTool->GetFreeShapes(labels);
+    {
+        int shapeEstimate = labels.Length() * 4;  // rough estimate of total shapes
+        if (shapeEstimate > 1000) {
+            myShapes.reserve(shapeEstimate);
+            myNames.reserve(shapeEstimate);
+        }
+    }
+
+    std::vector<App::DocumentObject*> objs;
     boost::dynamic_bitset<> vis;
     int count = 0;
     for (Standard_Integer i = 1; i <= labels.Length(); i++) {
@@ -559,6 +568,12 @@ App::DocumentObject* ImportOCAF2::loadShapes()
             ret = info.obj;
         }
     }
+    // Early cache release — free import caches before visualization/recompute
+    // to reduce peak memory usage on large models
+    myShapes.clear();
+    myNames.clear();
+    myCollapsedObjects.clear();
+
     if (ret) {
         ret->recomputeFeature(true);
     }

@@ -43,9 +43,19 @@ public:
     }
     void read(Handle(TDocStd_Document) hDoc);
 
+    // Timing and size accessors (populated after read())
+    int64_t getParseTimeMs() const { return parseTimeMs; }
+    int64_t getTransferTimeMs() const { return transferTimeMs; }
+    int64_t getTotalTimeMs() const { return totalTimeMs; }
+    int64_t getFileSizeBytes() const { return fileSizeBytes; }
+
 private:
     Base::FileInfo file;
     Resource_FormatType codePage {};
+    int64_t parseTimeMs = 0;
+    int64_t transferTimeMs = 0;
+    int64_t totalTimeMs = 0;
+    int64_t fileSizeBytes = 0;
 };
 
 }  // namespace Import

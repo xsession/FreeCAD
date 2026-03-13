@@ -3,6 +3,8 @@
 add_executable(PartDesign_tests_run
         BackwardCompatibility.cpp
         DatumPlane.cpp
+        FeatureChamferRobustness.cpp
+        FeatureFilletRobustness.cpp
         ShapeBinder.cpp
         Pad.cpp
 )

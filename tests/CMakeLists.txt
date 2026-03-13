@@ -200,3 +200,12 @@ foreach (exe ${TestExecutables})
         gtest_discover_tests(${exe})
     endif()
 endforeach()
+
+# Install test executables for deployable packages (optional "tests" component)
+foreach (exe ${TestExecutables})
+    install(TARGETS ${exe}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+        COMPONENT tests
+        OPTIONAL
+    )
+endforeach()

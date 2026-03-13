@@ -245,8 +245,23 @@ void AutoSaver::timerEvent(QTimerEvent* event)
                 it.second->touched.clear();
                 break;
             }
+            catch (const Base::Exception& e) {
+                Base::Console().Error(
+                    "Auto-save failed for document '%s': %s\n",
+                    it.first.c_str(), e.what()
+                );
+            }
+            catch (const std::exception& e) {
+                Base::Console().Error(
+                    "Auto-save failed for document '%s': C++ exception: %s\n",
+                    it.first.c_str(), e.what()
+                );
+            }
             catch (...) {
-                Base::Console().error("Failed to auto-save document '%s'\n", it.first.c_str());
+                Base::Console().Error(
+                    "Auto-save failed for document '%s': unknown exception\n",
+                    it.first.c_str()
+                );
             }
         }
     }

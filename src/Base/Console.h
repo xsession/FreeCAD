@@ -558,6 +558,16 @@ public:
     template<typename... Args>
     void userTranslatedNotification(const std::string& notifier, const char* pMsg, Args&&... args);
 
+    // Backward-compatible uppercase aliases (deprecated, use lowercase versions)
+    template<typename... Args>
+    void Message(const char* pMsg, Args&&... args) { message(pMsg, std::forward<Args>(args)...); }
+    template<typename... Args>
+    void Warning(const char* pMsg, Args&&... args) { warning(pMsg, std::forward<Args>(args)...); }
+    template<typename... Args>
+    void Error(const char* pMsg, Args&&... args) { error(pMsg, std::forward<Args>(args)...); }
+    template<typename... Args>
+    void Log(const char* pMsg, Args&&... args) { log(pMsg, std::forward<Args>(args)...); }
+
     // Notify a message directly to observers
     template<LogStyle, IntendedRecipient = IntendedRecipient::All, ContentType = ContentType::Untranslated>
     void notify(const std::string& notifiername, const std::string& msg);

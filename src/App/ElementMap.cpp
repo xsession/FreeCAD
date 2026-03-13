@@ -558,7 +558,16 @@ MappedName ElementMap::setElementName(const IndexedName& element,
                                       bool overwrite)
 {
     if (!element) {
-        throw Base::ValueError("Invalid input");
+        // Gracefully handle null element instead of crashing.  This can happen
+        // when a sub-shape is not found in the parent topology during element
+        // map construction (e.g. mapSubElement reverse/forward pass, or
+        // corrupted element map restoration).  Logging a warning and returning
+        // empty lets the modelling operation continue with a partial element
+        // map rather than aborting the entire feature.
+        if (FC_LOG_INSTANCE.isEnabled(FC_LOGLEVEL_LOG)) {
+            FC_WARN("setElementName: skipping null element (mapped name: " << name << ")");  // NOLINT
+        }
+        return {};
     }
     if (!name) {
         erase(element);

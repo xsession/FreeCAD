@@ -149,6 +149,15 @@ private:
             PolylineParametric  // Polyline imported as a Part::Compound of Part primitives
         };
 
+        // Explicit constructor to work around MSVC 2019 internal compiler error (ICE)
+        // with C++20 parenthesized aggregate initialization (P0960R3).
+        // MSVC 2019's code generator (p2/main.c) crashes when generating code for
+        // parenthesized aggregate init of a class containing TopoDS_Shape + default
+        // member initializer.
+        explicit GeometryBuilder(const TopoDS_Shape& s)
+            : shape(s)
+        {}
+
         // The raw geometric shape.
         TopoDS_Shape shape;
         // The intended parametric type for the shape.
@@ -161,6 +170,13 @@ private:
         // This entity is in paper space, and the user setting says to ignore it.
         return !m_importPaperSpaceEntities && m_entityAttributes.m_paperSpace;
     }
+
+    // Helper to map the current import mode to a PrimitiveType for entity callbacks.
+    // Extracted to a single function to work around MSVC 2019 internal compiler errors
+    // caused by repeated switch statements on ImportMode in large translation units.
+    GeometryBuilder::PrimitiveType mapImportModeToPrimitiveType(
+        GeometryBuilder::PrimitiveType editableType
+    ) const;
     static gp_Pnt makePoint(const Base::Vector3d& point3d)
     {
         return {point3d.x, point3d.y, point3d.z};
