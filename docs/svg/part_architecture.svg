@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 680" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="680" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">Part Module Architecture</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">263 .cpp · 162 .h · 42 .py — OpenCASCADE kernel wrapper &amp; Boolean operations</text>
+
+  <!-- TopoShape core -->
+  <rect x="30" y="75" width="940" height="105" rx="8" fill="#1a5276" opacity="0.9" filter="url(#s)"/>
+  <text x="500" y="100" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">🔷 TopoShape — Core Geometry Kernel</text>
+  <g font-size="11" fill="#d6eaf8">
+    <rect x="50" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="105" y="130" text-anchor="middle">TopoShape</text>
+    <rect x="170" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="225" y="130" text-anchor="middle">TopoShapeEdge</text>
+    <rect x="290" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="345" y="130" text-anchor="middle">TopoShapeFace</text>
+    <rect x="410" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="465" y="130" text-anchor="middle">TopoShapeWire</text>
+    <rect x="530" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="585" y="130" text-anchor="middle">TopoShapeShell</text>
+    <rect x="650" y="112" width="110" height="26" rx="4" fill="#0e2f44"/><text x="705" y="130" text-anchor="middle">TopoShapeSolid</text>
+    <rect x="770" y="112" width="140" height="26" rx="4" fill="#0e2f44"/><text x="840" y="130" text-anchor="middle">TopoShapeCompound</text>
+    <text x="500" y="165" text-anchor="middle" fill="#85c1e9" font-size="10">Wraps OCC TopoDS_Shape with element maps, Python bindings, and FreeCAD property integration</text>
+  </g>
+
+  <!-- Geometry classes -->
+  <rect x="30" y="195" width="310" height="150" rx="8" fill="#1e8449" opacity="0.85" filter="url(#s)"/>
+  <text x="185" y="220" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">📐 Geometry</text>
+  <g font-size="10" fill="#d5f5e3">
+    <rect x="45" y="232" width="130" height="24" rx="4" fill="#145a32"/><text x="110" y="248" text-anchor="middle">Geom*BSplineCurve</text>
+    <rect x="185" y="232" width="130" height="24" rx="4" fill="#145a32"/><text x="250" y="248" text-anchor="middle">Geom*BSplineSurface</text>
+    <rect x="45" y="264" width="130" height="24" rx="4" fill="#145a32"/><text x="110" y="280" text-anchor="middle">GeomCircle</text>
+    <rect x="185" y="264" width="130" height="24" rx="4" fill="#145a32"/><text x="250" y="280" text-anchor="middle">GeomEllipse</text>
+    <rect x="45" y="296" width="270" height="24" rx="4" fill="#145a32"/><text x="180" y="312" text-anchor="middle">GeomLine · GeomArc · GeomPoint · GeomPlane</text>
+  </g>
+
+  <!-- Boolean Operations -->
+  <rect x="355" y="195" width="290" height="150" rx="8" fill="#922b21" opacity="0.85" filter="url(#s)"/>
+  <text x="500" y="220" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">⚡ Boolean Operations</text>
+  <g font-size="10" fill="#fadbd8">
+    <rect x="370" y="232" width="120" height="24" rx="4" fill="#641e16"/><text x="430" y="248" text-anchor="middle">BooleanCut</text>
+    <rect x="500" y="232" width="120" height="24" rx="4" fill="#641e16"/><text x="560" y="248" text-anchor="middle">BooleanFuse</text>
+    <rect x="370" y="264" width="120" height="24" rx="4" fill="#641e16"/><text x="430" y="280" text-anchor="middle">BooleanCommon</text>
+    <rect x="500" y="264" width="120" height="24" rx="4" fill="#641e16"/><text x="560" y="280" text-anchor="middle">BooleanFragments</text>
+    <rect x="370" y="296" width="250" height="24" rx="4" fill="#641e16"/><text x="495" y="312" text-anchor="middle">MultiCommon · MultiFuse · Section</text>
+  </g>
+
+  <!-- Primitives -->
+  <rect x="660" y="195" width="310" height="150" rx="8" fill="#b9770e" opacity="0.85" filter="url(#s)"/>
+  <text x="815" y="220" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🧱 Primitives</text>
+  <g font-size="10" fill="#fdebd0">
+    <rect x="675" y="232" width="90" height="24" rx="4" fill="#7e5109"/><text x="720" y="248" text-anchor="middle">Box</text>
+    <rect x="775" y="232" width="90" height="24" rx="4" fill="#7e5109"/><text x="820" y="248" text-anchor="middle">Cylinder</text>
+    <rect x="875" y="232" width="80" height="24" rx="4" fill="#7e5109"/><text x="915" y="248" text-anchor="middle">Cone</text>
+    <rect x="675" y="264" width="90" height="24" rx="4" fill="#7e5109"/><text x="720" y="280" text-anchor="middle">Sphere</text>
+    <rect x="775" y="264" width="90" height="24" rx="4" fill="#7e5109"/><text x="820" y="280" text-anchor="middle">Torus</text>
+    <rect x="875" y="264" width="80" height="24" rx="4" fill="#7e5109"/><text x="915" y="280" text-anchor="middle">Prism</text>
+    <rect x="675" y="296" width="280" height="24" rx="4" fill="#7e5109"/><text x="815" y="312" text-anchor="middle">Helix · Spiral · Wedge · Ellipsoid</text>
+  </g>
+
+  <!-- Feature Operations -->
+  <rect x="30" y="360" width="460" height="120" rx="8" fill="#6c3483" opacity="0.8" filter="url(#s)"/>
+  <text x="260" y="385" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🔧 Feature Operations</text>
+  <g font-size="10" fill="#e8daef">
+    <rect x="45" y="398" width="200" height="22" rx="4" fill="#4a235a"/><text x="145" y="413" text-anchor="middle">Extrusion · Revolution · Loft · Sweep</text>
+    <rect x="255" y="398" width="220" height="22" rx="4" fill="#4a235a"/><text x="365" y="413" text-anchor="middle">Fillet · Chamfer · Offset3D · Thickness</text>
+    <rect x="45" y="428" width="200" height="22" rx="4" fill="#4a235a"/><text x="145" y="443" text-anchor="middle">Mirror · Scale · Refine · Compound</text>
+    <rect x="255" y="428" width="220" height="22" rx="4" fill="#4a235a"/><text x="365" y="443" text-anchor="middle">CrossSections · Tube · RuledSurface</text>
+    <rect x="45" y="458" width="430" height="14" rx="2" fill="none" stroke="#9b59b6" stroke-width="0.5"/>
+    <text x="260" y="469" text-anchor="middle" fill="#d2b4de" font-size="9">All operations produce TNP-mapped TopoShape results</text>
+  </g>
+
+  <!-- Attachment -->
+  <rect x="510" y="360" width="460" height="120" rx="8" fill="#1a5276" opacity="0.8" filter="url(#s)"/>
+  <text x="740" y="385" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">📌 Attachment &amp; IO</text>
+  <g font-size="10" fill="#d6eaf8">
+    <rect x="525" y="398" width="200" height="22" rx="4" fill="#0e2f44"/><text x="625" y="413" text-anchor="middle">Attacher · AttachEngine</text>
+    <rect x="735" y="398" width="220" height="22" rx="4" fill="#0e2f44"/><text x="845" y="413" text-anchor="middle">Part2DObject (sketches/datums)</text>
+    <rect x="525" y="428" width="200" height="22" rx="4" fill="#0e2f44"/><text x="625" y="443" text-anchor="middle">STEP · IGES · BREP import</text>
+    <rect x="735" y="428" width="220" height="22" rx="4" fill="#0e2f44"/><text x="845" y="443" text-anchor="middle">FaceMaker · FaceMakerBullseye</text>
+    <rect x="525" y="458" width="430" height="14" rx="2" fill="none" stroke="#3498db" stroke-width="0.5"/>
+    <text x="740" y="469" text-anchor="middle" fill="#85c1e9" font-size="9">BodyBase defines feature body container (used by PartDesign)</text>
+  </g>
+
+  <!-- OCC dependency -->
+  <rect x="30" y="500" width="940" height="60" rx="8" fill="#1c2833" opacity="0.85"/>
+  <text x="500" y="522" text-anchor="middle" fill="#aeb6bf" font-size="13" font-weight="bold">🔗 OpenCASCADE Technology (OCCT) Integration</text>
+  <text x="500" y="545" text-anchor="middle" fill="#7f8c8d" font-size="11">BRep kernel · STEP/IGES translators · BOP (Boolean) · Geom2d/3d · TopExp · ShapeFix · ShapeAnalysis · BRepAlgo</text>
+
+  <!-- Timeline -->
+  <rect x="30" y="575" width="940" height="90" rx="8" fill="#1c2833" opacity="0.6"/>
+  <text x="500" y="598" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">📅 Part Module Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="80" y1="620" x2="920" y2="620" stroke="#34495e" stroke-width="2"/>
+    <circle cx="80" cy="620" r="4" fill="#e74c3c"/><text x="80" y="643" text-anchor="middle">2002 OCC wrap</text>
+    <circle cx="200" cy="620" r="4" fill="#e67e22"/><text x="200" y="643" text-anchor="middle">2007 Boolean</text>
+    <circle cx="340" cy="620" r="4" fill="#f1c40f"/><text x="340" y="643" text-anchor="middle">2012 Attacher</text>
+    <circle cx="480" cy="620" r="4" fill="#2ecc71"/><text x="480" y="643" text-anchor="middle">2016 FaceMaker</text>
+    <circle cx="620" cy="620" r="4" fill="#3498db"/><text x="620" y="643" text-anchor="middle">2020 BSpline</text>
+    <circle cx="760" cy="620" r="4" fill="#9b59b6"/><text x="760" y="643" text-anchor="middle">2023 TNP Map</text>
+    <circle cx="900" cy="620" r="4" fill="#1abc9c"/><text x="900" y="643" text-anchor="middle">2025 OCC 7.8</text>
+  </g>
+</svg>

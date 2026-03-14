@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="620" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">FreeCAD Property System Hierarchy</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">~50 property types — the universal data model for parametric features</text>
+
+  <!-- Base -->
+  <rect x="360" y="75" width="280" height="40" rx="8" fill="#e74c3c" opacity="0.85" filter="url(#s)"/>
+  <text x="500" y="100" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">PropertyContainer (base)</text>
+
+  <line x1="500" y1="115" x2="500" y2="130" stroke="#5dade2" stroke-width="2"/>
+
+  <rect x="360" y="130" width="280" height="40" rx="8" fill="#e67e22" opacity="0.85" filter="url(#s)"/>
+  <text x="500" y="155" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Property (abstract base)</text>
+
+  <!-- Branches -->
+  <line x1="500" y1="170" x2="500" y2="190" stroke="#5dade2" stroke-width="2"/>
+  <line x1="100" y1="190" x2="900" y2="190" stroke="#5dade2" stroke-width="1"/>
+  <line x1="100" y1="190" x2="100" y2="205" stroke="#5dade2" stroke-width="1"/>
+  <line x1="300" y1="190" x2="300" y2="205" stroke="#5dade2" stroke-width="1"/>
+  <line x1="500" y1="190" x2="500" y2="205" stroke="#5dade2" stroke-width="1"/>
+  <line x1="700" y1="190" x2="700" y2="205" stroke="#5dade2" stroke-width="1"/>
+  <line x1="900" y1="190" x2="900" y2="205" stroke="#5dade2" stroke-width="1"/>
+
+  <!-- Scalar -->
+  <rect x="20" y="205" width="160" height="180" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="100" y="228" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">📊 Scalar</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="35" y="248">PropertyBool</text>
+    <text x="35" y="265">PropertyInteger</text>
+    <text x="35" y="282">PropertyFloat</text>
+    <text x="35" y="299">PropertyString</text>
+    <text x="35" y="316">PropertyEnumeration</text>
+    <text x="35" y="333">PropertyPercent</text>
+    <text x="35" y="350">PropertyQuantity</text>
+    <text x="35" y="367">PropertyLength / Angle</text>
+  </g>
+
+  <!-- Geometric -->
+  <rect x="200" y="205" width="200" height="180" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="300" y="228" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">📐 Geometric</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="215" y="248">PropertyVector</text>
+    <text x="215" y="265">PropertyMatrix</text>
+    <text x="215" y="282">PropertyPlacement</text>
+    <text x="215" y="299">PropertyPartShape</text>
+    <text x="215" y="316">PropertyComplexGeoData</text>
+    <text x="215" y="333">PropertyMeshKernel</text>
+    <text x="215" y="350">PropertyBoundBox</text>
+    <text x="215" y="367">PropertyDirection</text>
+  </g>
+
+  <!-- Links -->
+  <rect x="420" y="205" width="160" height="180" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="500" y="228" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">🔗 Links</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="435" y="248">PropertyLink</text>
+    <text x="435" y="265">PropertyLinkSub</text>
+    <text x="435" y="282">PropertyLinkList</text>
+    <text x="435" y="299">PropertyLinkSubList</text>
+    <text x="435" y="316">PropertyXLink</text>
+    <text x="435" y="333">PropertyXLinkSub</text>
+    <text x="435" y="350">ShadowSub (TNP)</text>
+    <text x="435" y="367">PropertyLinkGlobal</text>
+  </g>
+
+  <!-- Collections -->
+  <rect x="600" y="205" width="200" height="180" rx="8" fill="#9b59b6" opacity="0.8" filter="url(#s)"/>
+  <text x="700" y="228" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">📚 Collections</text>
+  <g font-size="9" fill="#e8daef">
+    <text x="615" y="248">PropertyStringList</text>
+    <text x="615" y="265">PropertyIntegerList</text>
+    <text x="615" y="282">PropertyFloatList</text>
+    <text x="615" y="299">PropertyVectorList</text>
+    <text x="615" y="316">PropertyColorList</text>
+    <text x="615" y="333">PropertyMap</text>
+    <text x="615" y="350">PropertyPersistentObject</text>
+    <text x="615" y="367">PropertyIntegerSet</text>
+  </g>
+
+  <!-- Special -->
+  <rect x="820" y="205" width="160" height="180" rx="8" fill="#1abc9c" opacity="0.8" filter="url(#s)"/>
+  <text x="900" y="228" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">🔧 Special</text>
+  <g font-size="9" fill="#d1f2eb">
+    <text x="835" y="248">PropertyFile</text>
+    <text x="835" y="265">PropertyFileIncluded</text>
+    <text x="835" y="282">PropertyPath</text>
+    <text x="835" y="299">PropertyColor</text>
+    <text x="835" y="316">PropertyMaterial</text>
+    <text x="835" y="333">PropertyPythonObject</text>
+    <text x="835" y="350">PropertyExpressionEngine</text>
+    <text x="835" y="367">PropertyUUID</text>
+  </g>
+
+  <!-- Property Lifecycle -->
+  <rect x="30" y="405" width="940" height="85" rx="8" fill="#1c2833" opacity="0.85"/>
+  <text x="500" y="430" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">🔄 Property Lifecycle</text>
+  <g font-size="11">
+    <rect x="55" y="445" width="110" height="30" rx="5" fill="#3498db" opacity="0.7"/><text x="110" y="464" text-anchor="middle" fill="#fff">setValue()</text>
+    <text x="175" y="464" fill="#5dade2">→</text>
+    <rect x="190" y="445" width="120" height="30" rx="5" fill="#2ecc71" opacity="0.7"/><text x="250" y="464" text-anchor="middle" fill="#fff">aboutToSet()</text>
+    <text x="320" y="464" fill="#5dade2">→</text>
+    <rect x="335" y="445" width="120" height="30" rx="5" fill="#f39c12" opacity="0.7"/><text x="395" y="464" text-anchor="middle" fill="#fff">hasSetValue()</text>
+    <text x="465" y="464" fill="#5dade2">→</text>
+    <rect x="480" y="445" width="120" height="30" rx="5" fill="#e74c3c" opacity="0.7"/><text x="540" y="464" text-anchor="middle" fill="#fff">onChange()</text>
+    <text x="610" y="464" fill="#5dade2">→</text>
+    <rect x="625" y="445" width="110" height="30" rx="5" fill="#9b59b6" opacity="0.7"/><text x="680" y="464" text-anchor="middle" fill="#fff">recompute()</text>
+    <text x="745" y="464" fill="#5dade2">→</text>
+    <rect x="760" y="445" width="110" height="30" rx="5" fill="#1abc9c" opacity="0.7"/><text x="815" y="464" text-anchor="middle" fill="#fff">touch()</text>
+  </g>
+
+  <!-- Key notes -->
+  <rect x="30" y="505" width="940" height="100" rx="8" fill="#1c2833" opacity="0.6"/>
+  <text x="500" y="530" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">💡 Key Design Principles</text>
+  <g font-size="10" fill="#7f8c8d">
+    <text x="50" y="555">• Properties are the ONLY data model — all DocumentObject state is stored in properties</text>
+    <text x="50" y="575">• Undo/Redo works by saving/restoring property values in Transactions</text>
+    <text x="50" y="595">• Expression bindings attach to properties — Spreadsheet.B2 drives Pad.Length</text>
+    <text x="500" y="555">• Serialization: XML header + binary blobs (shapes, meshes)</text>
+    <text x="500" y="575">• Link properties store TNP shadow sub-element names</text>
+    <text x="500" y="595">• DynamicProperty allows Python-added properties at runtime</text>
+  </g>
+</svg>

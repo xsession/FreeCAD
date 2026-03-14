@@ -31,6 +31,7 @@
 #include <App/Document.h>
 #include <App/DocumentObjectPy.h>
 #include <App/DocumentObject.h>
+#include <Base/Console.h>
 #include <Base/Interpreter.h>
 #include <Base/Tools.h>
 #include "Selection.h"

@@ -19,5 +19,6 @@ from . import TestPolarPattern
 from . import TestPrimitive
 from . import TestRevolve
 from . import TestShapeBinder
+from . import TestSketchOnFace
 from . import TestThickness
 from . import TestTopologicalNamingProblem

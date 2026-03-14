@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 650" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="650" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">FreeCAD Build System Pipeline</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">CMake + pixi + ninja — from source to installable package</text>
+
+  <!-- Source -->
+  <rect x="30" y="80" width="160" height="100" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="110" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">📂 Source</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="125">CMakeLists.txt</text>
+    <text x="45" y="140">src/</text>
+    <text x="45" y="155">cMake/</text>
+    <text x="45" y="170">pixi.toml</text>
+  </g>
+
+  <text x="205" y="130" fill="#5dade2" font-size="16">→</text>
+
+  <!-- CMake Configure -->
+  <rect x="220" y="80" width="180" height="100" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="310" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">⚙️ Configure</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="235" y="125">cmake --preset</text>
+    <text x="235" y="140">Find* modules</text>
+    <text x="235" y="155">Option checks</text>
+    <text x="235" y="170">Config generation</text>
+  </g>
+
+  <text x="415" y="130" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Build -->
+  <rect x="430" y="80" width="160" height="100" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="510" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">🔨 Build</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="445" y="125">ninja / MSBuild</text>
+    <text x="445" y="140">~5,378 source files</text>
+    <text x="445" y="155">C++ → .obj/.o</text>
+    <text x="445" y="170">Link → .dll/.so</text>
+  </g>
+
+  <text x="605" y="130" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Install -->
+  <rect x="620" y="80" width="160" height="100" rx="8" fill="#9b59b6" opacity="0.8" filter="url(#s)"/>
+  <text x="700" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">📦 Install</text>
+  <g font-size="9" fill="#e8daef">
+    <text x="635" y="125">cmake --install</text>
+    <text x="635" y="140">Bin/ Lib/ Mod/</text>
+    <text x="635" y="155">Data/ Doc/</text>
+    <text x="635" y="170">Python site-pkg</text>
+  </g>
+
+  <text x="795" y="130" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Package -->
+  <rect x="810" y="80" width="160" height="100" rx="8" fill="#e74c3c" opacity="0.8" filter="url(#s)"/>
+  <text x="890" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">🎁 Package</text>
+  <g font-size="9" fill="#fadbd8">
+    <text x="825" y="125">NSIS (Windows)</text>
+    <text x="825" y="140">conda-forge</text>
+    <text x="825" y="155">AppImage (Linux)</text>
+    <text x="825" y="170">Homebrew (macOS)</text>
+  </g>
+
+  <!-- CMake Structure -->
+  <rect x="30" y="200" width="460" height="165" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="260" y="225" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">📋 CMake Structure</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="45" y="248">CMakeLists.txt (root) — top-level project</text>
+    <text x="45" y="268">├── cMake/FreeCAD_Helpers/ — 30+ helper scripts</text>
+    <text x="45" y="288">│    ├── SetupOpenCasCade, SetupQt, SetupPython</text>
+    <text x="45" y="308">│    ├── SetupBoost, SetupCoin3D, SetupShiboken</text>
+    <text x="45" y="328">│    └── ConfigureCMakeVariables, CompilerChecks</text>
+    <text x="45" y="348">├── src/CMakeLists.txt — sources</text>
+    <text x="45" y="358" fill="#7f8c8d">└── src/Mod/*/CMakeLists.txt — per-module builds</text>
+  </g>
+
+  <!-- Dependencies -->
+  <rect x="510" y="200" width="460" height="165" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="740" y="225" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">📦 Major Dependencies</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="525" y="248" fill="#3498db">■</text><text x="540" y="248">Python 3.12 + PySide6 + shiboken6</text>
+    <text x="525" y="268" fill="#2ecc71">■</text><text x="540" y="268">Qt 6.x (Core/Gui/Widgets/Network/OpenGL)</text>
+    <text x="525" y="288" fill="#f39c12">■</text><text x="540" y="288">OpenCASCADE 7.7+ (OCCT kernel)</text>
+    <text x="525" y="308" fill="#e74c3c">■</text><text x="540" y="308">Coin3D + Quarter (3D rendering)</text>
+    <text x="525" y="328" fill="#9b59b6">■</text><text x="540" y="328">Boost, Eigen3, Xerces-C, VTK, SMESH</text>
+    <text x="525" y="348" fill="#1abc9c">■</text><text x="540" y="348">Netgen, fmt, yaml-cpp, libOndselSolver</text>
+  </g>
+
+  <!-- Presets -->
+  <rect x="30" y="380" width="460" height="110" rx="8" fill="#1a5276" opacity="0.8" filter="url(#s)"/>
+  <text x="260" y="405" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🎯 CMake Presets</text>
+  <g font-size="10" fill="#d6eaf8">
+    <text x="45" y="428">CMakePresets.json defines:</text>
+    <text x="45" y="448">├── conda-windows-release (MSVC + Ninja)</text>
+    <text x="45" y="468">├── conda-linux-release (GCC + Ninja)</text>
+    <text x="45" y="483">└── conda-osx-release (Clang + Ninja)</text>
+  </g>
+
+  <!-- pixi -->
+  <rect x="510" y="380" width="460" height="110" rx="8" fill="#1e8449" opacity="0.8" filter="url(#s)"/>
+  <text x="740" y="405" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🐍 pixi Environment</text>
+  <g font-size="10" fill="#d5f5e3">
+    <text x="525" y="428">pixi.toml — conda-based environment manager</text>
+    <text x="525" y="448">pixi run build — full build pipeline</text>
+    <text x="525" y="468">pixi run test — run test suite</text>
+    <text x="525" y="483">Handles all native + Python dependencies</text>
+  </g>
+
+  <!-- Build Output Structure -->
+  <rect x="30" y="510" width="940" height="125" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="500" y="535" text-anchor="middle" fill="#aeb6bf" font-size="13" font-weight="bold">📁 Build Output Structure</text>
+  <g font-size="10" fill="#7f8c8d">
+    <text x="50" y="558">build/</text>
+    <text x="50" y="578">├── bin/ — FreeCAD.exe, FreeCADCmd.exe</text>
+    <text x="50" y="598">├── lib/ — FreeCADBase.dll, FreeCADApp.dll, FreeCADGui.dll</text>
+    <text x="50" y="618">├── Mod/ — Part.dll, PartDesign.dll, Sketcher.dll, FEM.dll, ...</text>
+    <text x="500" y="558">├── data/ — resources, examples, tests</text>
+    <text x="500" y="578">├── Ext/ — Python extensions</text>
+    <text x="500" y="598">└── Doc/ — generated documentation</text>
+    <text x="500" y="618" fill="#5dade2">Total: ~80 libraries + ~28 module DLLs</text>
+  </g>
+</svg>

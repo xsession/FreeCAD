@@ -215,6 +215,20 @@ std::vector<TopoShape> DressUp::getContinuousEdges(const TopoShape& shape)
         TopoDS_Shape subshape;
         const auto& ref = v.newName.size() ? v.newName : v.oldName;
         subshape = shape.getSubShape(ref.c_str(), true);
+        if (subshape.IsNull() && v.newName.size() && v.oldName.size()) {
+            // TNP fallback: the mapped element name is stale after the base
+            // shape was modified.  Try the short (indexed) name instead.
+            // The oldName may carry a '?' missing-element prefix that must
+            // be stripped before lookup.
+            const char* fallback = v.oldName.c_str();
+            if (*fallback == '?') {
+                ++fallback;
+            }
+            FC_WARN(getFullName()
+                     << ": mapped edge name '" << v.newName
+                     << "' is stale, falling back to '" << fallback << "'");
+            subshape = shape.getSubShape(fallback, true);
+        }
         if (subshape.IsNull()) {
             FC_THROWM(Base::CADKernelError, "Invalid edge link: " << ref);
         }
@@ -254,6 +268,25 @@ std::vector<TopoShape> DressUp::getFaces(const TopoShape& shape)
             subshape = shape.getSubTopoShape(ref.c_str());
         }
         catch (...) {
+        }
+
+        if (subshape.isNull() && sub.newName.size() && sub.oldName.size()) {
+            // TNP fallback: the mapped element name is stale after the base
+            // shape was modified.  Try the short (indexed) name instead.
+            // The oldName may carry a '?' missing-element prefix that must
+            // be stripped before lookup.
+            const char* fallback = sub.oldName.c_str();
+            if (*fallback == '?') {
+                ++fallback;
+            }
+            FC_WARN(getFullName()
+                     << ": mapped face name '" << sub.newName
+                     << "' is stale, falling back to '" << fallback << "'");
+            try {
+                subshape = shape.getSubTopoShape(fallback);
+            }
+            catch (...) {
+            }
         }
 
         if (subshape.isNull()) {

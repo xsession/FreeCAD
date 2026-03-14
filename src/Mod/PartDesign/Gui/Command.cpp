@@ -584,6 +584,38 @@ CmdPartDesignNewSketch::CmdPartDesignNewSketch()
 void CmdPartDesignNewSketch::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
+
+    // DEBUG: Log selection at the very start of the command
+    {
+        auto selEx = Gui::Selection().getSelectionEx(
+            nullptr, App::DocumentObject::getClassTypeId());
+        Base::Console().Warning("NewSketch::activated START: selectionEx count = %d\n",
+                                (int)selEx.size());
+        for (size_t i = 0; i < selEx.size(); ++i) {
+            auto& so = selEx[i];
+            Base::Console().Warning(
+                "  sel[%d]: obj=%s type=%s subNames=%d\n",
+                (int)i,
+                so.getFeatName(),
+                so.getTypeName(),
+                (int)so.getSubNames().size());
+            for (auto& sn : so.getSubNames()) {
+                Base::Console().Warning("    subName: '%s'\n", sn.c_str());
+            }
+        }
+        // Also log raw selection
+        auto rawSel = Gui::Selection().getSelection();
+        Base::Console().Warning("NewSketch::activated: raw selection count = %d\n",
+                                (int)rawSel.size());
+        for (size_t i = 0; i < rawSel.size(); ++i) {
+            Base::Console().Warning(
+                "  raw[%d]: obj=%s sub='%s'\n",
+                (int)i,
+                rawSel[i].pObject ? rawSel[i].FeatName : "null",
+                rawSel[i].SubName);
+        }
+    }
+
     PartDesignGui::SketchWorkflow creator(getActiveGuiDocument());
     creator.createSketch();
 }

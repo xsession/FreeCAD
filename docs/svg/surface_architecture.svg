@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="900" height="380" fill="url(#bg)" rx="10"/>
+  <text x="450" y="30" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold">Surface Module Architecture</text>
+  <text x="450" y="48" text-anchor="middle" fill="#8b949e" font-size="11">Advanced freeform surface creation from edges and curves</text>
+
+  <rect x="30" y="65" width="200" height="110" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="130" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Filling</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="108">BRepOffsetAPI_MakeFilling</text>
+    <text x="45" y="123">N-sided patch from</text>
+    <text x="45" y="138">boundary edges</text>
+    <text x="45" y="153">Constraint points</text>
+    <text x="45" y="168">G0/G1/G2 continuity</text>
+  </g>
+
+  <rect x="250" y="65" width="200" height="110" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="350" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">GeomFillSurface</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="265" y="108">BRepFill_Filling</text>
+    <text x="265" y="123">Coons / Curved</text>
+    <text x="265" y="138">/ Stretch fill styles</text>
+    <text x="265" y="153">2-4 boundary edges</text>
+    <text x="265" y="168">Bezier surfaces</text>
+  </g>
+
+  <rect x="470" y="65" width="200" height="110" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="570" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Sections</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="485" y="108">BRepOffsetAPI_ThruSections</text>
+    <text x="485" y="123">Surface through</text>
+    <text x="485" y="138">cross-section wires</text>
+    <text x="485" y="153">Solid or shell</text>
+    <text x="485" y="168">Ruled or smooth</text>
+  </g>
+
+  <rect x="690" y="65" width="180" height="110" rx="8" fill="#9b59b6" opacity="0.8" filter="url(#s)"/>
+  <text x="780" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Tools</text>
+  <g font-size="9" fill="#e8daef">
+    <text x="705" y="108">Extend surface</text>
+    <text x="705" y="123">BlendCurve</text>
+    <text x="705" y="138">CurveOnMesh</text>
+    <text x="705" y="153">Cut / Trim</text>
+    <text x="705" y="168">Flip normals</text>
+  </g>
+
+  <!-- Notes -->
+  <rect x="30" y="200" width="840" height="55" rx="8" fill="#2c3e50" opacity="0.85"/>
+  <text x="450" y="223" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">💡 Key Design: All operations delegate to OpenCASCADE BRepOffsetAPI / BRepFill classes</text>
+  <text x="450" y="243" text-anchor="middle" fill="#7f8c8d" font-size="10">Surface module provides parametric FreeCAD wrappers with property-driven recomputation around OCCT surface algorithms</text>
+
+  <!-- Timeline -->
+  <rect x="30" y="275" width="840" height="90" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="450" y="298" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">📅 Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="100" y1="320" x2="800" y2="320" stroke="#34495e" stroke-width="2"/>
+    <circle cx="180" cy="320" r="4" fill="#3498db"/><text x="180" y="340" text-anchor="middle">2017</text><text x="180" y="353" text-anchor="middle" fill="#bdc3c7">Filling tool</text>
+    <circle cx="380" cy="320" r="4" fill="#2ecc71"/><text x="380" y="340" text-anchor="middle">2019</text><text x="380" y="353" text-anchor="middle" fill="#bdc3c7">GeomFill+Sections</text>
+    <circle cx="580" cy="320" r="4" fill="#f39c12"/><text x="580" y="340" text-anchor="middle">2021</text><text x="580" y="353" text-anchor="middle" fill="#bdc3c7">BlendCurve</text>
+    <circle cx="730" cy="320" r="4" fill="#9b59b6"/><text x="730" y="340" text-anchor="middle">2024</text><text x="730" y="353" text-anchor="middle" fill="#bdc3c7">Extend+Cut</text>
+  </g>
+</svg>
