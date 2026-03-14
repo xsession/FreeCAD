@@ -1,0 +1,129 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="700" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">PartDesign Module — Feature-Based Solid Modeling</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">Body-centric parametric modeling · Sketch → Feature pipeline · TNP-aware</text>
+
+  <!-- Body container -->
+  <rect x="30" y="75" width="940" height="80" rx="8" fill="#1a5276" opacity="0.9" filter="url(#s)"/>
+  <text x="500" y="100" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">🏗️ Body — Single Contiguous Solid Container</text>
+  <text x="500" y="120" text-anchor="middle" fill="#85c1e9" font-size="11">Body → Origin (XY/XZ/YZ planes + X/Y/Z axes) → Tip (active feature) → Feature chain</text>
+  <text x="500" y="140" text-anchor="middle" fill="#5dade2" font-size="10">Only ONE solid allowed. Features are added/subtracted sequentially. Tip marks the "current state."</text>
+
+  <!-- Additive features -->
+  <rect x="30" y="170" width="310" height="150" rx="8" fill="#1e8449" opacity="0.85" filter="url(#s)"/>
+  <text x="185" y="195" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">➕ Additive Features</text>
+  <g font-size="10" fill="#d5f5e3">
+    <rect x="45" y="208" width="135" height="24" rx="4" fill="#145a32"/><text x="112" y="224" text-anchor="middle">Pad (extrude)</text>
+    <rect x="190" y="208" width="135" height="24" rx="4" fill="#145a32"/><text x="257" y="224" text-anchor="middle">Revolution</text>
+    <rect x="45" y="240" width="135" height="24" rx="4" fill="#145a32"/><text x="112" y="256" text-anchor="middle">AdditiveLoft</text>
+    <rect x="190" y="240" width="135" height="24" rx="4" fill="#145a32"/><text x="257" y="256" text-anchor="middle">AdditivePipe</text>
+    <rect x="45" y="272" width="135" height="24" rx="4" fill="#145a32"/><text x="112" y="288" text-anchor="middle">AdditiveHelix</text>
+    <rect x="190" y="272" width="135" height="24" rx="4" fill="#145a32"/><text x="257" y="288" text-anchor="middle">Additive*Primitive</text>
+  </g>
+
+  <!-- Subtractive features -->
+  <rect x="355" y="170" width="290" height="150" rx="8" fill="#922b21" opacity="0.85" filter="url(#s)"/>
+  <text x="500" y="195" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">➖ Subtractive Features</text>
+  <g font-size="10" fill="#fadbd8">
+    <rect x="370" y="208" width="120" height="24" rx="4" fill="#641e16"/><text x="430" y="224" text-anchor="middle">Pocket</text>
+    <rect x="500" y="208" width="120" height="24" rx="4" fill="#641e16"/><text x="560" y="224" text-anchor="middle">Groove</text>
+    <rect x="370" y="240" width="120" height="24" rx="4" fill="#641e16"/><text x="430" y="256" text-anchor="middle">SubtractiveLoft</text>
+    <rect x="500" y="240" width="120" height="24" rx="4" fill="#641e16"/><text x="560" y="256" text-anchor="middle">SubtractivePipe</text>
+    <rect x="370" y="272" width="250" height="24" rx="4" fill="#641e16"/><text x="495" y="288" text-anchor="middle">SubtractiveHelix · Sub*Primitive</text>
+  </g>
+
+  <!-- DressUp features -->
+  <rect x="660" y="170" width="310" height="150" rx="8" fill="#b9770e" opacity="0.85" filter="url(#s)"/>
+  <text x="815" y="195" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">✨ DressUp Features</text>
+  <g font-size="10" fill="#fdebd0">
+    <rect x="675" y="208" width="135" height="24" rx="4" fill="#7e5109"/><text x="742" y="224" text-anchor="middle">Fillet</text>
+    <rect x="820" y="208" width="135" height="24" rx="4" fill="#7e5109"/><text x="887" y="224" text-anchor="middle">Chamfer</text>
+    <rect x="675" y="240" width="135" height="24" rx="4" fill="#7e5109"/><text x="742" y="256" text-anchor="middle">Draft (taper)</text>
+    <rect x="820" y="240" width="135" height="24" rx="4" fill="#7e5109"/><text x="887" y="256" text-anchor="middle">Thickness</text>
+    <rect x="675" y="272" width="280" height="24" rx="4" fill="#7e5109"/><text x="815" y="288" text-anchor="middle">FeatureDressUp (TNP fallback base)</text>
+  </g>
+
+  <!-- Pattern features -->
+  <rect x="30" y="335" width="310" height="110" rx="8" fill="#6c3483" opacity="0.8" filter="url(#s)"/>
+  <text x="185" y="360" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🔄 Patterns / Transforms</text>
+  <g font-size="10" fill="#e8daef">
+    <rect x="45" y="372" width="130" height="24" rx="4" fill="#4a235a"/><text x="110" y="388" text-anchor="middle">LinearPattern</text>
+    <rect x="185" y="372" width="130" height="24" rx="4" fill="#4a235a"/><text x="250" y="388" text-anchor="middle">PolarPattern</text>
+    <rect x="45" y="404" width="130" height="24" rx="4" fill="#4a235a"/><text x="110" y="420" text-anchor="middle">Mirrored</text>
+    <rect x="185" y="404" width="130" height="24" rx="4" fill="#4a235a"/><text x="250" y="420" text-anchor="middle">MultiTransform</text>
+  </g>
+
+  <!-- Datum features -->
+  <rect x="355" y="335" width="290" height="110" rx="8" fill="#1a5276" opacity="0.8" filter="url(#s)"/>
+  <text x="500" y="360" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">📌 Datum Geometry</text>
+  <g font-size="10" fill="#d6eaf8">
+    <rect x="370" y="372" width="120" height="24" rx="4" fill="#0e2f44"/><text x="430" y="388" text-anchor="middle">DatumPlane</text>
+    <rect x="500" y="372" width="120" height="24" rx="4" fill="#0e2f44"/><text x="560" y="388" text-anchor="middle">DatumLine</text>
+    <rect x="370" y="404" width="120" height="24" rx="4" fill="#0e2f44"/><text x="430" y="420" text-anchor="middle">DatumPoint</text>
+    <rect x="500" y="404" width="120" height="24" rx="4" fill="#0e2f44"/><text x="560" y="420" text-anchor="middle">ShapeBinder</text>
+  </g>
+
+  <!-- Pipeline -->
+  <rect x="660" y="335" width="310" height="110" rx="8" fill="#922b21" opacity="0.7" filter="url(#s)"/>
+  <text x="815" y="360" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">⚙️ Feature Pipeline</text>
+  <g font-size="10" fill="#fadbd8">
+    <text x="680" y="385" fill="#f5b7b1">1. Sketch → Profile wire/face</text>
+    <text x="680" y="403" fill="#f5b7b1">2. Feature → Boolean add/sub to Body solid</text>
+    <text x="680" y="421" fill="#f5b7b1">3. ElementMap → TNP name propagation</text>
+    <text x="680" y="439" fill="#f5b7b1">4. Tip → Update "current" solid state</text>
+  </g>
+
+  <!-- TNP Fix callout -->
+  <rect x="30" y="460" width="940" height="55" rx="8" fill="#e74c3c" opacity="0.15"/>
+  <text x="500" y="483" text-anchor="middle" fill="#e74c3c" font-size="12" font-weight="bold">🔧 TNP Fallback Fix (FeatureDressUp.cpp) — Fillet/Chamfer stale edge resolution</text>
+  <text x="500" y="503" text-anchor="middle" fill="#f1948a" font-size="10">getContinuousEdges() / getFaces(): strip "?" prefix → try short name → sub-shape lookup → no crash on model rebuild</text>
+
+  <!-- Timeline -->
+  <rect x="30" y="530" width="940" height="155" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="500" y="555" text-anchor="middle" fill="#aeb6bf" font-size="13" font-weight="bold">📅 PartDesign Evolution</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="80" y1="580" x2="920" y2="580" stroke="#34495e" stroke-width="2"/>
+    <circle cx="80" cy="580" r="4" fill="#e74c3c"/>
+    <text x="80" y="600" text-anchor="middle">2008</text>
+    <text x="80" y="615" text-anchor="middle" fill="#bdc3c7">First Pad/</text>
+    <text x="80" y="628" text-anchor="middle" fill="#bdc3c7">Pocket</text>
+
+    <circle cx="230" cy="580" r="4" fill="#e67e22"/>
+    <text x="230" y="600" text-anchor="middle">2012</text>
+    <text x="230" y="615" text-anchor="middle" fill="#bdc3c7">Body</text>
+    <text x="230" y="628" text-anchor="middle" fill="#bdc3c7">concept</text>
+
+    <circle cx="380" cy="580" r="4" fill="#f1c40f"/>
+    <text x="380" y="600" text-anchor="middle">2015</text>
+    <text x="380" y="615" text-anchor="middle" fill="#bdc3c7">PartDesign</text>
+    <text x="380" y="628" text-anchor="middle" fill="#bdc3c7">Next rewrite</text>
+
+    <circle cx="530" cy="580" r="4" fill="#2ecc71"/>
+    <text x="530" y="600" text-anchor="middle">2019</text>
+    <text x="530" y="615" text-anchor="middle" fill="#bdc3c7">Helix +</text>
+    <text x="530" y="628" text-anchor="middle" fill="#bdc3c7">Primitives</text>
+
+    <circle cx="680" cy="580" r="4" fill="#3498db"/>
+    <text x="680" y="600" text-anchor="middle">2023</text>
+    <text x="680" y="615" text-anchor="middle" fill="#bdc3c7">TNP</text>
+    <text x="680" y="628" text-anchor="middle" fill="#bdc3c7">Integration</text>
+
+    <circle cx="830" cy="580" r="4" fill="#9b59b6"/>
+    <text x="830" y="600" text-anchor="middle">2026</text>
+    <text x="830" y="615" text-anchor="middle" fill="#bdc3c7">DressUp</text>
+    <text x="830" y="628" text-anchor="middle" fill="#bdc3c7">TNP fallback</text>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(55, 650)" font-size="10">
+    <rect width="14" height="14" rx="2" fill="#1e8449"/><text x="20" y="12" fill="#7f8c8d">Additive</text>
+    <rect x="90" width="14" height="14" rx="2" fill="#922b21"/><text x="110" y="12" fill="#7f8c8d">Subtractive</text>
+    <rect x="195" width="14" height="14" rx="2" fill="#b9770e"/><text x="215" y="12" fill="#7f8c8d">DressUp</text>
+    <rect x="280" width="14" height="14" rx="2" fill="#6c3483"/><text x="300" y="12" fill="#7f8c8d">Pattern</text>
+    <rect x="360" width="14" height="14" rx="2" fill="#1a5276"/><text x="380" y="12" fill="#7f8c8d">Datum</text>
+  </g>
+</svg>

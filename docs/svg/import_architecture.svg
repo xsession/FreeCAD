@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="900" height="380" fill="url(#bg)" rx="10"/>
+  <text x="450" y="30" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold">Import Module Architecture</text>
+  <text x="450" y="48" text-anchor="middle" fill="#8b949e" font-size="11">STEP/IGES import/export via OpenCASCADE XCAF</text>
+
+  <!-- Import -->
+  <rect x="30" y="65" width="260" height="120" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="160" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">ImportOCAF</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="108">STEPCAFControl_Reader</text>
+    <text x="45" y="123">XDE document → FreeCAD</text>
+    <text x="45" y="138">Colors, materials, names</text>
+    <text x="45" y="153">Assembly structure</text>
+    <text x="45" y="168">TNP element map on import</text>
+  </g>
+
+  <!-- Export -->
+  <rect x="310" y="65" width="260" height="120" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="440" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">ExportOCAF</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="325" y="108">STEPCAFControl_Writer</text>
+    <text x="325" y="123">FreeCAD → XDE document</text>
+    <text x="325" y="138">Preserve colors, assembly</text>
+    <text x="325" y="153">STEP AP214/AP203</text>
+    <text x="325" y="168">IGES export</text>
+  </g>
+
+  <!-- Formats -->
+  <rect x="590" y="65" width="280" height="120" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="730" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Supported Formats</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="605" y="108" fill="#fff" font-weight="bold">STEP</text><text x="640" y="108"> — AP203/AP214/AP242</text>
+    <text x="605" y="128" fill="#fff" font-weight="bold">IGES</text><text x="640" y="128"> — Legacy interchange</text>
+    <text x="605" y="148" fill="#fff" font-weight="bold">BREP</text><text x="640" y="148"> — OCC native format</text>
+    <text x="605" y="168" fill="#fff" font-weight="bold">glTF</text><text x="640" y="168"> — 3D web format</text>
+  </g>
+
+  <!-- Pipeline -->
+  <rect x="30" y="205" width="840" height="55" rx="8" fill="#2c3e50" opacity="0.85"/>
+  <text x="450" y="228" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">🔄 STEP Import Pipeline</text>
+  <g font-size="10">
+    <rect x="55" y="237" width="90" height="16" rx="4" fill="#3498db" opacity="0.7"/><text x="100" y="249" text-anchor="middle" fill="#fff" font-size="8">.step file</text>
+    <text x="155" y="249" fill="#5dade2" font-size="11">→</text>
+    <rect x="170" y="237" width="120" height="16" rx="4" fill="#2ecc71" opacity="0.7"/><text x="230" y="249" text-anchor="middle" fill="#fff" font-size="8">XCAF Reader</text>
+    <text x="300" y="249" fill="#5dade2" font-size="11">→</text>
+    <rect x="315" y="237" width="120" height="16" rx="4" fill="#f39c12" opacity="0.7"/><text x="375" y="249" text-anchor="middle" fill="#fff" font-size="8">XDE Document</text>
+    <text x="445" y="249" fill="#5dade2" font-size="11">→</text>
+    <rect x="460" y="237" width="120" height="16" rx="4" fill="#e74c3c" opacity="0.7"/><text x="520" y="249" text-anchor="middle" fill="#fff" font-size="8">ImportOCAF</text>
+    <text x="590" y="249" fill="#5dade2" font-size="11">→</text>
+    <rect x="605" y="237" width="120" height="16" rx="4" fill="#9b59b6" opacity="0.7"/><text x="665" y="249" text-anchor="middle" fill="#fff" font-size="8">DocumentObjects</text>
+  </g>
+
+  <!-- Timeline -->
+  <rect x="30" y="280" width="840" height="85" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="450" y="303" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">📅 Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="100" y1="325" x2="800" y2="325" stroke="#34495e" stroke-width="2"/>
+    <circle cx="160" cy="325" r="4" fill="#3498db"/><text x="160" y="345" text-anchor="middle">2004</text><text x="160" y="358" text-anchor="middle" fill="#bdc3c7">STEP/IGES basic</text>
+    <circle cx="370" cy="325" r="4" fill="#2ecc71"/><text x="370" y="345" text-anchor="middle">2015</text><text x="370" y="358" text-anchor="middle" fill="#bdc3c7">XCAF colors</text>
+    <circle cx="570" cy="325" r="4" fill="#f39c12"/><text x="570" y="345" text-anchor="middle">2023</text><text x="570" y="358" text-anchor="middle" fill="#bdc3c7">TNP on import</text>
+    <circle cx="730" cy="325" r="4" fill="#9b59b6"/><text x="730" y="345" text-anchor="middle">2024</text><text x="730" y="358" text-anchor="middle" fill="#bdc3c7">glTF export</text>
+  </g>
+</svg>

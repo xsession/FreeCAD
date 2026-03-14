@@ -838,9 +838,36 @@ void SketchWorkflow::createSketch()
 
 void SketchWorkflow::tryCreateSketch()
 {
+    // DEBUG: Log selection BEFORE shouldCreateBody
+    {
+        auto selEx = Gui::Selection().getSelectionEx(
+            nullptr, App::DocumentObject::getClassTypeId());
+        Base::Console().Warning("SketchWorkflow BEFORE shouldCreateBody: selectionEx count = %d\n",
+                                (int)selEx.size());
+        for (size_t i = 0; i < selEx.size(); ++i) {
+            auto& so = selEx[i];
+            Base::Console().Warning(
+                "  sel[%d]: obj=%s subNames=%d\n",
+                (int)i, so.getFeatName(), (int)so.getSubNames().size());
+            for (auto& sn : so.getSubNames()) {
+                Base::Console().Warning("    subName: '%s'\n", sn.c_str());
+            }
+        }
+    }
+
     auto result = shouldCreateBody();
     auto shouldMakeBody = std::get<0>(result);
     activeBody = std::get<1>(result);
+
+    // DEBUG: Log selection AFTER shouldCreateBody
+    {
+        auto selEx = Gui::Selection().getSelectionEx(
+            nullptr, App::DocumentObject::getClassTypeId());
+        Base::Console().Warning("SketchWorkflow AFTER shouldCreateBody: selectionEx count = %d, activeBody=%s\n",
+                                (int)selEx.size(),
+                                activeBody ? activeBody->getNameInDocument() : "null");
+    }
+
     if (shouldAbort(shouldMakeBody)) {
         return;
     }
@@ -848,12 +875,34 @@ void SketchWorkflow::tryCreateSketch()
     auto filters = getFilters();
     SketchPreselection sketchOnFace {guidocument, activeBody, filters};
 
+    // DEBUG: Log selection state before matching
+    {
+        auto selEx = Gui::Selection().getSelectionEx(
+            nullptr, App::DocumentObject::getClassTypeId());
+        Base::Console().Warning("SketchWorkflow: selectionEx count = %d\n",
+                                (int)selEx.size());
+        for (size_t i = 0; i < selEx.size(); ++i) {
+            auto& so = selEx[i];
+            Base::Console().Warning(
+                "  sel[%d]: obj=%s type=%s subNames=%d\n",
+                (int)i,
+                so.getFeatName(),
+                so.getTypeName(),
+                (int)so.getSubNames().size());
+            for (auto& sn : so.getSubNames()) {
+                Base::Console().Warning("    subName: '%s'\n", sn.c_str());
+            }
+        }
+    }
+
     if (sketchOnFace.matches()) {
+        Base::Console().Warning("SketchWorkflow: matches() = TRUE\n");
         // create Sketch on Face or Plane
         sketchOnFace.createSupport();
         sketchOnFace.createSketchOnSupport(sketchOnFace.getSupport());
     }
     else {
+        Base::Console().Warning("SketchWorkflow: matches() = FALSE\n");
         SketchRequestSelection requestSelection {guidocument, activeBody};
         requestSelection.findSupport();
     }
@@ -869,6 +918,10 @@ std::tuple<bool, PartDesign::Body*> SketchWorkflow::shouldCreateBody()
     App::DocumentObject* topParent;
     PartDesign::Body* pdBody
         = PartDesignGui::getBody(/* messageIfNot = */ false, true, true, &topParent);
+
+    Base::Console().Warning("shouldCreateBody: getBody returned pdBody=%s\n",
+                            pdBody ? pdBody->getNameInDocument() : "null");
+
     if (pdBody && topParent->isLink()) {
         auto* xLink = dynamic_cast<App::Link*>(topParent);
         pdBody->Placement.setValue(xLink->Placement.getValue());
@@ -876,11 +929,18 @@ std::tuple<bool, PartDesign::Body*> SketchWorkflow::shouldCreateBody()
     if (!pdBody) {
         if (appdocument->countObjectsOfType<PartDesign::Body>() == 0) {
             shouldMakeBody = true;
+            Base::Console().Warning("shouldCreateBody: no bodies exist, will create one\n");
         }
         else {
+            Base::Console().Warning("shouldCreateBody: showing DlgActiveBody dialog\n");
             PartDesignGui::DlgActiveBody dia(Gui::getMainWindow(), appdocument);
             if (dia.exec() == QDialog::Accepted) {
                 pdBody = dia.getActiveBody();
+                Base::Console().Warning("shouldCreateBody: dialog accepted, pdBody=%s\n",
+                                        pdBody ? pdBody->getNameInDocument() : "null");
+            }
+            else {
+                Base::Console().Warning("shouldCreateBody: dialog rejected\n");
             }
         }
     }

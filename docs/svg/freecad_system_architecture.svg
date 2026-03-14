@@ -1,0 +1,283 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="100%" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="coreGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1a5276"/>
+      <stop offset="100%" stop-color="#2980b9"/>
+    </linearGradient>
+    <linearGradient id="modGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e8449"/>
+      <stop offset="100%" stop-color="#27ae60"/>
+    </linearGradient>
+    <linearGradient id="extGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7d3c98"/>
+      <stop offset="100%" stop-color="#a569bd"/>
+    </linearGradient>
+    <linearGradient id="uiGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#b9770e"/>
+      <stop offset="100%" stop-color="#f39c12"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="url(#bgGrad)" rx="12"/>
+
+  <!-- Title -->
+  <text x="600" y="45" text-anchor="middle" fill="#e6edf3" font-size="22" font-weight="bold">FreeCAD System Architecture</text>
+  <text x="600" y="68" text-anchor="middle" fill="#8b949e" font-size="13">Version 1.2.0-dev · 28 Modules · ~5,400 Source Files</text>
+
+  <!-- Layer 1: External Libraries -->
+  <rect x="40" y="780" width="1120" height="90" rx="10" fill="url(#extGrad)" opacity="0.85" filter="url(#shadow)"/>
+  <text x="600" y="810" text-anchor="middle" fill="#fff" font-size="15" font-weight="bold">External Libraries</text>
+  <g font-size="12" fill="#e8daef">
+    <text x="120" y="835">OpenCascade 7.8</text>
+    <text x="280" y="835">Coin3D / SoQt</text>
+    <text x="420" y="835">Qt 6.x</text>
+    <text x="530" y="835">Python 3.12</text>
+    <text x="660" y="835">Boost</text>
+    <text x="760" y="835">Eigen 3</text>
+    <text x="860" y="835">VTK</text>
+    <text x="950" y="835">OndselSolver</text>
+    <text x="120" y="858">SMESH / Netgen</text>
+    <text x="280" y="858">fmt / yaml-cpp</text>
+    <text x="420" y="858">Xerces-C</text>
+    <text x="530" y="858">Pybind11</text>
+    <text x="660" y="858">FreeType</text>
+    <text x="760" y="858">OCCT HLR</text>
+    <text x="860" y="858">libarea</text>
+    <text x="950" y="858">Gmsh</text>
+  </g>
+
+  <!-- Layer 2: Base -->
+  <rect x="40" y="680" width="1120" height="85" rx="10" fill="url(#coreGrad)" opacity="0.9" filter="url(#shadow)"/>
+  <text x="100" y="710" fill="#fff" font-size="15" font-weight="bold">Base (FreeCADBase)</text>
+  <text x="100" y="730" fill="#aed6f1" font-size="11">72 .cpp · 72 .h</text>
+  <g font-size="11" fill="#d6eaf8">
+    <text x="280" y="710">Vector3D</text>  <text x="370" y="710">Matrix</text>
+    <text x="440" y="710">Placement</text> <text x="540" y="710">Rotation</text>
+    <text x="630" y="710">Quantity</text>  <text x="720" y="710">Unit</text>
+    <text x="790" y="710">UnitsApi</text>  <text x="890" y="710">Console</text>
+    <text x="980" y="710">Parameter</text>
+    <text x="280" y="735">Type</text>      <text x="370" y="735">BaseClass</text>
+    <text x="440" y="735">Persistence</text> <text x="540" y="735">Reader/Writer</text>
+    <text x="630" y="735">FileInfo</text>  <text x="720" y="735">Exception</text>
+    <text x="790" y="735">BoundBox</text>  <text x="890" y="735">Interpreter</text>
+    <text x="980" y="735">DualQuat</text>
+  </g>
+
+  <!-- Layer 3: App -->
+  <rect x="40" y="580" width="1120" height="85" rx="10" fill="url(#coreGrad)" opacity="0.95" filter="url(#shadow)"/>
+  <text x="100" y="610" fill="#fff" font-size="15" font-weight="bold">App (FreeCADApp)</text>
+  <text x="100" y="630" fill="#aed6f1" font-size="11">90 .cpp · 80 .h</text>
+  <g font-size="11" fill="#d6eaf8">
+    <text x="280" y="610">Application</text>  <text x="380" y="610">Document</text>
+    <text x="475" y="610">DocumentObject</text> <text x="600" y="610">Property*</text>
+    <text x="690" y="610">PropertyLinks</text> <text x="810" y="610">Expression</text>
+    <text x="910" y="610">ElementMap</text>    <text x="1020" y="610">StringHasher</text>
+    <text x="280" y="635">GeoFeature</text>   <text x="380" y="635">Link</text>
+    <text x="475" y="635">Extension</text>    <text x="600" y="635">Transaction</text>
+    <text x="690" y="635">ComplexGeoData</text> <text x="810" y="635">GroupExt.</text>
+    <text x="910" y="635">OriginGroupExt</text> <text x="1020" y="635">VarSet</text>
+  </g>
+
+  <!-- Layer 4: Gui -->
+  <rect x="40" y="475" width="1120" height="90" rx="10" fill="url(#uiGrad)" opacity="0.9" filter="url(#shadow)"/>
+  <text x="100" y="505" fill="#fff" font-size="15" font-weight="bold">Gui (FreeCADGui)</text>
+  <text x="100" y="525" fill="#fdebd0" font-size="11">365 .cpp · 347 .h</text>
+  <g font-size="11" fill="#fef9e7">
+    <text x="280" y="505">MainWindow</text>   <text x="390" y="505">View3DInventor</text>
+    <text x="530" y="505">ViewProvider</text>  <text x="650" y="505">Command</text>
+    <text x="740" y="505">Workbench</text>    <text x="850" y="505">Selection</text>
+    <text x="960" y="505">NavigationStyle</text>
+    <text x="280" y="530">Tree</text>         <text x="390" y="530">TaskView</text>
+    <text x="530" y="530">PropertyEditor</text> <text x="650" y="530">Control</text>
+    <text x="740" y="530">OverlayMgr</text>   <text x="850" y="530">NaviCube</text>
+    <text x="960" y="530">MDIView</text>
+  </g>
+
+  <!-- Layer 5: Modules -->
+  <text x="600" y="105" text-anchor="middle" fill="#8b949e" font-size="13" font-weight="bold">WORKBENCH MODULES (src/Mod/)</text>
+
+  <!-- Row 1: Major CAD modules -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="117" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Part</text>
+    <text x="117" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">263 cpp · 162 h</text>
+    <text x="117" y="173" text-anchor="middle" fill="#abebc6" font-size="9">OCC Wrapper · BRep</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="205" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="282" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">PartDesign</text>
+    <text x="282" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">Feature Modeling</text>
+    <text x="282" y="173" text-anchor="middle" fill="#abebc6" font-size="9">Body · Pad · DressUp</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="370" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="447" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Sketcher</text>
+    <text x="447" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">77 cpp · 100 h</text>
+    <text x="447" y="173" text-anchor="middle" fill="#abebc6" font-size="9">PlaneGCS · Constraints</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="535" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="612" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">Assembly</text>
+    <text x="612" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">29 cpp · 24 py</text>
+    <text x="612" y="173" text-anchor="middle" fill="#abebc6" font-size="9">OndselSolver · Joints</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="700" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="777" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">FEM</text>
+    <text x="777" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">135 cpp · 389 py</text>
+    <text x="777" y="173" text-anchor="middle" fill="#abebc6" font-size="9">CalculiX · Elmer · VTK</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="865" y="115" width="155" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="942" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">TechDraw</text>
+    <text x="942" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">241 cpp · 209 h</text>
+    <text x="942" y="173" text-anchor="middle" fill="#abebc6" font-size="9">2D Views · Dimensions</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1030" y="115" width="130" height="70" rx="8" fill="url(#modGrad)" opacity="0.9"/>
+    <text x="1095" y="140" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">CAM</text>
+    <text x="1095" y="158" text-anchor="middle" fill="#d5f5e3" font-size="10">76 cpp · 379 py</text>
+    <text x="1095" y="173" text-anchor="middle" fill="#abebc6" font-size="9">GCode · Toolpath</text>
+  </g>
+
+  <!-- Row 2: Secondary modules -->
+  <g filter="url(#shadow)">
+    <rect x="40" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="105" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Mesh</text>
+    <text x="105" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">148 cpp · STL/OBJ</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="180" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="245" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Draft</text>
+    <text x="245" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">238 py · 2D Lines</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="320" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="385" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">BIM</text>
+    <text x="385" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">215 py · IFC · Walls</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="460" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="525" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Surface</text>
+    <text x="525" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">24 cpp · NURBS</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="600" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="665" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Spreadsheet</text>
+    <text x="665" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">29 cpp · Formulas</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="740" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="805" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Material</text>
+    <text x="805" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">63 cpp · FCMat DB</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="880" y="195" width="130" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="945" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">Import</text>
+    <text x="945" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">29 cpp · STEP/IGES</text>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="1020" y="195" width="140" height="60" rx="8" fill="#2c3e50" opacity="0.9"/>
+    <text x="1090" y="218" text-anchor="middle" fill="#ecf0f1" font-size="12" font-weight="bold">MeshPart</text>
+    <text x="1090" y="235" text-anchor="middle" fill="#bdc3c7" font-size="9">16 cpp · Bridge</text>
+  </g>
+
+  <!-- Row 3: Small/utility modules -->
+  <g font-size="10" fill="#95a5a6">
+    <rect x="40" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="90" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Points</text>
+    <text x="90" y="305" text-anchor="middle">E57 · PLY</text>
+
+    <rect x="150" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="200" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Measure</text>
+    <text x="200" y="305" text-anchor="middle">Dist · Angle</text>
+
+    <rect x="260" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="310" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Inspection</text>
+    <text x="310" y="305" text-anchor="middle">Deviation</text>
+
+    <rect x="370" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="420" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">RevEng</text>
+    <text x="420" y="305" text-anchor="middle">Poisson · Fit</text>
+
+    <rect x="480" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="530" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Robot</text>
+    <text x="530" y="305" text-anchor="middle">6-Axis · Traj</text>
+
+    <rect x="590" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="640" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">OpenSCAD</text>
+    <text x="640" y="305" text-anchor="middle">CSG Import</text>
+
+    <rect x="700" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="750" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Start</text>
+    <text x="750" y="305" text-anchor="middle">Welcome</text>
+
+    <rect x="810" y="270" width="110" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="865" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">AddonMgr</text>
+    <text x="865" y="305" text-anchor="middle">99 py · Install</text>
+
+    <rect x="930" y="270" width="100" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="980" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Show</text>
+    <text x="980" y="305" text-anchor="middle">TempoVis</text>
+
+    <rect x="1040" y="270" width="120" height="45" rx="6" fill="#1c2833" opacity="0.85"/>
+    <text x="1100" y="290" text-anchor="middle" fill="#d5d8dc" font-size="11">Help · Plot</text>
+    <text x="1100" y="305" text-anchor="middle">Browser · MPL</text>
+  </g>
+
+  <!-- Cross-cutting systems band -->
+  <rect x="40" y="340" width="1120" height="50" rx="8" fill="#922b21" opacity="0.7"/>
+  <text x="600" y="365" text-anchor="middle" fill="#fadbd8" font-size="13" font-weight="bold">Cross-Cutting Systems</text>
+  <g font-size="11" fill="#f5b7b1">
+    <text x="120" y="380">Element Maps / TNP</text>
+    <text x="300" y="380">Property System</text>
+    <text x="460" y="380">Expression Engine</text>
+    <text x="640" y="380">Link System</text>
+    <text x="790" y="380">Extension Framework</text>
+    <text x="980" y="380">Transaction System</text>
+  </g>
+
+  <!-- Connection arrows (simplified) -->
+  <g stroke="#4a6fa5" stroke-width="1.5" fill="none" opacity="0.5" stroke-dasharray="4,3">
+    <!-- Modules to Gui -->
+    <line x1="600" y1="315" x2="600" y2="475"/>
+    <!-- Gui to App -->
+    <line x1="600" y1="565" x2="600" y2="580"/>
+    <!-- App to Base -->
+    <line x1="600" y1="665" x2="600" y2="680"/>
+    <!-- Base to External -->
+    <line x1="600" y1="765" x2="600" y2="780"/>
+  </g>
+
+  <!-- Arrows labels -->
+  <text x="615" y="430" fill="#4a6fa5" font-size="10" opacity="0.7">↕ ViewProviders / Commands</text>
+  <text x="615" y="575" fill="#4a6fa5" font-size="10" opacity="0.7">↕ Properties / Objects</text>
+  <text x="615" y="675" fill="#4a6fa5" font-size="10" opacity="0.7">↕ Math / IO / Types</text>
+  <text x="615" y="775" fill="#4a6fa5" font-size="10" opacity="0.7">↕ OCC / Qt / Python</text>
+
+  <!-- Legend -->
+  <g transform="translate(40,440)">
+    <rect width="12" height="12" rx="2" fill="url(#coreGrad)"/>
+    <text x="18" y="11" fill="#8b949e" font-size="10">Core Framework</text>
+    <rect x="130" width="12" height="12" rx="2" fill="url(#uiGrad)"/>
+    <text x="148" y="11" fill="#8b949e" font-size="10">GUI Layer</text>
+    <rect x="230" width="12" height="12" rx="2" fill="url(#modGrad)"/>
+    <text x="248" y="11" fill="#8b949e" font-size="10">Major Modules</text>
+    <rect x="350" width="12" height="12" rx="2" fill="#2c3e50"/>
+    <text x="368" y="11" fill="#8b949e" font-size="10">Secondary Modules</text>
+    <rect x="490" width="12" height="12" rx="2" fill="#1c2833"/>
+    <text x="508" y="11" fill="#8b949e" font-size="10">Utility Modules</text>
+    <rect x="620" width="12" height="12" rx="2" fill="#922b21" opacity="0.7"/>
+    <text x="638" y="11" fill="#8b949e" font-size="10">Cross-Cutting</text>
+    <rect x="740" width="12" height="12" rx="2" fill="url(#extGrad)"/>
+    <text x="758" y="11" fill="#8b949e" font-size="10">External Libs</text>
+  </g>
+</svg>

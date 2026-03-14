@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="900" height="380" fill="url(#bg)" rx="10"/>
+  <text x="450" y="30" text-anchor="middle" fill="#e6edf3" font-size="18" font-weight="bold">Spreadsheet Module Architecture</text>
+  <text x="450" y="48" text-anchor="middle" fill="#8b949e" font-size="11">Cell-based data with expression formulas driving model parameters</text>
+
+  <!-- Sheet -->
+  <rect x="30" y="65" width="250" height="110" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="155" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Sheet Object</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="108">cells: map&lt;CellAddress, Cell&gt;</text>
+    <text x="45" y="123">Alias system (B2 → "Width")</text>
+    <text x="45" y="138">Row/column sizing</text>
+    <text x="45" y="153">Style: color, font, alignment</text>
+    <text x="45" y="168">XLSX import/export</text>
+  </g>
+
+  <!-- Cell -->
+  <rect x="300" y="65" width="270" height="110" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="435" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Cell</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="315" y="108">Expression → evaluated by engine</text>
+    <text x="315" y="123">DisplayUnit (mm, in, deg...)</text>
+    <text x="315" y="138">Foreground / Background color</text>
+    <text x="315" y="153">Font, style, alignment</text>
+    <text x="315" y="168">Row/column span</text>
+  </g>
+
+  <!-- Expression Binding -->
+  <rect x="590" y="65" width="280" height="110" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="730" y="88" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">Expression Binding</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="605" y="108">Cell formula: =Pad.Length * 2</text>
+    <text x="605" y="123">Property binding: Pad.Length = B2</text>
+    <text x="605" y="138">Bidirectional parametric link</text>
+    <text x="605" y="153">Aggregate: =sum(A1:A10)</text>
+    <text x="605" y="168">Cross-object references</text>
+  </g>
+
+  <!-- Flow -->
+  <rect x="30" y="200" width="840" height="60" rx="8" fill="#2c3e50" opacity="0.85"/>
+  <text x="450" y="225" text-anchor="middle" fill="#ecf0f1" font-size="13" font-weight="bold">🔄 Parametric Flow</text>
+  <g font-size="11">
+    <rect x="55" y="235" width="110" height="18" rx="4" fill="#3498db" opacity="0.7"/><text x="110" y="249" text-anchor="middle" fill="#fff" font-size="9">Spreadsheet.B2</text>
+    <text x="175" y="249" fill="#5dade2" font-size="12">→</text>
+    <rect x="190" y="235" width="140" height="18" rx="4" fill="#2ecc71" opacity="0.7"/><text x="260" y="249" text-anchor="middle" fill="#fff" font-size="9">Expression Engine</text>
+    <text x="340" y="249" fill="#5dade2" font-size="12">→</text>
+    <rect x="355" y="235" width="110" height="18" rx="4" fill="#f39c12" opacity="0.7"/><text x="410" y="249" text-anchor="middle" fill="#fff" font-size="9">Pad.Length</text>
+    <text x="475" y="249" fill="#5dade2" font-size="12">→</text>
+    <rect x="490" y="235" width="100" height="18" rx="4" fill="#e74c3c" opacity="0.7"/><text x="540" y="249" text-anchor="middle" fill="#fff" font-size="9">Recompute</text>
+    <text x="600" y="249" fill="#5dade2" font-size="12">→</text>
+    <rect x="615" y="235" width="130" height="18" rx="4" fill="#9b59b6" opacity="0.7"/><text x="680" y="249" text-anchor="middle" fill="#fff" font-size="9">Updated 3D Shape</text>
+  </g>
+
+  <!-- Timeline -->
+  <rect x="30" y="280" width="840" height="85" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="450" y="303" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">📅 Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="80" y1="325" x2="820" y2="325" stroke="#34495e" stroke-width="2"/>
+    <circle cx="150" cy="325" r="4" fill="#3498db"/><text x="150" y="345" text-anchor="middle">2014</text><text x="150" y="358" text-anchor="middle" fill="#bdc3c7">Initial</text>
+    <circle cx="370" cy="325" r="4" fill="#2ecc71"/><text x="370" y="345" text-anchor="middle">2016</text><text x="370" y="358" text-anchor="middle" fill="#bdc3c7">Expressions</text>
+    <circle cx="590" cy="325" r="4" fill="#f39c12"/><text x="590" y="345" text-anchor="middle">2020</text><text x="590" y="358" text-anchor="middle" fill="#bdc3c7">Aliases</text>
+    <circle cx="750" cy="325" r="4" fill="#9b59b6"/><text x="750" y="345" text-anchor="middle">2024</text><text x="750" y="358" text-anchor="middle" fill="#bdc3c7">XLSX import</text>
+  </g>
+</svg>

@@ -1,0 +1,138 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 700" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="700" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">Topological Naming Problem (TNP) — Element Map Pipeline</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">How FreeCAD tracks edge/face identity across model operations</text>
+
+  <!-- Problem statement -->
+  <rect x="30" y="75" width="940" height="70" rx="8" fill="#922b21" opacity="0.7" filter="url(#s)"/>
+  <text x="500" y="100" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">❌ The Problem (Pre-TNP)</text>
+  <text x="500" y="120" text-anchor="middle" fill="#f5b7b1" font-size="11">Edit a feature upstream → OCC regenerates topology → "Edge7" becomes "Edge12" → Fillet/Chamfer references break → Model crashes</text>
+
+  <!-- Solution -->
+  <rect x="30" y="160" width="940" height="70" rx="8" fill="#1e8449" opacity="0.7" filter="url(#s)"/>
+  <text x="500" y="185" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">✅ The Solution (TNP / Element Maps)</text>
+  <text x="500" y="205" text-anchor="middle" fill="#a9dfbf" font-size="11">Each operation creates a map: old_element_name → new_element_name. Names are hashed for compact storage. References survive regeneration.</text>
+
+  <!-- Pipeline -->
+  <text x="500" y="260" text-anchor="middle" fill="#aeb6bf" font-size="14" font-weight="bold">🔄 Element Map Pipeline</text>
+
+  <!-- Step 1: Shape Operation -->
+  <rect x="30" y="280" width="180" height="120" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="120" y="305" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">1️⃣ Shape Op</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="325">Pad, Pocket,</text>
+    <text x="45" y="340">Fillet, Boolean</text>
+    <text x="45" y="360">OCC generates</text>
+    <text x="45" y="375">new topology</text>
+  </g>
+
+  <text x="225" y="340" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Step 2: Name Generation -->
+  <rect x="240" y="280" width="180" height="120" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="330" y="305" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">2️⃣ Name Gen</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="255" y="325">TopoShape generates</text>
+    <text x="255" y="340">mapped names from</text>
+    <text x="255" y="360">operation history +</text>
+    <text x="255" y="375">input element names</text>
+  </g>
+
+  <text x="435" y="340" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Step 3: String Hasher -->
+  <rect x="450" y="280" width="180" height="120" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="540" y="305" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">3️⃣ Hash</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="465" y="325">StringHasher</text>
+    <text x="465" y="340">compresses names</text>
+    <text x="465" y="360">to integer IDs</text>
+    <text x="465" y="375">for compact storage</text>
+  </g>
+
+  <text x="645" y="340" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Step 4: Element Map -->
+  <rect x="660" y="280" width="150" height="120" rx="8" fill="#e74c3c" opacity="0.8" filter="url(#s)"/>
+  <text x="735" y="305" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">4️⃣ Map</text>
+  <g font-size="9" fill="#fadbd8">
+    <text x="675" y="325">ElementMap stores</text>
+    <text x="675" y="340">old → new name</text>
+    <text x="675" y="360">mapping in</text>
+    <text x="675" y="375">ComplexGeoData</text>
+  </g>
+
+  <text x="825" y="340" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Step 5: Resolve -->
+  <rect x="840" y="280" width="130" height="120" rx="8" fill="#9b59b6" opacity="0.8" filter="url(#s)"/>
+  <text x="905" y="305" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold">5️⃣ Resolve</text>
+  <g font-size="9" fill="#e8daef">
+    <text x="855" y="325">Downstream</text>
+    <text x="855" y="340">features look up</text>
+    <text x="855" y="360">stable names to</text>
+    <text x="855" y="375">find geometry</text>
+  </g>
+
+  <!-- Key Classes -->
+  <rect x="30" y="420" width="300" height="120" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="180" y="445" text-anchor="middle" fill="#ecf0f1" font-size="13" font-weight="bold">📦 Key Classes</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="45" y="468">ElementMap — name mapping storage</text>
+    <text x="45" y="488">StringHasher — name→int compression</text>
+    <text x="45" y="508">ComplexGeoData — geometry + map</text>
+    <text x="45" y="528">MappedName / IndexedName — refs</text>
+  </g>
+
+  <!-- Fallback Strategy -->
+  <rect x="350" y="420" width="310" height="120" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="505" y="445" text-anchor="middle" fill="#ecf0f1" font-size="13" font-weight="bold">🔧 Fallback Strategy (DressUp)</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="365" y="468">1. Try mapped name directly</text>
+    <text x="365" y="488">2. Strip "?" MISSING_PREFIX</text>
+    <text x="365" y="508">3. Try as MappedName</text>
+    <text x="365" y="528">4. Try as IndexedName ("Edge3")</text>
+  </g>
+
+  <!-- Affected Modules -->
+  <rect x="680" y="420" width="290" height="120" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="825" y="445" text-anchor="middle" fill="#ecf0f1" font-size="13" font-weight="bold">🎯 Affected Modules</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="695" y="468">Part (TopoShape core)</text>
+    <text x="695" y="488">PartDesign (all features)</text>
+    <text x="695" y="508">Sketcher (external geometry)</text>
+    <text x="695" y="528">TechDraw, Assembly, FEM...</text>
+  </g>
+
+  <!-- Timeline -->
+  <rect x="30" y="560" width="940" height="125" rx="8" fill="#1c2833" opacity="0.7"/>
+  <text x="500" y="585" text-anchor="middle" fill="#aeb6bf" font-size="13" font-weight="bold">📅 TNP Resolution Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="80" y1="610" x2="920" y2="610" stroke="#34495e" stroke-width="2"/>
+    <circle cx="80" cy="610" r="5" fill="#e74c3c"/><text x="80" y="635" text-anchor="middle">2002</text>
+    <text x="80" y="650" text-anchor="middle" fill="#bdc3c7">Problem known</text>
+
+    <circle cx="230" cy="610" r="5" fill="#e67e22"/><text x="230" y="635" text-anchor="middle">2016</text>
+    <text x="230" y="650" text-anchor="middle" fill="#bdc3c7">realthunder starts</text>
+    <text x="230" y="663" text-anchor="middle" fill="#bdc3c7">element maps</text>
+
+    <circle cx="390" cy="610" r="5" fill="#f1c40f"/><text x="390" y="635" text-anchor="middle">2019</text>
+    <text x="390" y="650" text-anchor="middle" fill="#bdc3c7">Link branch</text>
+    <text x="390" y="663" text-anchor="middle" fill="#bdc3c7">with TNP</text>
+
+    <circle cx="560" cy="610" r="5" fill="#2ecc71"/><text x="560" y="635" text-anchor="middle">2023</text>
+    <text x="560" y="650" text-anchor="middle" fill="#bdc3c7" font-weight="bold">TNP MERGED</text>
+    <text x="560" y="663" text-anchor="middle" fill="#bdc3c7">into main</text>
+
+    <circle cx="730" cy="610" r="5" fill="#3498db"/><text x="730" y="635" text-anchor="middle">2025</text>
+    <text x="730" y="650" text-anchor="middle" fill="#bdc3c7">Ongoing fixes</text>
+
+    <circle cx="880" cy="610" r="5" fill="#9b59b6"/><text x="880" y="635" text-anchor="middle">2026</text>
+    <text x="880" y="650" text-anchor="middle" fill="#bdc3c7">DressUp</text>
+    <text x="880" y="663" text-anchor="middle" fill="#bdc3c7">fallback fix</text>
+  </g>
+</svg>

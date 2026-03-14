@@ -58,6 +58,7 @@ from PartDesignTests.TestThickness import TestThickness
 # extras
 from PartDesignTests.TestInvoluteGear import TestInvoluteGear
 from PartDesignTests.TestSketch import TestSketch
+from PartDesignTests.TestSketchOnFace import TestSketchOnFace
 
 # Topological naming problem
 from PartDesignTests.TestTopologicalNamingProblem import TestTopologicalNamingProblem

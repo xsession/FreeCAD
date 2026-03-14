@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 550" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="550" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">Expression Engine Pipeline</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">Spreadsheet-like formulas binding model properties together</text>
+
+  <!-- Input -->
+  <rect x="30" y="80" width="200" height="90" rx="8" fill="#3498db" opacity="0.8" filter="url(#s)"/>
+  <text x="130" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">📝 Formula Input</text>
+  <g font-size="9" fill="#d6eaf8">
+    <text x="45" y="128">Pad.Length =</text>
+    <text x="45" y="143" font-weight="bold">Spreadsheet.B2 * 2</text>
+    <text x="45" y="158">+ 5mm</text>
+  </g>
+
+  <text x="245" y="125" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Parser -->
+  <rect x="260" y="80" width="180" height="90" rx="8" fill="#2ecc71" opacity="0.8" filter="url(#s)"/>
+  <text x="350" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">🔍 Parser</text>
+  <g font-size="9" fill="#d5f5e3">
+    <text x="275" y="128">ExpressionParser</text>
+    <text x="275" y="143">Tokenize → Parse</text>
+    <text x="275" y="158">→ Build AST</text>
+  </g>
+
+  <text x="455" y="125" fill="#5dade2" font-size="16">→</text>
+
+  <!-- AST -->
+  <rect x="470" y="80" width="180" height="90" rx="8" fill="#f39c12" opacity="0.8" filter="url(#s)"/>
+  <text x="560" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">🌳 AST</text>
+  <g font-size="9" fill="#fdebd0">
+    <text x="485" y="128">OperatorExpression(+)</text>
+    <text x="495" y="143">├ OperatorExpr(*)</text>
+    <text x="505" y="158">└ NumberExpr(5mm)</text>
+  </g>
+
+  <text x="665" y="125" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Evaluate -->
+  <rect x="680" y="80" width="140" height="90" rx="8" fill="#9b59b6" opacity="0.8" filter="url(#s)"/>
+  <text x="750" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">⚡ Evaluate</text>
+  <g font-size="9" fill="#e8daef">
+    <text x="695" y="128">Resolve refs</text>
+    <text x="695" y="143">Compute value</text>
+    <text x="695" y="158">Unit check</text>
+  </g>
+
+  <text x="835" y="125" fill="#5dade2" font-size="16">→</text>
+
+  <!-- Result -->
+  <rect x="850" y="80" width="120" height="90" rx="8" fill="#e74c3c" opacity="0.8" filter="url(#s)"/>
+  <text x="910" y="105" text-anchor="middle" fill="#fff" font-size="13" font-weight="bold">✅ Result</text>
+  <g font-size="9" fill="#fadbd8">
+    <text x="865" y="128">55.0 mm</text>
+    <text x="865" y="143">→ Property</text>
+    <text x="865" y="158">→ Recompute</text>
+  </g>
+
+  <!-- AST Node Types -->
+  <rect x="30" y="190" width="460" height="150" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="260" y="215" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">🌳 Expression AST Node Types</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="50" y="238" fill="#3498db">■</text><text x="65" y="238">NumberExpression — literal: 42, 3.14, 5mm</text>
+    <text x="50" y="258" fill="#2ecc71">■</text><text x="65" y="258">StringExpression — literal: "hello"</text>
+    <text x="50" y="278" fill="#f39c12">■</text><text x="65" y="278">VariableExpression — reference: Pad.Length</text>
+    <text x="50" y="298" fill="#e74c3c">■</text><text x="65" y="298">OperatorExpression — +, -, *, /, ^, %</text>
+    <text x="50" y="318" fill="#9b59b6">■</text><text x="65" y="318">FunctionExpression — sin(), cos(), if(), min(), max()</text>
+    <text x="50" y="333" fill="#1abc9c">■</text><text x="65" y="333">ConditionalExpression — ternary: cond ? a : b</text>
+  </g>
+
+  <!-- ObjectIdentifier -->
+  <rect x="510" y="190" width="460" height="150" rx="8" fill="#2c3e50" opacity="0.85" filter="url(#s)"/>
+  <text x="740" y="215" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">🔗 ObjectIdentifier Resolution</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="530" y="238">Spreadsheet.B2</text>
+    <text x="530" y="258">  → Document: current</text>
+    <text x="530" y="278">  → Object: "Spreadsheet"</text>
+    <text x="530" y="298">  → Property: "B2" (or alias)</text>
+    <text x="530" y="318">  → Value: 25.0 mm</text>
+    <text x="530" y="338" fill="#7f8c8d">Cross-doc: file#Object.Property</text>
+  </g>
+
+  <!-- Dependency Graph -->
+  <rect x="30" y="355" width="940" height="80" rx="8" fill="#1c2833" opacity="0.85"/>
+  <text x="500" y="380" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">🔄 Expression Dependency Graph</text>
+  <g font-size="11">
+    <rect x="55" y="395" width="140" height="28" rx="5" fill="#3498db" opacity="0.7"/><text x="125" y="413" text-anchor="middle" fill="#fff">Spreadsheet.B2</text>
+    <text x="210" y="413" fill="#5dade2">→</text>
+    <rect x="225" y="395" width="120" height="28" rx="5" fill="#2ecc71" opacity="0.7"/><text x="285" y="413" text-anchor="middle" fill="#fff">Pad.Length</text>
+    <text x="360" y="413" fill="#5dade2">→</text>
+    <rect x="375" y="395" width="120" height="28" rx="5" fill="#f39c12" opacity="0.7"/><text x="435" y="413" text-anchor="middle" fill="#fff">Pad Shape</text>
+    <text x="510" y="413" fill="#5dade2">→</text>
+    <rect x="525" y="395" width="120" height="28" rx="5" fill="#e74c3c" opacity="0.7"/><text x="585" y="413" text-anchor="middle" fill="#fff">Pocket.Depth</text>
+    <text x="660" y="413" fill="#5dade2">→</text>
+    <rect x="675" y="395" width="130" height="28" rx="5" fill="#9b59b6" opacity="0.7"/><text x="740" y="413" text-anchor="middle" fill="#fff">Pocket Shape</text>
+    <text x="820" y="413" fill="#5dade2">→</text>
+    <rect x="835" y="395" width="120" height="28" rx="5" fill="#1abc9c" opacity="0.7"/><text x="895" y="413" text-anchor="middle" fill="#fff">Final Body</text>
+  </g>
+
+  <!-- Key Points -->
+  <rect x="30" y="450" width="940" height="85" rx="8" fill="#1c2833" opacity="0.6"/>
+  <text x="500" y="475" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">💡 Key Design Points</text>
+  <g font-size="10" fill="#7f8c8d">
+    <text x="50" y="498">• Expressions support units — "5mm + 2in" → automatic conversion</text>
+    <text x="50" y="518">• Circular dependencies detected and blocked</text>
+    <text x="500" y="498">• PropertyExpressionEngine stores bindings per object</text>
+    <text x="500" y="518">• Functions: sin, cos, sqrt, min, max, abs, if, pi, e, etc.</text>
+  </g>
+</svg>

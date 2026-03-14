@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 660" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#0d1117"/><stop offset="100%" stop-color="#161b22"/></linearGradient>
+    <filter id="s"><feDropShadow dx="1" dy="1" stdDeviation="2" flood-opacity="0.3"/></filter>
+  </defs>
+  <rect width="1000" height="660" fill="url(#bg)" rx="10"/>
+  <text x="500" y="35" text-anchor="middle" fill="#e6edf3" font-size="20" font-weight="bold">Sketcher Module — 2D Constraint Solver</text>
+  <text x="500" y="55" text-anchor="middle" fill="#8b949e" font-size="12">77 .cpp · 100 .h · 16 .py — Geometric constraint solver powered by PlaneGCS</text>
+
+  <!-- SketchObject -->
+  <rect x="30" y="75" width="940" height="85" rx="8" fill="#1a5276" opacity="0.9" filter="url(#s)"/>
+  <text x="500" y="100" text-anchor="middle" fill="#fff" font-size="16" font-weight="bold">📋 SketchObject — Central Sketch Data Model</text>
+  <text x="500" y="120" text-anchor="middle" fill="#85c1e9" font-size="11">Part2DObject subclass · Contains geometry list + constraint list + solver state</text>
+  <text x="500" y="140" text-anchor="middle" fill="#5dade2" font-size="10">Attached to a face or datum plane · Provides 2D profiles for PartDesign Pad/Pocket/etc.</text>
+
+  <!-- Geometry -->
+  <rect x="30" y="175" width="310" height="160" rx="8" fill="#1e8449" opacity="0.85" filter="url(#s)"/>
+  <text x="185" y="200" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">📐 Geometry Elements</text>
+  <g font-size="10" fill="#d5f5e3">
+    <rect x="45" y="212" width="130" height="24" rx="4" fill="#145a32"/><text x="110" y="228" text-anchor="middle">GeomPoint</text>
+    <rect x="185" y="212" width="130" height="24" rx="4" fill="#145a32"/><text x="250" y="228" text-anchor="middle">GeomLineSegment</text>
+    <rect x="45" y="244" width="130" height="24" rx="4" fill="#145a32"/><text x="110" y="260" text-anchor="middle">GeomCircle</text>
+    <rect x="185" y="244" width="130" height="24" rx="4" fill="#145a32"/><text x="250" y="260" text-anchor="middle">GeomArcOfCircle</text>
+    <rect x="45" y="276" width="130" height="24" rx="4" fill="#145a32"/><text x="110" y="292" text-anchor="middle">GeomEllipse</text>
+    <rect x="185" y="276" width="130" height="24" rx="4" fill="#145a32"/><text x="250" y="292" text-anchor="middle">GeomBSplineCurve</text>
+    <rect x="45" y="308" width="270" height="14" rx="2" fill="none" stroke="#2ecc71" stroke-width="0.5"/>
+    <text x="180" y="319" text-anchor="middle" fill="#a9dfbf" font-size="9">GeometryFacade wraps geometry with construction-mode flag</text>
+  </g>
+
+  <!-- Constraints -->
+  <rect x="355" y="175" width="290" height="160" rx="8" fill="#922b21" opacity="0.85" filter="url(#s)"/>
+  <text x="500" y="200" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🔒 Constraints</text>
+  <g font-size="10" fill="#fadbd8">
+    <rect x="370" y="212" width="120" height="22" rx="4" fill="#641e16"/><text x="430" y="227" text-anchor="middle">Coincident</text>
+    <rect x="500" y="212" width="120" height="22" rx="4" fill="#641e16"/><text x="560" y="227" text-anchor="middle">Tangent</text>
+    <rect x="370" y="242" width="120" height="22" rx="4" fill="#641e16"/><text x="430" y="257" text-anchor="middle">Parallel</text>
+    <rect x="500" y="242" width="120" height="22" rx="4" fill="#641e16"/><text x="560" y="257" text-anchor="middle">Perpendicular</text>
+    <rect x="370" y="272" width="120" height="22" rx="4" fill="#641e16"/><text x="430" y="287" text-anchor="middle">Equal</text>
+    <rect x="500" y="272" width="120" height="22" rx="4" fill="#641e16"/><text x="560" y="287" text-anchor="middle">Symmetric</text>
+    <rect x="370" y="302" width="250" height="22" rx="4" fill="#641e16"/><text x="495" y="317" text-anchor="middle">Distance · Angle · Radius · Lock</text>
+  </g>
+
+  <!-- Solver -->
+  <rect x="660" y="175" width="310" height="160" rx="8" fill="#b9770e" opacity="0.85" filter="url(#s)"/>
+  <text x="815" y="200" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">⚡ PlaneGCS Solver</text>
+  <g font-size="10" fill="#fdebd0">
+    <rect x="675" y="212" width="130" height="24" rx="4" fill="#7e5109"/><text x="740" y="228" text-anchor="middle">GCS::System</text>
+    <rect x="815" y="212" width="130" height="24" rx="4" fill="#7e5109"/><text x="880" y="228" text-anchor="middle">GCS::Constraint</text>
+    <rect x="675" y="244" width="130" height="24" rx="4" fill="#7e5109"/><text x="740" y="260" text-anchor="middle">DogLeg solver</text>
+    <rect x="815" y="244" width="130" height="24" rx="4" fill="#7e5109"/><text x="880" y="260" text-anchor="middle">LevMarq solver</text>
+    <rect x="675" y="276" width="130" height="24" rx="4" fill="#7e5109"/><text x="740" y="292" text-anchor="middle">BFGS solver</text>
+    <rect x="815" y="276" width="130" height="24" rx="4" fill="#7e5109"/><text x="880" y="292" text-anchor="middle">SQP optimizer</text>
+    <rect x="675" y="308" width="280" height="14" rx="2" fill="none" stroke="#f39c12" stroke-width="0.5"/>
+    <text x="815" y="319" text-anchor="middle" fill="#fad7a0" font-size="9">Custom built-in constraint solver — no external dependency</text>
+  </g>
+
+  <!-- Analysis & Tools -->
+  <rect x="30" y="350" width="460" height="100" rx="8" fill="#6c3483" opacity="0.8" filter="url(#s)"/>
+  <text x="260" y="375" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">🔍 Analysis &amp; Tools</text>
+  <g font-size="10" fill="#e8daef">
+    <rect x="45" y="388" width="200" height="24" rx="4" fill="#4a235a"/><text x="145" y="404" text-anchor="middle">SketchAnalysis (auto-constraints)</text>
+    <rect x="255" y="388" width="220" height="24" rx="4" fill="#4a235a"/><text x="365" y="404" text-anchor="middle">ExternalGeometry (edge references)</text>
+    <rect x="45" y="420" width="420" height="14" rx="2" fill="none" stroke="#9b59b6" stroke-width="0.5"/>
+    <text x="255" y="431" text-anchor="middle" fill="#d2b4de" font-size="9">DOF analysis · Redundancy detection · Conflicting constraints · Auto-remove</text>
+  </g>
+
+  <!-- Solver Pipeline -->
+  <rect x="510" y="350" width="460" height="100" rx="8" fill="#1c2833" opacity="0.85"/>
+  <text x="740" y="375" text-anchor="middle" fill="#ecf0f1" font-size="14" font-weight="bold">🔄 Solve Pipeline</text>
+  <g font-size="10" fill="#bdc3c7">
+    <text x="530" y="398">1️⃣ User edits geometry/adds constraint</text>
+    <text x="530" y="418">2️⃣ SketchObject syncs to PlaneGCS parameters</text>
+    <text x="530" y="438">3️⃣ Solver minimizes error (DogLeg/LevMarq/BFGS)</text>
+  </g>
+
+  <!-- DOF diagram -->
+  <rect x="30" y="465" width="940" height="70" rx="8" fill="#2c3e50" opacity="0.7"/>
+  <text x="500" y="488" text-anchor="middle" fill="#ecf0f1" font-size="13" font-weight="bold">📊 Degrees of Freedom (DOF) Status</text>
+  <g font-size="11">
+    <rect x="80" y="500" width="160" height="24" rx="4" fill="#27ae60" opacity="0.8"/><text x="160" y="516" text-anchor="middle" fill="#fff">Fully Constrained</text>
+    <rect x="260" y="500" width="160" height="24" rx="4" fill="#f39c12" opacity="0.8"/><text x="340" y="516" text-anchor="middle" fill="#fff">Under-constrained</text>
+    <rect x="440" y="500" width="160" height="24" rx="4" fill="#e74c3c" opacity="0.8"/><text x="520" y="516" text-anchor="middle" fill="#fff">Over-constrained</text>
+    <rect x="620" y="500" width="160" height="24" rx="4" fill="#9b59b6" opacity="0.8"/><text x="700" y="516" text-anchor="middle" fill="#fff">Redundant</text>
+    <rect x="800" y="500" width="120" height="24" rx="4" fill="#e74c3c" opacity="0.5"/><text x="860" y="516" text-anchor="middle" fill="#fff">Conflicting</text>
+  </g>
+
+  <!-- Timeline -->
+  <rect x="30" y="550" width="940" height="95" rx="8" fill="#1c2833" opacity="0.6"/>
+  <text x="500" y="575" text-anchor="middle" fill="#aeb6bf" font-size="12" font-weight="bold">📅 Sketcher Timeline</text>
+  <g font-size="9" fill="#7f8c8d">
+    <line x1="80" y1="600" x2="920" y2="600" stroke="#34495e" stroke-width="2"/>
+    <circle cx="80" cy="600" r="4" fill="#e74c3c"/><text x="80" y="620" text-anchor="middle">2008 Initial</text>
+    <text x="80" y="635" text-anchor="middle" fill="#bdc3c7">FreeGCS</text>
+    <circle cx="230" cy="600" r="4" fill="#e67e22"/><text x="230" y="620" text-anchor="middle">2013 BSpline</text>
+    <circle cx="380" cy="600" r="4" fill="#f1c40f"/><text x="380" y="620" text-anchor="middle">2016 External</text>
+    <text x="380" y="635" text-anchor="middle" fill="#bdc3c7">geometry</text>
+    <circle cx="530" cy="600" r="4" fill="#2ecc71"/><text x="530" y="620" text-anchor="middle">2019 Offset</text>
+    <circle cx="680" cy="600" r="4" fill="#3498db"/><text x="680" y="620" text-anchor="middle">2023 TNP</text>
+    <text x="680" y="635" text-anchor="middle" fill="#bdc3c7">integration</text>
+    <circle cx="830" cy="600" r="4" fill="#9b59b6"/><text x="830" y="620" text-anchor="middle">2025 Rendering</text>
+    <text x="830" y="635" text-anchor="middle" fill="#bdc3c7">rewrite</text>
+  </g>
+</svg>
