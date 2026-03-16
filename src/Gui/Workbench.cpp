@@ -931,6 +931,20 @@ DockWindowItems* StdWorkbench::setupDockWindows() const
     root->addDockWidget("Std_ReportView", Qt::BottomDockWidgetArea, Gui::DockWindowOption::HiddenTabbed);
     root->addDockWidget("Std_PythonView", Qt::BottomDockWidgetArea, Gui::DockWindowOption::HiddenTabbed);
 
+    // Modification History Timeline (Fusion 360-style)
+    {
+        ParameterGrp::handle group = App::GetApplication()
+                                         .GetUserParameter()
+                                         .GetGroup("BaseApp")
+                                         ->GetGroup("Preferences")
+                                         ->GetGroup("DockWindows")
+                                         ->GetGroup("HistoryView");
+        bool enabled = group->GetBool("Enabled", true);
+        if (enabled) {
+            root->addDockWidget("Std_HistoryView", Qt::BottomDockWidgetArea, Gui::DockWindowOption::HiddenTabbed);
+        }
+    }
+
     // Dagview through parameter.
     ParameterGrp::handle group = App::GetApplication()
                                      .GetUserParameter()
