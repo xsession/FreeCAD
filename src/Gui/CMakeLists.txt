@@ -802,6 +802,9 @@ SET(Dock_Windows_CPP_SRCS
     DAGView/DAGModel.cpp
     DAGView/DAGRectItem.cpp
     DAGView/DAGModelGraph.cpp
+    HistoryView/HistoryModel.cpp
+    HistoryView/HistoryView.cpp
+    HistoryView/HistoryViewPy.cpp
 )
 SET(Dock_Windows_HPP_SRCS
     ComboView.h
@@ -816,6 +819,9 @@ SET(Dock_Windows_HPP_SRCS
     DAGView/DAGModel.h
     DAGView/DAGRectItem.h
     DAGView/DAGModelGraph.h
+    HistoryView/HistoryModel.h
+    HistoryView/HistoryView.h
+    HistoryView/HistoryViewPy.h
 )
 SET(Dock_Windows_SRCS
     ${Dock_Windows_CPP_SRCS}

@@ -82,6 +82,7 @@
 #include <Base/Tools.h>
 #include <Base/UnitsApi.h>
 #include <DAGView/DAGView.h>
+#include <HistoryView/HistoryView.h>
 #include <TaskView/TaskView.h>
 
 #include "MainWindow.h"
@@ -555,6 +556,7 @@ void MainWindow::initDockWindows(bool show)
     updateComboView(show);
     updateTaskView(show);
     updateDAGView(show);
+    updateHistoryView(show);
 }
 
 void MainWindow::setupDockWindows()
@@ -824,6 +826,36 @@ bool MainWindow::updateDAGView(bool show)
             widget = dagDockWindow;
             return widget;
         });
+
+        return enabled;
+    }
+
+    return false;
+}
+
+bool MainWindow::updateHistoryView(bool show)
+{
+    // Modification History Timeline (Fusion 360-style)
+    if (d->hiddenDockWindows.find("Std_HistoryView") == std::string::npos) {
+        ParameterGrp::handle group = App::GetApplication()
+                                         .GetUserParameter()
+                                         .GetGroup("BaseApp")
+                                         ->GetGroup("Preferences")
+                                         ->GetGroup("DockWindows")
+                                         ->GetGroup("HistoryView");
+        bool enabled = group->GetBool("Enabled", true);
+        _updateDockWidget("Std_HistoryView", enabled, show, Qt::BottomDockWidgetArea,
+            [](QWidget* widget) {
+                if (widget) {
+                    return widget;
+                }
+
+                auto historyDockWindow = new HistoryView::DockWindow(nullptr, getMainWindow());
+                historyDockWindow->setObjectName(QStringLiteral("Modification History"));
+                historyDockWindow->setWindowTitle(QDockWidget::tr("Modification History"));
+                widget = historyDockWindow;
+                return widget;
+            });
 
         return enabled;
     }

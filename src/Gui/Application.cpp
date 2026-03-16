@@ -93,6 +93,8 @@
 #include "Selection.h"
 #include "SelectionFilterPy.h"
 #include "SoQtOffscreenRendererPy.h"
+
+#include <HistoryView/HistoryViewPy.h>
 #include "SplitView3DInventor.h"
 #include "StartupProcess.h"
 #include "TaskView/TaskView.h"
@@ -664,6 +666,9 @@ Application::Application(bool GUIenabled)
     View3DInventorViewerPy      ::init_type();
     AbstractSplitViewPy         ::init_type();
     // clang-format on
+
+    // Modification History Timeline Python module
+    HistoryView::initHistoryViewPy();
 
     d = new ApplicationP(GUIenabled);
 

@@ -325,6 +325,7 @@ private:
     bool updateTaskView(bool show);
     bool updateComboView(bool show);
     bool updateDAGView(bool show);
+    bool updateHistoryView(bool show);
 
     void populateToolBarMenu(QMenu*);
     void populateDockWindowMenu(QMenu*);
