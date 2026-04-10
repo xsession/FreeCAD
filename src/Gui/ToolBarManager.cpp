@@ -44,6 +44,7 @@
 #include "Command.h"
 #include "MainWindow.h"
 #include "OverlayWidgets.h"
+#include "RibbonBar.h"
 #include "WidgetFactory.h"
 
 
@@ -795,6 +796,26 @@ void ToolBarManager::setup(ToolBarItem* toolBarItems)
     }
 
     setMovable(!areToolBarsLocked());
+
+    // --- Ribbon Bar integration ---
+    // If ribbon mode is enabled, also populate the ribbon and hide classic toolbars.
+    // If not, ensure ribbon is hidden and classic toolbars are visible.
+    RibbonBar* ribbon = RibbonBar::instance();
+    if (ribbon) {
+        if (RibbonBar::isRibbonEnabled()) {
+            ribbon->setup(toolBarItems);
+            ribbon->show();
+            // Hide classic toolbars when ribbon is active
+            QList<ToolBar*> allToolbars = toolBars();
+            for (ToolBar* tb : allToolbars) {
+                tb->hide();
+            }
+        }
+        else {
+            ribbon->hide();
+            ribbon->clear();
+        }
+    }
 }
 
 void ToolBarManager::setup(ToolBarItem* item, QToolBar* toolbar) const

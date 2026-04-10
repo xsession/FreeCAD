@@ -43,6 +43,11 @@ namespace HistoryView {
  *   FreeCADGui.HistoryView.toggleSuppressed(index) -> bool
  *   FreeCADGui.HistoryView.createGroup(name, start, end) -> int
  *   FreeCADGui.HistoryView.removeGroup(groupId)
+ *   FreeCADGui.HistoryView.createCheckpoint(name)  -> int
+ *   FreeCADGui.HistoryView.restoreCheckpoint(index) -> bool
+ *   FreeCADGui.HistoryView.deleteCheckpoint(index)  -> bool
+ *   FreeCADGui.HistoryView.renameCheckpoint(index, name) -> bool
+ *   FreeCADGui.HistoryView.getCheckpoints()         -> list of dicts
  *   FreeCADGui.HistoryView.isEnabled()          -> bool
  *   FreeCADGui.HistoryView.setEnabled(bool)
  */
@@ -62,6 +67,11 @@ private:
     Py::Object toggleSuppressed(const Py::Tuple& args);
     Py::Object createGroup(const Py::Tuple& args);
     Py::Object removeGroup(const Py::Tuple& args);
+    Py::Object createCheckpoint(const Py::Tuple& args);
+    Py::Object restoreCheckpoint(const Py::Tuple& args);
+    Py::Object deleteCheckpoint(const Py::Tuple& args);
+    Py::Object renameCheckpoint(const Py::Tuple& args);
+    Py::Object getCheckpoints(const Py::Tuple& args);
     Py::Object isEnabled(const Py::Tuple& args);
     Py::Object setEnabled(const Py::Tuple& args);
 };

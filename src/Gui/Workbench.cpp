@@ -765,6 +765,7 @@ MenuItem* StdWorkbench::setupMenuBar() const
         *view << "Std_DockOverlay";
     }
     *view << "Std_ToggleBottomPanels"
+          << "Std_ToggleRibbonBar"
           << "Separator"
           << "Std_LinkSelectActions"
           << "Std_TreeViewActions"

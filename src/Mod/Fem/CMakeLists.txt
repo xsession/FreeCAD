@@ -47,6 +47,13 @@ SET(FemCommands_SRCS
     femcommands/manager.py
 )
 
+SET(FemParaView_SRCS
+    femparaview/__init__.py
+    femparaview/commands.py
+    femparaview/paraview_bridge.py
+    femparaview/task_paraview.py
+)
+
 SET(FemExamples_SRCS
     femexamples/__init__.py
     femexamples/boxanalysis_base.py
@@ -596,6 +603,7 @@ SET(FemTools_SRCS
 SET(FemAllScripts
     ${FemBaseModules_SRCS}
     ${FemCommands_SRCS}
+    ${FemParaView_SRCS}
     ${FemExamples_SRCS}
     ${FemExampleMeshes_SRCS}
     ${FemInOut_SRCS}
@@ -636,6 +644,7 @@ fc_copy_sources(FemScriptsTarget "${CMAKE_BINARY_DIR}/Mod/Fem" ${FemAllScripts})
 # install directories for Python packages (for make install)
 INSTALL(FILES ${FemBaseModules_SRCS} DESTINATION Mod/Fem)
 INSTALL(FILES ${FemCommands_SRCS} DESTINATION Mod/Fem/femcommands)
+INSTALL(FILES ${FemParaView_SRCS} DESTINATION Mod/Fem/femparaview)
 INSTALL(FILES ${FemExamples_SRCS} DESTINATION Mod/Fem/femexamples)
 INSTALL(FILES ${FemExampleMeshes_SRCS} DESTINATION Mod/Fem/femexamples/meshes)
 INSTALL(FILES ${FemInOut_SRCS} DESTINATION Mod/Fem/feminout)

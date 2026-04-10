@@ -99,6 +99,27 @@ HistoryViewPy::HistoryViewPy()
         "removeGroup(groupId)\n"
         "Remove a feature group (ungroup).");
 
+    add_varargs_method("createCheckpoint", &HistoryViewPy::createCheckpoint,
+        "createCheckpoint(name) -> int\n"
+        "Create a checkpoint (snapshot) of the current document state.\n"
+        "Returns the checkpoint ID, or -1 on failure.");
+
+    add_varargs_method("restoreCheckpoint", &HistoryViewPy::restoreCheckpoint,
+        "restoreCheckpoint(index) -> bool\n"
+        "Restore the document to the state saved at the given checkpoint entry index.");
+
+    add_varargs_method("deleteCheckpoint", &HistoryViewPy::deleteCheckpoint,
+        "deleteCheckpoint(index) -> bool\n"
+        "Delete the checkpoint at the given entry index.");
+
+    add_varargs_method("renameCheckpoint", &HistoryViewPy::renameCheckpoint,
+        "renameCheckpoint(index, name) -> bool\n"
+        "Rename the checkpoint at the given entry index.");
+
+    add_varargs_method("getCheckpoints", &HistoryViewPy::getCheckpoints,
+        "getCheckpoints() -> list of dicts\n"
+        "Get all checkpoints. Each dict contains: id, name, timestamp, entryIndex.");
+
     add_varargs_method("isEnabled", &HistoryViewPy::isEnabled,
         "isEnabled() -> bool\n"
         "Check whether the History View panel is enabled.");
@@ -112,7 +133,12 @@ HistoryViewPy::HistoryViewPy()
                "Provides access to the Fusion 360-style modification history\n"
                "that tracks all document changes, transactions, and undo/redo\n"
                "operations. Supports feature editing, suppress/unsuppress,\n"
-               "grouping, and rollback.\n"
+               "grouping, rollback, and git-like checkpoints.\n"
+               "\n"
+               "Checkpoint API:\n"
+               "  FreeCADGui.HistoryView.createCheckpoint('My save point')\n"
+               "  FreeCADGui.HistoryView.getCheckpoints()\n"
+               "  FreeCADGui.HistoryView.restoreCheckpoint(index)\n"
                "\n"
                "Usage:\n"
                "  import FreeCADGui\n"
@@ -155,6 +181,8 @@ Py::Object HistoryViewPy::getEntries(const Py::Tuple& args)
         dict.setItem("featureFamily", Py::Long(static_cast<int>(entry.family)));
         dict.setItem("featureLabel", Py::String(entry.featureLabel().toStdString()));
         dict.setItem("groupId", Py::Long(entry.groupId));
+        dict.setItem("isCheckpoint", Py::Boolean(entry.type == EntryType::Checkpoint));
+        dict.setItem("checkpointId", Py::Long(entry.checkpointId));
 
         result.append(dict);
     }
@@ -256,6 +284,81 @@ Py::Object HistoryViewPy::removeGroup(const Py::Tuple& args)
         model->removeGroup(groupId);
     }
     return Py::None();
+}
+
+Py::Object HistoryViewPy::createCheckpoint(const Py::Tuple& args)
+{
+    const char* name = nullptr;
+    if (!PyArg_ParseTuple(args.ptr(), "s", &name)) {
+        throw Py::Exception();
+    }
+
+    auto model = getActiveModel();
+    if (!model) {
+        return Py::Long(-1);
+    }
+    return Py::Long(model->createCheckpoint(QString::fromUtf8(name)));
+}
+
+Py::Object HistoryViewPy::restoreCheckpoint(const Py::Tuple& args)
+{
+    int index = 0;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &index)) {
+        throw Py::Exception();
+    }
+
+    auto model = getActiveModel();
+    return Py::Boolean(model ? model->restoreCheckpoint(index) : false);
+}
+
+Py::Object HistoryViewPy::deleteCheckpoint(const Py::Tuple& args)
+{
+    int index = 0;
+    if (!PyArg_ParseTuple(args.ptr(), "i", &index)) {
+        throw Py::Exception();
+    }
+
+    auto model = getActiveModel();
+    return Py::Boolean(model ? model->deleteCheckpoint(index) : false);
+}
+
+Py::Object HistoryViewPy::renameCheckpoint(const Py::Tuple& args)
+{
+    int index = 0;
+    const char* name = nullptr;
+    if (!PyArg_ParseTuple(args.ptr(), "is", &index, &name)) {
+        throw Py::Exception();
+    }
+
+    auto model = getActiveModel();
+    return Py::Boolean(model ? model->renameCheckpoint(index, QString::fromUtf8(name)) : false);
+}
+
+Py::Object HistoryViewPy::getCheckpoints(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), "")) {
+        throw Py::Exception();
+    }
+
+    auto model = getActiveModel();
+    if (!model) {
+        return Py::List();
+    }
+
+    const auto& checkpoints = model->checkpoints();
+    Py::List result;
+
+    for (const auto& cp : checkpoints) {
+        Py::Dict dict;
+        dict.setItem("id", Py::Long(cp.id));
+        dict.setItem("name", Py::String(cp.name.toStdString()));
+        dict.setItem("timestamp", Py::String(
+            cp.timestamp.toString(Qt::ISODate).toStdString()));
+        dict.setItem("entryIndex", Py::Long(cp.entryIndex));
+        result.append(dict);
+    }
+
+    return result;
 }
 
 Py::Object HistoryViewPy::isEnabled(const Py::Tuple& args)

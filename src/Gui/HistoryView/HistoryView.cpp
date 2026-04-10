@@ -78,6 +78,7 @@ void HistoryDelegate::paint(QPainter* painter,
     bool isUndone = index.data(IsUndoneRole).toBool();
     bool isRollbackTarget = index.data(IsRollbackTargetRole).toBool();
     bool isSuppressed = index.data(IsSuppressedRole).toBool();
+    bool isCheckpoint = index.data(IsCheckpointRole).toBool();
     QColor typeColor = index.data(ColorRole).value<QColor>();
     QString description = index.data(DescriptionRole).toString();
     QString typeLabel = index.data(TypeLabelRole).toString();
@@ -100,6 +101,12 @@ void HistoryDelegate::paint(QPainter* painter,
         bgColor = option.palette.base().color();
     }
     painter->fillRect(rect, bgColor);
+
+    // --- Checkpoint special background (green tint) ---
+    if (isCheckpoint) {
+        QColor cpBg(0x00, 0xE6, 0x76, 30);  // subtle green overlay
+        painter->fillRect(rect, cpBg);
+    }
 
     // --- Colored left edge indicator (4px wide) ---
     QRect edgeRect(rect.left(), rect.top(), 4, rect.height());
@@ -127,7 +134,22 @@ void HistoryDelegate::paint(QPainter* painter,
 
     // --- Timeline dot ---
     int dotY = rect.top() + rect.height() / 2;
-    int dotRadius = isRollbackTarget ? 6 : 4;
+    if (isCheckpoint) {
+        // Checkpoint: render as a diamond (git commit marker)
+        int diamondSize = 7;
+        QColor cpColor(0x00, 0xE6, 0x76);
+        painter->setPen(QPen(cpColor.darker(120), 2));
+        painter->setBrush(cpColor);
+        QPainterPath diamond;
+        diamond.moveTo(lineX, dotY - diamondSize);
+        diamond.lineTo(lineX + diamondSize, dotY);
+        diamond.lineTo(lineX, dotY + diamondSize);
+        diamond.lineTo(lineX - diamondSize, dotY);
+        diamond.closeSubpath();
+        painter->drawPath(diamond);
+    }
+    else {
+        int dotRadius = isRollbackTarget ? 6 : 4;
     QColor dotColor = isRollbackTarget ? QColor(0xFF, 0xA0, 0x00) : typeColor;
     if (isUndone) {
         dotColor.setAlpha(100);
@@ -142,6 +164,7 @@ void HistoryDelegate::paint(QPainter* painter,
         painter->setBrush(Qt::NoBrush);
         painter->drawEllipse(QPoint(lineX, dotY), 8, 8);
     }
+    } // end else (not checkpoint)
 
     // --- Icon ---
     QIcon icon = index.data(Qt::DecorationRole).value<QIcon>();
@@ -245,6 +268,10 @@ QSize HistoryDelegate::sizeHint(const QStyleOptionViewItem& option,
 {
     Q_UNUSED(option);
     bool isRollbackTarget = index.data(IsRollbackTargetRole).toBool();
+    bool isCheckpoint = index.data(IsCheckpointRole).toBool();
+    if (isCheckpoint) {
+        return QSize(250, 52);  // larger for checkpoint entries
+    }
     return QSize(250, isRollbackTarget ? 48 : 40);
 }
 
@@ -435,6 +462,7 @@ void TimelineBar::paintEvent(QPaintEvent* /*event*/)
         bool isUndone = idx.data(IsUndoneRole).toBool();
         bool isRollbackTarget = idx.data(IsRollbackTargetRole).toBool();
         bool isSuppressed = idx.data(IsSuppressedRole).toBool();
+        bool isCheckpoint = idx.data(IsCheckpointRole).toBool();
         QColor color = idx.data(ColorRole).value<QColor>();
         QIcon icon = idx.data(Qt::DecorationRole).value<QIcon>();
 
@@ -479,7 +507,19 @@ void TimelineBar::paintEvent(QPaintEvent* /*event*/)
 
         painter.setPen(borderPen);
         painter.setBrush(nodeBg);
-        painter.drawRoundedRect(nRect, 4, 4);
+        if (isCheckpoint) {
+            // Checkpoint: render as rotated diamond (git commit style)
+            painter.save();
+            painter.translate(nRect.center());
+            painter.rotate(45);
+            QRect rotRect(-nRect.width() / 3, -nRect.height() / 3,
+                          nRect.width() * 2 / 3, nRect.height() * 2 / 3);
+            painter.drawRect(rotRect);
+            painter.restore();
+        }
+        else {
+            painter.drawRoundedRect(nRect, 4, 4);
+        }
 
         // Icon inside node
         if (!icon.isNull()) {
@@ -768,7 +808,7 @@ bool TimelineBar::event(QEvent* event)
 HistoryFilterProxy::HistoryFilterProxy(QObject* parent)
     : QSortFilterProxyModel(parent)
 {
-    for (int i = 0; i <= static_cast<int>(EntryType::RollbackMarker); ++i) {
+    for (int i = 0; i <= static_cast<int>(EntryType::Checkpoint); ++i) {
         visibleTypes.insert(i);
     }
 }
@@ -899,6 +939,28 @@ void HistoryPanel::setupUi()
     clearBtn->setToolTip(tr("Clear modification history"));
     toolbar->addWidget(clearBtn);
 
+    // Checkpoint button
+    toolbar->addSeparator();
+    checkpointBtn = new QPushButton(tr("📌 Checkpoint"), this);
+    checkpointBtn->setToolTip(tr("Create a snapshot of the current document state (like a git commit)"));
+    checkpointBtn->setStyleSheet(QStringLiteral(
+        "QPushButton {"
+        "  background-color: #00C853;"
+        "  color: white;"
+        "  border: none;"
+        "  border-radius: 3px;"
+        "  padding: 4px 10px;"
+        "  font-weight: bold;"
+        "}"
+        "QPushButton:hover {"
+        "  background-color: #00E676;"
+        "}"
+        "QPushButton:pressed {"
+        "  background-color: #00A844;"
+        "}"
+    ));
+    toolbar->addWidget(checkpointBtn);
+
     layout->addWidget(toolbar);
 
     // --- Horizontal Timeline Bar (Fusion 360 style) ---
@@ -987,6 +1049,9 @@ void HistoryPanel::setupConnections()
 
     // Clear
     connect(clearBtn, &QPushButton::clicked, this, &HistoryPanel::onClearClicked);
+
+    // Checkpoint
+    connect(checkpointBtn, &QPushButton::clicked, this, &HistoryPanel::onCheckpointClicked);
 
     // List view double-click
     connect(listView, &QListView::doubleClicked,
@@ -1128,6 +1193,27 @@ void HistoryPanel::onEntryDoubleClicked(const QModelIndex& proxyIndex)
     QModelIndex srcIndex = filterProxy->mapToSource(proxyIndex);
     int srcRow = srcIndex.row();
 
+    // Check if this is a checkpoint — restore it
+    int entryType = model->data(srcIndex, EntryTypeRole).toInt();
+    if (entryType == static_cast<int>(EntryType::Checkpoint)) {
+        int cpId = model->data(srcIndex, CheckpointIdRole).toInt();
+        if (cpId >= 0) {
+            int reply = QMessageBox::question(
+                this,
+                tr("Restore Checkpoint?"),
+                tr("Restore document to checkpoint:\n\n%1\n\n"
+                   "This will replace the current document state.\n"
+                   "Unsaved changes will be lost.")
+                    .arg(model->data(srcIndex, CheckpointNameRole).toString()),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                model->restoreCheckpoint(srcRow);
+            }
+            return;
+        }
+    }
+
     // Try to edit the feature first (Fusion 360 primary action)
     QString objName = model->data(srcIndex, ObjectNameRole).toString();
     if (!objName.isEmpty()) {
@@ -1158,6 +1244,25 @@ void HistoryPanel::onEntryDoubleClicked(const QModelIndex& proxyIndex)
 
 void HistoryPanel::onTimelineDoubleClicked(int sourceIndex)
 {
+    // Check if this is a checkpoint — restore it
+    if (sourceIndex >= 0 && sourceIndex < model->rowCount()) {
+        const auto& entry = model->entries()[sourceIndex];
+        if (entry.type == EntryType::Checkpoint && entry.checkpointId >= 0) {
+            int reply = QMessageBox::question(
+                this,
+                tr("Restore Checkpoint?"),
+                tr("Restore document to checkpoint:\n\n%1\n\n"
+                   "This will replace the current document state.")
+                    .arg(entry.transactionName),
+                QMessageBox::Yes | QMessageBox::No,
+                QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                model->restoreCheckpoint(sourceIndex);
+            }
+            return;
+        }
+    }
+
     // Try edit feature first (Fusion 360 behavior)
     if (model->editFeature(sourceIndex)) {
         return;
@@ -1212,6 +1317,51 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
     bool isSuppressed = model->data(srcIndex, IsSuppressedRole).toBool();
 
     QMenu menu(this);
+
+    // --- Checkpoint-specific actions ---
+    bool isCheckpoint = model->data(srcIndex, IsCheckpointRole).toBool();
+    int checkpointId = model->data(srcIndex, CheckpointIdRole).toInt();
+    if (isCheckpoint && checkpointId >= 0) {
+        auto restoreAction = menu.addAction(tr("🔄 Restore Checkpoint"));
+        restoreAction->setToolTip(tr("Restore document to this checkpoint state"));
+        connect(restoreAction, &QAction::triggered, this, [this, sourceRow]() {
+            int reply = QMessageBox::question(
+                this,
+                tr("Restore Checkpoint?"),
+                tr("Restore document to this checkpoint?\n\n"
+                   "Current unsaved changes will be lost."),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                model->restoreCheckpoint(sourceRow);
+            }
+        });
+
+        auto renameAction = menu.addAction(tr("✏️ Rename Checkpoint"));
+        connect(renameAction, &QAction::triggered, this, [this, sourceRow, description]() {
+            bool ok;
+            QString newName = QInputDialog::getText(
+                this, tr("Rename Checkpoint"),
+                tr("Enter new name:"),
+                QLineEdit::Normal, description, &ok);
+            if (ok && !newName.isEmpty()) {
+                model->renameCheckpoint(sourceRow, newName);
+            }
+        });
+
+        auto deleteAction = menu.addAction(tr("🗑️ Delete Checkpoint"));
+        connect(deleteAction, &QAction::triggered, this, [this, sourceRow]() {
+            int reply = QMessageBox::question(
+                this,
+                tr("Delete Checkpoint?"),
+                tr("This will permanently delete this checkpoint snapshot.\nContinue?"),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                model->deleteCheckpoint(sourceRow);
+            }
+        });
+
+        menu.addSeparator();
+    }
 
     // --- Edit Feature (Fusion 360 primary action) ---
     if (!objName.isEmpty() && model->document()) {
@@ -1318,7 +1468,7 @@ void HistoryPanel::onFilterChanged()
 
     QSet<int> types;
     if (filterType == -1) {
-        for (int i = 0; i <= static_cast<int>(EntryType::RollbackMarker); ++i) {
+        for (int i = 0; i <= static_cast<int>(EntryType::Checkpoint); ++i) {
             types.insert(i);
         }
     }
@@ -1389,6 +1539,35 @@ void HistoryPanel::onClearClicked()
     if (reply == QMessageBox::Yes) {
         model->clear();
         updateStatus();
+    }
+}
+
+void HistoryPanel::onCheckpointClicked()
+{
+    if (!model->document()) {
+        QMessageBox::information(this, tr("No Document"),
+                                 tr("Open a document first to create checkpoints."));
+        return;
+    }
+
+    bool ok;
+    QString name = QInputDialog::getText(
+        this, tr("Create Checkpoint"),
+        tr("Enter a name for this checkpoint (like a git commit message):"),
+        QLineEdit::Normal,
+        tr("Checkpoint %1").arg(model->checkpointCount() + 1),
+        &ok);
+
+    if (ok && !name.isEmpty()) {
+        int cpId = model->createCheckpoint(name);
+        if (cpId >= 0) {
+            statusLabel->setText(tr("✅ Checkpoint \"%1\" created").arg(name));
+        }
+        else {
+            QMessageBox::warning(this, tr("Checkpoint Failed"),
+                                 tr("Could not create checkpoint.\n"
+                                    "Make sure the document is valid."));
+        }
     }
 }
 

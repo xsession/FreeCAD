@@ -51,6 +51,7 @@
 #include <QTimer>
 #include <QToolBar>
 #include <QUrlQuery>
+#include <QVBoxLayout>
 #include <QWhatsThis>
 #include <QWindow>
 #include <QPushButton>
@@ -109,6 +110,7 @@
 #include "StatusBarLabel.h"
 #include "ToolBarManager.h"
 #include "ToolBoxManager.h"
+#include "RibbonBar.h"
 #include "Tree.h"
 #include "WaitCursor.h"
 #include "WorkbenchManager.h"
@@ -411,7 +413,21 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags f)
     d->mdiArea->setActivationOrder(QMdiArea::ActivationHistoryOrder);
 #endif
     d->mdiArea->setBackground(QBrush(QColor(160, 160, 160)));
-    setCentralWidget(d->mdiArea);
+
+    // Create central widget that wraps ribbon bar + MDI area
+    auto* centralContainer = new QWidget(this);
+    auto* centralLayout = new QVBoxLayout(centralContainer);
+    centralLayout->setContentsMargins(0, 0, 0, 0);
+    centralLayout->setSpacing(0);
+
+    // Ribbon bar (Inventor-style) — initially hidden unless preference is set
+    auto* ribbon = new RibbonBar(centralContainer);
+    ribbon->setVisible(RibbonBar::isRibbonEnabled());
+    centralLayout->addWidget(ribbon);
+
+    centralLayout->addWidget(d->mdiArea, 1);
+    centralContainer->setLayout(centralLayout);
+    setCentralWidget(centralContainer);
 
     statusBar()->setObjectName(QStringLiteral("statusBar"));
     connect(statusBar(), &QStatusBar::messageChanged, this, &MainWindow::statusMessageChanged);

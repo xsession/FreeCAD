@@ -43,6 +43,7 @@
 #include <QPointer>
 #include <QSignalBlocker>
 #include <QTextStream>
+#include <QToolBar>
 #include <QToolButton>
 
 #include <App/ComplexGeoDataPy.h>
@@ -72,6 +73,7 @@
 #include "Macro.h"
 #include "MainWindow.h"
 #include "Navigation/NavigationStyle.h"
+#include "RibbonBar.h"
 #include "OverlayParams.h"
 #include "OverlayManager.h"
 #include "SceneInspector.h"
@@ -4300,6 +4302,76 @@ bool StdCmdToggleBottomPanels::isActive()
 }
 
 //===========================================================================
+// Std_ToggleRibbonBar
+//===========================================================================
+DEF_STD_CMD_AC(StdCmdToggleRibbonBar)
+
+StdCmdToggleRibbonBar::StdCmdToggleRibbonBar()
+    : Command("Std_ToggleRibbonBar")
+{
+    sGroup = "View";
+    sMenuText = QT_TR_NOOP("Toggle &Ribbon Bar");
+    sToolTipText = QT_TR_NOOP("Switch between Ribbon Bar and classic toolbars");
+    sStatusTip = sToolTipText;
+    sWhatsThis = "Std_ToggleRibbonBar";
+    sAccel = "Ctrl+Shift+R";
+    eType = NoTransaction;
+}
+
+void StdCmdToggleRibbonBar::activated(int iMsg)
+{
+    Q_UNUSED(iMsg);
+    auto* ribbon = RibbonBar::instance();
+    if (!ribbon) {
+        return;
+    }
+
+    bool useRibbon = !ribbon->isVisible();
+
+    // Save preference
+    auto hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/General"
+    );
+    hGrp->SetBool("UseRibbonBar", useRibbon);
+
+    // Toggle ribbon visibility
+    ribbon->setVisible(useRibbon);
+
+    // Toggle classic toolbars
+    auto* mainWindow = getMainWindow();
+    if (mainWindow) {
+        auto toolBars = mainWindow->findChildren<QToolBar*>(Qt::FindDirectChildrenOnly);
+        for (auto* tb : toolBars) {
+            tb->setVisible(!useRibbon);
+        }
+    }
+
+    // Sync checked state
+    if (_pcAction) {
+        _pcAction->setBlockedChecked(useRibbon);
+    }
+}
+
+Action* StdCmdToggleRibbonBar::createAction()
+{
+    _pcAction = Command::createAction();
+    _pcAction->setCheckable(true);
+
+    // Set initial checked state from preference
+    auto hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/General"
+    );
+    _pcAction->setChecked(hGrp->GetBool("UseRibbonBar", false));
+
+    return _pcAction;
+}
+
+bool StdCmdToggleRibbonBar::isActive()
+{
+    return true;
+}
+
+//===========================================================================
 // Std_StoreWorkingView
 //===========================================================================
 DEF_STD_CMD_A(StdStoreWorkingView)
@@ -4628,6 +4700,7 @@ void CreateViewStdCommands()
     rcCmdMgr.addCommand(new StdCmdTreeViewActions());
     rcCmdMgr.addCommand(new StdCmdDockOverlay());
     rcCmdMgr.addCommand(new StdCmdToggleBottomPanels());
+    rcCmdMgr.addCommand(new StdCmdToggleRibbonBar());
 
     auto hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/View"

@@ -72,6 +72,7 @@ class FemWorkbench(Workbench):
         import Fem
         import FemGui
         import femcommands.commands
+        import femparaview.commands
         import fempreferencepages
 
         FreeCADGui.addPreferencePage(fempreferencepages.DlgSettingsNetgen, "FEM")

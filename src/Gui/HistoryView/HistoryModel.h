@@ -33,6 +33,8 @@
 
 #include <vector>
 #include <memory>
+#include <QDir>
+#include <QTemporaryDir>
 
 namespace App {
 class Document;
@@ -57,7 +59,8 @@ enum class EntryType {
     Recompute,          ///< Document recompute
     DocumentCreated,    ///< New document
     DocumentSaved,      ///< Document saved
-    RollbackMarker      ///< Current rollback position marker
+    RollbackMarker,     ///< Current rollback position marker
+    Checkpoint          ///< User-created snapshot checkpoint (git-like)
 };
 
 /// Feature family for Fusion 360-style color coding
@@ -93,6 +96,7 @@ struct HistoryEntry {
     bool          isRollbackTarget{false}; ///< Whether this is the current rollback point
     bool          isSuppressed{false}; ///< Whether the feature is suppressed
     int           groupId{-1};      ///< Group index (-1 = no group)
+    int           checkpointId{-1}; ///< Checkpoint ID (-1 = not a checkpoint)
 
     /// Get an icon for the entry type (feature-type-specific)
     QIcon icon() const;
@@ -126,7 +130,20 @@ enum HistoryRoles {
     FeatureFamilyRole,
     ColorRole,
     DescriptionRole,
-    GroupIdRole
+    GroupIdRole,
+    IsCheckpointRole,
+    CheckpointIdRole,
+    CheckpointNameRole
+};
+
+
+/// A saved checkpoint / snapshot (like a git commit)
+struct CheckpointData {
+    int     id{-1};             ///< Unique checkpoint ID
+    QString name;               ///< User-assigned name (commit message)
+    QString filePath;           ///< Path to saved .FCStd snapshot
+    QDateTime timestamp;        ///< When the checkpoint was created
+    int     entryIndex{-1};     ///< Index in historyEntries
 };
 
 
@@ -218,6 +235,26 @@ public:
     /// Get all groups
     const std::vector<FeatureGroup>& groups() const { return featureGroups; }
 
+    // --- Checkpoint / Version Control operations ---
+
+    /// Create a checkpoint (snapshot of the current document state)
+    int createCheckpoint(const QString& name);
+
+    /// Restore the document to a checkpoint
+    bool restoreCheckpoint(int entryIndex);
+
+    /// Delete a checkpoint
+    bool deleteCheckpoint(int entryIndex);
+
+    /// Rename a checkpoint
+    bool renameCheckpoint(int entryIndex, const QString& newName);
+
+    /// Get all checkpoints
+    const std::vector<CheckpointData>& checkpoints() const { return checkpointStore; }
+
+    /// Get the number of checkpoints
+    int checkpointCount() const { return static_cast<int>(checkpointStore.size()); }
+
     /// Resolve the FeatureFamily for a given type string
     static FeatureFamily classifyFeatureType(const QString& typeString);
 
@@ -230,6 +267,12 @@ Q_SIGNALS:
 
     /// Emitted when a feature's suppression state changes
     void suppressionChanged(int entryIndex, bool suppressed);
+
+    /// Emitted when a checkpoint is created
+    void checkpointCreated(int entryIndex);
+
+    /// Emitted when a checkpoint is restored
+    void checkpointRestored(int entryIndex);
 
 private Q_SLOTS:
     /// Coalesce timer for rapid property changes
@@ -261,8 +304,11 @@ private:
 
     std::vector<HistoryEntry> historyEntries;
     std::vector<FeatureGroup> featureGroups;
+    std::vector<CheckpointData> checkpointStore;
+    std::unique_ptr<QTemporaryDir> checkpointDir;  ///< Temp dir for checkpoint files
     int rollbackPos{-1};  ///< Index of the current state marker (-1 = at end)
     int nextGroupId{0};   ///< Next group ID to assign
+    int nextCheckpointId{0}; ///< Next checkpoint ID to assign
 
     // Signal connections (RAII)
     fastsignals::scoped_connection conNewObj;

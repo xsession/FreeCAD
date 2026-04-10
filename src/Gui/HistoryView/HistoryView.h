@@ -223,6 +223,7 @@ private Q_SLOTS:
     void onSearchChanged(const QString& text);
     void onExportClicked();
     void onClearClicked();
+    void onCheckpointClicked();
     void updateStatus();
 
 private:
@@ -241,6 +242,7 @@ private:
     QComboBox*    filterCombo{nullptr};
     QPushButton*  exportBtn{nullptr};
     QPushButton*  clearBtn{nullptr};
+    QPushButton*  checkpointBtn{nullptr};
     QCheckBox*    showUndoneCheck{nullptr};
     QToolButton*  toggleListBtn{nullptr};
 

@@ -23,6 +23,8 @@
 
 #include <QApplication>
 #include <QStyle>
+#include <QFile>
+#include <QFileInfo>
 
 #include <App/Document.h>
 #include <App/DocumentObject.h>
@@ -193,6 +195,8 @@ QIcon HistoryEntry::icon() const
         return QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton);
     case EntryType::RollbackMarker:
         return QApplication::style()->standardIcon(QStyle::SP_MediaPlay);
+    case EntryType::Checkpoint:
+        return QApplication::style()->standardIcon(QStyle::SP_DialogApplyButton);
     }
     return {};
 }
@@ -229,6 +233,7 @@ QColor HistoryEntry::color() const
     case EntryType::DocumentCreated:  return QColor(0x00, 0xBC, 0xD4);
     case EntryType::DocumentSaved:    return QColor(0x00, 0x96, 0x88);
     case EntryType::RollbackMarker:   return QColor(0xFF, 0xEB, 0x3B);
+    case EntryType::Checkpoint:       return QColor(0x00, 0xE6, 0x76);  // bright green (git commit)
     }
     return QColor(0x9E, 0x9E, 0x9E);
 }
@@ -246,6 +251,7 @@ QString HistoryEntry::typeLabel() const
     case EntryType::DocumentCreated:  return QObject::tr("New Document");
     case EntryType::DocumentSaved:    return QObject::tr("Saved");
     case EntryType::RollbackMarker:   return QObject::tr("Current State");
+    case EntryType::Checkpoint:        return QObject::tr("Checkpoint");
     }
     return {};
 }
@@ -438,6 +444,12 @@ QVariant HistoryModel::data(const QModelIndex& index, int role) const
         return entry.description;
     case GroupIdRole:
         return entry.groupId;
+    case IsCheckpointRole:
+        return (entry.type == EntryType::Checkpoint);
+    case CheckpointIdRole:
+        return entry.checkpointId;
+    case CheckpointNameRole:
+        return (entry.type == EntryType::Checkpoint) ? entry.transactionName : QString();
     }
 
     return {};
@@ -463,6 +475,9 @@ QHash<int, QByteArray> HistoryModel::roleNames() const
     roles[ColorRole]             = "color";
     roles[DescriptionRole]       = "description";
     roles[GroupIdRole]           = "groupId";
+    roles[IsCheckpointRole]      = "isCheckpoint";
+    roles[CheckpointIdRole]      = "checkpointId";
+    roles[CheckpointNameRole]    = "checkpointName";
     return roles;
 }
 
@@ -648,6 +663,175 @@ void HistoryModel::removeGroup(int groupId)
     featureGroups.erase(it);
 
     Q_EMIT dataChanged(index(startIdx), index(endIdx), {GroupIdRole});
+}
+
+// ============================================================================
+// Checkpoint / Version Control
+// ============================================================================
+
+int HistoryModel::createCheckpoint(const QString& name)
+{
+    if (!appDoc) {
+        return -1;
+    }
+
+    // Ensure checkpoint directory exists
+    if (!checkpointDir) {
+        checkpointDir = std::make_unique<QTemporaryDir>();
+        if (!checkpointDir->isValid()) {
+            return -1;
+        }
+    }
+
+    int cpId = nextCheckpointId++;
+    QString fileName = QStringLiteral("checkpoint_%1.FCStd").arg(cpId);
+    QString filePath = checkpointDir->path() + QDir::separator() + fileName;
+
+    // Save current document state to the checkpoint file (saveCopy doesn't change FileName)
+    bool saved = appDoc->saveCopy(filePath.toUtf8().constData());
+    if (!saved) {
+        return -1;
+    }
+
+    CheckpointData cpData;
+    cpData.id = cpId;
+    cpData.name = name.isEmpty() ? tr("Checkpoint %1").arg(cpId + 1) : name;
+    cpData.filePath = filePath;
+    cpData.timestamp = QDateTime::currentDateTime();
+    cpData.entryIndex = static_cast<int>(historyEntries.size());
+
+    // Create a history entry for this checkpoint
+    HistoryEntry entry;
+    entry.type = EntryType::Checkpoint;
+    entry.family = FeatureFamily::Document;
+    entry.description = tr("📌 %1").arg(cpData.name);
+    entry.transactionName = cpData.name;  // reuse for display
+    entry.checkpointId = cpId;
+    entry.timestamp = cpData.timestamp;
+
+    checkpointStore.push_back(std::move(cpData));
+    addEntry(std::move(entry));
+
+    Q_EMIT checkpointCreated(cpData.entryIndex);
+
+    return cpId;
+}
+
+bool HistoryModel::restoreCheckpoint(int entryIndex)
+{
+    if (entryIndex < 0 || entryIndex >= static_cast<int>(historyEntries.size())) {
+        return false;
+    }
+
+    const auto& entry = historyEntries[entryIndex];
+    if (entry.type != EntryType::Checkpoint || entry.checkpointId < 0) {
+        return false;
+    }
+
+    // Find the checkpoint data
+    auto it = std::find_if(checkpointStore.begin(), checkpointStore.end(),
+                           [&](const CheckpointData& cp) { return cp.id == entry.checkpointId; });
+    if (it == checkpointStore.end()) {
+        return false;
+    }
+
+    // Verify the checkpoint file exists
+    if (!QFile::exists(it->filePath)) {
+        return false;
+    }
+
+    if (!appDoc) {
+        return false;
+    }
+
+    // Remember original file name and label
+    QString origFile = QString::fromUtf8(appDoc->FileName.getValue());
+    QString origLabel = QString::fromUtf8(appDoc->Label.getValue());
+
+    // Restore the document from the checkpoint
+    auto* mutableDoc = const_cast<App::Document*>(appDoc);
+    mutableDoc->restore(it->filePath.toUtf8().constData());
+
+    // Restore original filename and label (don't point at checkpoint file)
+    if (!origFile.isEmpty()) {
+        mutableDoc->FileName.setValue(origFile.toUtf8().constData());
+    }
+    if (!origLabel.isEmpty()) {
+        mutableDoc->Label.setValue(origLabel.toUtf8().constData());
+    }
+
+    // Add a restore entry to the history
+    HistoryEntry restoreEntry;
+    restoreEntry.type = EntryType::Checkpoint;
+    restoreEntry.family = FeatureFamily::Document;
+    restoreEntry.description = tr("🔄 Restored: %1").arg(it->name);
+    restoreEntry.transactionName = it->name;
+    restoreEntry.checkpointId = it->id;
+    restoreEntry.timestamp = QDateTime::currentDateTime();
+    addEntry(std::move(restoreEntry));
+
+    Q_EMIT checkpointRestored(entryIndex);
+
+    return true;
+}
+
+bool HistoryModel::deleteCheckpoint(int entryIndex)
+{
+    if (entryIndex < 0 || entryIndex >= static_cast<int>(historyEntries.size())) {
+        return false;
+    }
+
+    auto& entry = historyEntries[entryIndex];
+    if (entry.type != EntryType::Checkpoint || entry.checkpointId < 0) {
+        return false;
+    }
+
+    int cpId = entry.checkpointId;
+
+    // Remove the checkpoint file
+    auto it = std::find_if(checkpointStore.begin(), checkpointStore.end(),
+                           [cpId](const CheckpointData& cp) { return cp.id == cpId; });
+    if (it != checkpointStore.end()) {
+        QFile::remove(it->filePath);
+        checkpointStore.erase(it);
+    }
+
+    // Mark the entry as deleted (change description)
+    entry.description = tr("🗑️ Deleted checkpoint: %1").arg(entry.transactionName);
+    entry.checkpointId = -1;  // invalidate
+
+    QModelIndex idx = index(entryIndex);
+    Q_EMIT dataChanged(idx, idx);
+
+    return true;
+}
+
+bool HistoryModel::renameCheckpoint(int entryIndex, const QString& newName)
+{
+    if (entryIndex < 0 || entryIndex >= static_cast<int>(historyEntries.size())) {
+        return false;
+    }
+
+    auto& entry = historyEntries[entryIndex];
+    if (entry.type != EntryType::Checkpoint || entry.checkpointId < 0) {
+        return false;
+    }
+
+    // Update checkpoint store
+    auto it = std::find_if(checkpointStore.begin(), checkpointStore.end(),
+                           [&](const CheckpointData& cp) { return cp.id == entry.checkpointId; });
+    if (it != checkpointStore.end()) {
+        it->name = newName;
+    }
+
+    // Update entry display
+    entry.transactionName = newName;
+    entry.description = tr("📌 %1").arg(newName);
+
+    QModelIndex idx = index(entryIndex);
+    Q_EMIT dataChanged(idx, idx);
+
+    return true;
 }
 
 // ============================================================================
