@@ -50,6 +50,7 @@
 
 #include <QAction>
 #include <QMenu>
+#include <cmath>
 #include <sstream>
 
 #include <Inventor/SoPickedPoint.h>
@@ -966,8 +967,17 @@ void ViewProviderPartExt::updateData(const App::Property* prop)
 {
     const char* propName = prop->getName();
     if (propName && (strcmp(propName, "Shape") == 0 || strstr(propName, "Touched"))) {
+        // During document restore or object import, defer tessellation to avoid
+        // serializing expensive BRepMesh calls during STEP/IGES import.
+        // Tessellation will be triggered when the object becomes visible or
+        // when finishRestoring() is called.
+        if (pcObject
+            && (pcObject->isRestoring()
+                || pcObject->testStatus(App::ObjectStatus::ObjImporting))) {
+            VisualTouched = true;
+        }
         // calculate the visual only if visible
-        if (isUpdateForced() || Visibility.getValue()) {
+        else if (isUpdateForced() || Visibility.getValue()) {
             updateVisual();
         }
         else {
@@ -1074,6 +1084,39 @@ void ViewProviderPartExt::setupCoinGeometry(
         numNodes = 0, numNorms = 0, numFaces = 0, numEdges = 0, numLines = 0;
 
     std::set<int> faceEdges;
+
+    // Early face count for adaptive tessellation quality.
+    // For shapes with many faces (large STEP imports), automatically increase deviation
+    // to reduce triangle count and maintain interactive rendering performance.
+    {
+        ParameterGrp::handle hPart = App::GetApplication().GetParameterGroupByPath(
+            "User parameter:BaseApp/Preferences/Mod/Part"
+        );
+        bool useAdaptive = hPart->GetBool("AdaptiveDeviation", true);
+        int faceThreshold = hPart->GetInt("AdaptiveDeviationFaceThreshold", 2000);
+        double maxScale = hPart->GetFloat("AdaptiveDeviationMaxScale", 10.0);
+
+        if (useAdaptive && faceThreshold > 0) {
+            TopTools_IndexedMapOfShape earlyFaceMap;
+            TopExp::MapShapes(shape, TopAbs_FACE, earlyFaceMap);
+            int totalFaces = earlyFaceMap.Extent();
+
+            if (totalFaces > faceThreshold) {
+                double scale = std::sqrt(static_cast<double>(totalFaces) / faceThreshold);
+                scale = std::min(scale, maxScale);
+                deviation *= scale;
+                // Also relax angular deflection for very complex shapes
+                if (totalFaces > faceThreshold * 5) {
+                    angularDeflection = std::max(angularDeflection, 33.0);
+                }
+                Base::Console().Log(
+                    "Part: Adaptive tessellation for %d faces (deviation scaled x%.2f)\n",
+                    totalFaces,
+                    scale
+                );
+            }
+        }
+    }
 
     // calculating the deflection value
     Standard_Real deflection = Part::Tools::getDeflection(shape, deviation);
@@ -1431,19 +1474,33 @@ void ViewProviderPartExt::setupCoinGeometry(
     faceset->partIndex.finishEditing();
     lineset->coordIndex.finishEditing();
 
+    // Always log performance stats for large meshes; helps diagnose rendering issues
+    double elapsed = Base::TimeElapsed::diffTimeF(startTime, Base::TimeElapsed());
+    if (numTriangles > 100000 || elapsed > 2.0) {
+        Base::Console().Log(
+            "Part: Tessellation: %.2fs, Faces:%d Tris:%d Nodes:%d Edges:%d\n",
+            elapsed,
+            numFaces,
+            numTriangles,
+            numNodes,
+            numEdges
+        );
+    }
 #ifdef FC_DEBUG
-    Base::Console().log(
-        "ViewProvider update time: %f s\n",
-        Base::TimeElapsed::diffTimeF(startTime, Base::TimeElapsed())
-    );
-    Base::Console().log(
-        "Shape mesh info: Faces:%d Edges:%d Nodes:%d Triangles:%d IdxVec:%d\n",
-        numFaces,
-        numEdges,
-        numNodes,
-        numTriangles,
-        numLines
-    );
+    else {
+        Base::Console().Log(
+            "ViewProvider update time: %f s\n",
+            elapsed
+        );
+        Base::Console().Log(
+            "Shape mesh info: Faces:%d Edges:%d Nodes:%d Triangles:%d IdxVec:%d\n",
+            numFaces,
+            numEdges,
+            numNodes,
+            numTriangles,
+            numLines
+        );
+    }
 #endif
 }
 

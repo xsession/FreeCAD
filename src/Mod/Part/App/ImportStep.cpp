@@ -22,7 +22,9 @@
  *                                                                         *
  ***************************************************************************/
 
+#ifndef _WIN32
 #include <fcntl.h>
+#endif
 #include <sstream>
 #include <Quantity_Color.hxx>
 #include <BRep_Builder.hxx>
@@ -118,6 +120,8 @@ int Part::ImportStepParts(App::Document* pcDoc, const char* Name)
 
                 Part::Feature* pcFeature;
                 pcFeature = pcDoc->addObject<Part::Feature>(name.c_str());
+                // Defer tessellation during import
+                pcFeature->setStatus(App::ObjectStatus::ObjImporting, true);
                 pcFeature->Shape.setValue(aSolid);
 
                 // This is a trick to access the GUI via Python and set the color property
@@ -147,6 +151,7 @@ int Part::ImportStepParts(App::Document* pcDoc, const char* Name)
                 std::string name = fi.fileNamePure();
 
                 Part::Feature* pcFeature = pcDoc->addObject<Part::Feature>(name.c_str());
+                pcFeature->setStatus(App::ObjectStatus::ObjImporting, true);
                 pcFeature->Shape.setValue(aShell);
             }
 
@@ -186,6 +191,7 @@ int Part::ImportStepParts(App::Document* pcDoc, const char* Name)
                 Part::Feature* pcFeature = static_cast<Part::Feature*>(
                     pcDoc->addObject("Part::Feature", name.c_str())
                 );
+                pcFeature->setStatus(App::ObjectStatus::ObjImporting, true);
                 pcFeature->Shape.setValue(comp);
             }
         }

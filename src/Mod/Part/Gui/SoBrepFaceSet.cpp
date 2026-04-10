@@ -586,12 +586,24 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
         return;
     }
 
+    auto state = action->getState();
+
+    // Enable back-face culling during interactive navigation for ~2x face throughput.
+    // Only for large meshes to avoid visual artifacts on thin/open shells.
+    bool interactiveCull = false;
+    if (Gui::SoFCInteractiveElement::get(state) && this->coordIndex.getNum() > 10000) {
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+        interactiveCull = true;
+    }
+
     SelContextPtr ctx2;
     std::vector<SelContextPtr> ctxs;
     SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext(this, selContext, ctx2);
     const bool hasOverlayFields = (highlightPartIndex.getValue() >= 0)
         || (selectionPartIndex.getNum() > 0);
     if (!hasOverlayFields && ctx2 && ctx2->selectionIndex.empty()) {
+        if (interactiveCull) glDisable(GL_CULL_FACE);
         return;
     }
     if (selContext2->checkGlobal(ctx)) {
@@ -601,7 +613,6 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
         ctx.reset();
     }
 
-    auto state = action->getState();
     selCounter.checkRenderCache(state);
 
     bool hasContextHighlight = ctx && ctx->isHighlighted() && !ctx->isHighlightAll()
@@ -617,6 +628,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
 
             const SoPath* currentPath = action->getCurPath();
             Gui::SoDelayedAnnotationsElement::addDelayedPath(action->getState(), currentPath->copy(), 100);
+            if (interactiveCull) glDisable(GL_CULL_FACE);
             return;
         }
         else {
@@ -634,6 +646,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
             renderHighlight(action, ctx);
 
             state->pop();
+            if (interactiveCull) glDisable(GL_CULL_FACE);
             return;
         }
     }
@@ -690,6 +703,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
                     renderSelection(action, ctx);
                 }
             }
+            if (interactiveCull) glDisable(GL_CULL_FACE);
             return;
         }
 
@@ -708,6 +722,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
                 if (action->isRenderingDelayedPaths()) {
                     renderHighlight(action, ctx);
                 }
+                if (interactiveCull) glDisable(GL_CULL_FACE);
                 return;
             }
             if (!action->isRenderingDelayedPaths()) {
@@ -720,6 +735,7 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
                 renderSelection(action, ctx);
                 renderHighlight(action, ctx);
             }
+            if (interactiveCull) glDisable(GL_CULL_FACE);
             return;
         }
     }
@@ -830,6 +846,11 @@ void SoBrepFaceSet::GLRender(SoGLRenderAction* action)
         octx->highlightIndex = hl;
         octx->highlightColor = highlightColor.getValue();
         renderHighlight(action, octx);
+    }
+
+    // Restore culling state after interactive rendering
+    if (interactiveCull) {
+        glDisable(GL_CULL_FACE);
     }
 }
 #endif
@@ -1965,14 +1986,14 @@ void SoBrepFaceSet::VBO::render(
         }
 
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, buf.myvbo[0]);
-        glBufferDataARB(GL_ARRAY_BUFFER_ARB, sizeof(float) * indice, vertex_array, GL_DYNAMIC_DRAW_ARB);
+        glBufferDataARB(GL_ARRAY_BUFFER_ARB, sizeof(float) * indice, vertex_array, GL_STATIC_DRAW_ARB);
 
         glBindBufferARB(GL_ELEMENT_ARRAY_BUFFER_ARB, buf.myvbo[1]);
         glBufferDataARB(
             GL_ELEMENT_ARRAY_BUFFER_ARB,
             sizeof(GLuint) * this->indice_array,
             &index_array[0],
-            GL_DYNAMIC_DRAW_ARB
+            GL_STATIC_DRAW_ARB
         );
 
         glBindBufferARB(GL_ARRAY_BUFFER_ARB, 0);

@@ -332,6 +332,8 @@ void ImportOCAF::createShape(
             // Just need to add it to a Part::Feature and push it to lValue
             if (!comp.IsNull() && (ctSolids || ctShells || ctEdges || ctVertices)) {
                 Part::Feature* part = doc->addObject<Part::Feature>();
+                // Defer tessellation during import
+                part->setStatus(App::ObjectStatus::ObjImporting, true);
                 // Let's allocate the relative placement of the Compound from the STEP file
                 tryPlacementFromLoc(part, loc);
                 if (!loc.IsIdentity()) {
@@ -384,6 +386,10 @@ void ImportOCAF::createShape(
 )
 {
     Part::Feature* part = doc->addObject<Part::Feature>();
+
+    // Defer tessellation during import — ViewProviderPartExt::updateData()
+    // checks this flag and sets VisualTouched instead of calling updateVisual()
+    part->setStatus(App::ObjectStatus::ObjImporting, true);
 
     if (!loc.IsIdentity()) {
         part->Shape.setValue(aShape.Moved(loc));

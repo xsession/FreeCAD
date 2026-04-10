@@ -61,12 +61,13 @@ void ReaderStep::read(Handle(TDocStd_Document) hDoc)  // NOLINT
 
     // --- File size detection for adaptive optimization ---
     int64_t fileSize = file.size();
-    bool isLargeFile = fileSize > 100LL * 1024 * 1024;   // > 100 MB
+    bool isMediumFile = fileSize > 10LL * 1024 * 1024;    // > 10 MB
+    bool isLargeFile = fileSize > 100LL * 1024 * 1024;    // > 100 MB
     bool isVeryLargeFile = fileSize > 500LL * 1024 * 1024; // > 500 MB
 
-    if (isLargeFile) {
+    if (isMediumFile) {
         Base::Console().Message(
-            "[STEP Import] Large file detected: %.1f MB — enabling optimizations\n",
+            "[STEP Import] File size: %.1f MB — enabling optimizations\n",
             fileSize / (1024.0 * 1024.0));
     }
 
@@ -89,12 +90,14 @@ void ReaderStep::read(Handle(TDocStd_Document) hDoc)  // NOLINT
     Interface_Static::SetIVal("read.step.assembly.level", 1);     // all levels
 
     // Precision settings — adaptive based on file size
+    // Shape healing (edge precision fixing) is the #1 CPU bottleneck for STEP import.
+    // Capping max precision prevents OCC from spending minutes healing edge tolerances.
     if (isVeryLargeFile) {
-        // Very large files: relax precision for speed
+        // Very large files: aggressive relaxation
         Interface_Static::SetIVal("read.precision.mode", 0);      // file precision
         Interface_Static::SetRVal("read.precision.val", 0.001);
         Interface_Static::SetIVal("read.maxprecision.mode", 1);   // capped
-        Interface_Static::SetRVal("read.maxprecision.val", 0.1);  // relaxed healing
+        Interface_Static::SetRVal("read.maxprecision.val", 0.1);  // very relaxed healing
         Interface_Static::SetIVal("read.surfacecurve.mode", 0);   // skip recompute
     }
     else if (isLargeFile) {
@@ -102,6 +105,15 @@ void ReaderStep::read(Handle(TDocStd_Document) hDoc)  // NOLINT
         Interface_Static::SetRVal("read.precision.val", 0.0001);
         Interface_Static::SetIVal("read.maxprecision.mode", 1);   // capped
         Interface_Static::SetRVal("read.maxprecision.val", 0.5);  // moderate healing
+        Interface_Static::SetIVal("read.surfacecurve.mode", 3);   // prefer 3D
+    }
+    else if (isMediumFile) {
+        // 10-100 MB: cap precision to avoid slow healing on complex models
+        Interface_Static::SetIVal("read.precision.mode", 0);      // file precision
+        Interface_Static::SetRVal("read.precision.val", 0.0001);
+        Interface_Static::SetIVal("read.maxprecision.mode", 1);   // capped
+        Interface_Static::SetRVal("read.maxprecision.val", 1.0);  // reasonable cap
+        Interface_Static::SetIVal("read.surfacecurve.mode", 3);   // prefer 3D (faster)
     }
     else {
         Interface_Static::SetIVal("read.precision.mode", 1);      // user precision
