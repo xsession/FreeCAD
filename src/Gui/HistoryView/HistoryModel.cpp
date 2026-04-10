@@ -131,7 +131,9 @@ QIcon HistoryEntry::icon() const
 {
     // Try feature-type-specific icon from BitmapFactory
     if (!objectType.isEmpty()) {
-        static const QHash<QString, QString> iconMap = {
+        // Use QMap instead of QHash to avoid MSVC 2019 ICE (C1001) in qhash.h
+        // with ccache + /Z7 + /MP on large initializer lists.
+        static const QMap<QString, QString> iconMap = {
             {QStringLiteral("PartDesign::Pad"),              QStringLiteral("PartDesign_Pad")},
             {QStringLiteral("PartDesign::Pocket"),           QStringLiteral("PartDesign_Pocket")},
             {QStringLiteral("PartDesign::Revolution"),       QStringLiteral("PartDesign_Revolution")},
