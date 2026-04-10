@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: LGPL-2.1-or-later
+// SPDX-License-Identifier: LGPL-2.1-or-later
 
 /***************************************************************************
  *   Copyright (c) 2015 Yorik van Havre (yorik@uncreated.net)              *
@@ -810,3 +810,1337 @@ bool ImpExpDxfRead::OnReadBlock(const std::string& name, int flags)
 // --- The ImpExpDxfWrite methods and getStatsAsPyObject are in ImpExpDxfWrite.cpp.
 // --- This split works around MSVC 2019 internal compiler error (ICE) in the code generator
 // --- (p2/main.c line 213) which crashes on overly large translation units.
+
+    gp_Pnt p0 = makePoint(start);
+    gp_Pnt p1 = makePoint(end);
+    if (p0.IsEqual(p1, 1e-8)) {
+        return;
+    }
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(p0, p1).Edge();
+    GeometryBuilder builder(edge);
+
+    // CORRECTED: Set PrimitiveType conditionally based on m_importMode
+    switch (m_importMode) {
+        case ImportMode::EditableDraft:
+        case ImportMode::EditablePrimitives:
+            // For these modes, we want a specific Part primitive (Part::Line)
+            builder.type = GeometryBuilder::PrimitiveType::Line;
+            break;
+        case ImportMode::IndividualShapes:
+        case ImportMode::FusedShapes:
+            // For these modes, we want a generic Part::Feature wrapping the TopoDS_Shape.
+            // PrimitiveType::None will lead to a generic Part::Feature in AddGeometry.
+            builder.type = GeometryBuilder::PrimitiveType::None;
+            break;
+    }
+
+    Collector->AddGeometry(builder);
+}
+
+
+void ImpExpDxfRead::OnReadPoint(const Base::Vector3d& start)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+    TopoDS_Vertex vertex = BRepBuilderAPI_MakeVertex(makePoint(start)).Vertex();
+    GeometryBuilder builder(vertex);
+
+    switch (m_importMode) {
+        case ImportMode::EditableDraft:
+        case ImportMode::EditablePrimitives:
+            builder.type = GeometryBuilder::PrimitiveType::Point;
+            break;
+        case ImportMode::IndividualShapes:
+        case ImportMode::FusedShapes:
+            builder.type = GeometryBuilder::PrimitiveType::None;  // Generic Part::Feature
+            break;
+    }
+    Collector->AddGeometry(builder);
+}
+
+
+void ImpExpDxfRead::OnReadArc(
+    const Base::Vector3d& start,
+    const Base::Vector3d& end,
+    const Base::Vector3d& center,
+    bool dir,
+    bool /*hidden*/
+)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    gp_Pnt p0 = makePoint(start);
+    gp_Pnt p1 = makePoint(end);
+    gp_Dir up(0, 0, 1);
+    if (!dir) {
+        up.Reverse();
+    }
+    gp_Pnt pc = makePoint(center);
+    gp_Circ circle(gp_Ax2(pc, up), p0.Distance(pc));
+    if (circle.Radius() < 1e-9) {
+        Base::Console().warning("ImpExpDxf - ignore degenerate arc of circle\n");
+        return;
+    }
+
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(circle, p0, p1).Edge();
+    GeometryBuilder builder(edge);  // Instantiate builder once
+
+    switch (m_importMode) {
+        case ImportMode::EditableDraft:
+        case ImportMode::EditablePrimitives:
+            builder.type = GeometryBuilder::PrimitiveType::Arc;
+            break;
+        case ImportMode::IndividualShapes:
+        case ImportMode::FusedShapes:
+            builder.type = GeometryBuilder::PrimitiveType::None;  // Generic Part::Feature
+            break;
+    }
+    Collector->AddGeometry(builder);
+}
+
+
+void ImpExpDxfRead::OnReadCircle(const Base::Vector3d& start, const Base::Vector3d& center, bool dir, bool /*hidden*/)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    gp_Pnt p0 = makePoint(start);
+    gp_Dir up(0, 0, 1);
+    if (!dir) {
+        up.Reverse();
+    }
+    gp_Pnt pc = makePoint(center);
+    gp_Circ circle(gp_Ax2(pc, up), p0.Distance(pc));
+    if (circle.Radius() < 1e-9) {
+        Base::Console().warning("ImpExpDxf - ignore degenerate circle\n");
+        return;
+    }
+
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(circle).Edge();
+    GeometryBuilder builder(edge);  // Instantiate builder once
+
+    switch (m_importMode) {
+        case ImportMode::EditableDraft:
+        case ImportMode::EditablePrimitives:
+            builder.type = GeometryBuilder::PrimitiveType::Circle;
+            break;
+        case ImportMode::IndividualShapes:
+        case ImportMode::FusedShapes:
+            builder.type = GeometryBuilder::PrimitiveType::None;  // Generic Part::Feature
+            break;
+    }
+    Collector->AddGeometry(builder);
+}
+
+
+Handle(Geom_BSplineCurve) getSplineFromPolesAndKnots(struct SplineData& sd)
+{
+    std::size_t numPoles = sd.control_points;
+    if (sd.controlx.size() > numPoles || sd.controly.size() > numPoles
+        || sd.controlz.size() > numPoles || sd.weight.size() > numPoles) {
+        return nullptr;
+    }
+
+    // handle the poles
+    TColgp_Array1OfPnt occpoles(1, sd.control_points);
+    int index = 1;
+    for (auto coordinate : sd.controlx) {
+        occpoles(index++).SetX(coordinate);
+    }
+
+    index = 1;
+    for (auto coordinate : sd.controly) {
+        occpoles(index++).SetY(coordinate);
+    }
+
+    index = 1;
+    for (auto coordinate : sd.controlz) {
+        occpoles(index++).SetZ(coordinate);
+    }
+
+    // handle knots and mults
+    std::set<double> unique;
+    unique.insert(sd.knot.begin(), sd.knot.end());
+
+    int numKnots = int(unique.size());
+    TColStd_Array1OfInteger occmults(1, numKnots);
+    TColStd_Array1OfReal occknots(1, numKnots);
+    index = 1;
+    for (auto knot : unique) {
+        occknots(index) = knot;
+        occmults(index) = (int)std::count(sd.knot.begin(), sd.knot.end(), knot);
+        index++;
+    }
+
+    // handle weights
+    TColStd_Array1OfReal occweights(1, sd.control_points);
+    if (sd.weight.size() == std::size_t(sd.control_points)) {
+        index = 1;
+        for (auto weight : sd.weight) {
+            occweights(index++) = weight;
+        }
+    }
+    else {
+        // non-rational
+        for (int i = occweights.Lower(); i <= occweights.Upper(); i++) {
+            occweights(i) = 1.0;
+        }
+    }
+
+    Standard_Boolean periodic = sd.flag == 2;
+    Handle(Geom_BSplineCurve)
+        geom = new Geom_BSplineCurve(occpoles, occweights, occknots, occmults, sd.degree, periodic);
+    return geom;
+}
+
+Handle(Geom_BSplineCurve) getInterpolationSpline(struct SplineData& sd)
+{
+    std::size_t numPoints = sd.fit_points;
+    if (sd.fitx.size() > numPoints || sd.fity.size() > numPoints || sd.fitz.size() > numPoints) {
+        return nullptr;
+    }
+
+    // handle the poles
+    Handle(TColgp_HArray1OfPnt) fitpoints = new TColgp_HArray1OfPnt(1, sd.fit_points);
+    int index = 1;
+    for (auto coordinate : sd.fitx) {
+        fitpoints->ChangeValue(index++).SetX(coordinate);
+    }
+
+    index = 1;
+    for (auto coordinate : sd.fity) {
+        fitpoints->ChangeValue(index++).SetY(coordinate);
+    }
+
+    index = 1;
+    for (auto coordinate : sd.fitz) {
+        fitpoints->ChangeValue(index++).SetZ(coordinate);
+    }
+
+    Standard_Boolean periodic = sd.flag == 2;
+    GeomAPI_Interpolate interp(fitpoints, periodic, Precision::Confusion());
+    interp.Perform();
+    return interp.Curve();
+}
+
+void ImpExpDxfRead::OnReadSpline(struct SplineData& sd)
+{
+    // https://documentation.help/AutoCAD-DXF/WS1a9193826455f5ff18cb41610ec0a2e719-79e1.htm
+    // Flags:
+    // 1: Closed, 2: Periodic, 4: Rational, 8: Planar, 16: Linear
+
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    try {
+        Handle(Geom_BSplineCurve) geom;
+        if (sd.control_points > 0) {
+            geom = getSplineFromPolesAndKnots(sd);
+        }
+        else if (sd.fit_points > 0) {
+            geom = getInterpolationSpline(sd);
+        }
+
+        if (!geom.IsNull()) {
+            TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(geom).Edge();
+            GeometryBuilder builder(edge);  // Instantiate builder once
+
+            switch (m_importMode) {
+                case ImportMode::EditableDraft:
+                case ImportMode::EditablePrimitives:
+                    builder.type = GeometryBuilder::PrimitiveType::Spline;
+                    break;
+                case ImportMode::IndividualShapes:
+                case ImportMode::FusedShapes:
+                    builder.type = GeometryBuilder::PrimitiveType::None;  // Generic Part::Feature
+                    break;
+            }
+            Collector->AddGeometry(builder);
+        }
+    }
+    catch (const Standard_Failure&) {
+        Base::Console().warning("ImpExpDxf - failed to create bspline\n");
+    }
+}
+
+// NOLINTBEGIN(bugprone-easily-swappable-parameters)
+void ImpExpDxfRead::OnReadEllipse(
+    const Base::Vector3d& center,
+    double major_radius,
+    double minor_radius,
+    double rotation,
+    double /*start_angle*/,
+    double /*end_angle*/,
+    bool dir
+)
+// NOLINTEND(bugprone-easily-swappable-parameters)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    gp_Dir up(0, 0, 1);
+    if (!dir) {
+        up.Reverse();
+    }
+    gp_Pnt pc = makePoint(center);
+    gp_Elips ellipse(gp_Ax2(pc, up), major_radius, minor_radius);
+    ellipse.Rotate(gp_Ax1(pc, up), rotation);
+    if (ellipse.MinorRadius() < 1e-9) {
+        Base::Console().warning("ImpExpDxf - ignore degenerate ellipse\n");
+        return;
+    }
+
+    TopoDS_Edge edge = BRepBuilderAPI_MakeEdge(ellipse).Edge();
+    GeometryBuilder builder(edge);  // Pass the shape to the builder
+
+    switch (m_importMode) {
+        case ImportMode::EditableDraft:
+        case ImportMode::EditablePrimitives:
+            // Tag this geometry so the collector knows to create a Part::Ellipse primitive
+            builder.type = GeometryBuilder::PrimitiveType::Ellipse;
+            break;
+        case ImportMode::IndividualShapes:
+        case ImportMode::FusedShapes:
+        default:
+            // For other modes, create a generic shape (Part:Feature), which is the existing
+            // behavior.
+            builder.type = GeometryBuilder::PrimitiveType::None;
+            break;
+    }
+    Collector->AddGeometry(builder);
+}
+
+void ImpExpDxfRead::OnReadText(
+    const Base::Vector3d& point,
+    const double height,
+    const std::string& text,
+    const double rotation
+)
+{
+    if (shouldSkipEntity() || !m_importAnnotations) {
+        return;
+    }
+
+    auto* p = static_cast<App::FeaturePython*>(document->addObject("App::FeaturePython", "Text"));
+    if (p) {
+        p->addDynamicProperty("App::PropertyString", "DxfEntityType", "Internal", "DXF entity type");
+        static_cast<App::PropertyString*>(p->getPropertyByName("DxfEntityType"))->setValue("TEXT");
+
+        p->addDynamicProperty("App::PropertyStringList", "Text", "Data", "Text content");
+        // Explicitly create the vector to resolve ambiguity
+        std::vector<std::string> text_values = {text};
+        static_cast<App::PropertyStringList*>(p->getPropertyByName("Text"))->setValues(text_values);
+
+        p->addDynamicProperty("App::PropertyFloat", "DxfTextHeight", "Internal", "Original text height");
+        static_cast<App::PropertyFloat*>(p->getPropertyByName("DxfTextHeight"))->setValue(height);
+
+        p->addDynamicProperty("App::PropertyPlacement", "Placement", "Base", "Object placement");
+        Base::Placement pl;
+        pl.setPosition(point);
+        pl.setRotation(Base::Rotation(Base::Vector3d(0, 0, 1), Base::toRadians(rotation)));
+        static_cast<App::PropertyPlacement*>(p->getPropertyByName("Placement"))->setValue(pl);
+
+        Collector->AddObject(p, "Text");
+    }
+}
+
+
+void ImpExpDxfRead::OnReadInsert(
+    const Base::Vector3d& point,
+    const Base::Vector3d& scale,
+    const std::string& name,
+    double rotation
+)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    // Delegate the action to the currently active collector.
+    // If the BlockDefinitionCollector is active, it will just store the data.
+    // If the DrawingEntityCollector is active, it will create the App::Link.
+    Collector->AddInsert(point, scale, name, rotation);
+}
+
+
+void ImpExpDxfRead::OnReadDimension(
+    const Base::Vector3d& start,
+    const Base::Vector3d& end,
+    const Base::Vector3d& point,
+    int dimensionType,
+    double rotation
+)
+{
+    if (shouldSkipEntity() || !m_importAnnotations) {
+        return;
+    }
+
+    auto* p = static_cast<App::FeaturePython*>(document->addObject("App::FeaturePython", "Dimension"));
+    if (p) {
+        p->addDynamicProperty("App::PropertyString", "DxfEntityType", "Internal", "DXF entity type");
+        static_cast<App::PropertyString*>(p->getPropertyByName("DxfEntityType"))->setValue("DIMENSION");
+
+        p->addDynamicProperty("App::PropertyVector", "Start", "Data", "Start point of dimension");
+        static_cast<App::PropertyVector*>(p->getPropertyByName("Start"))->setValue(start);
+
+        p->addDynamicProperty("App::PropertyVector", "End", "Data", "End point of dimension");
+        static_cast<App::PropertyVector*>(p->getPropertyByName("End"))->setValue(end);
+
+        p->addDynamicProperty("App::PropertyVector", "Dimline", "Data", "Point on dimension line");
+        static_cast<App::PropertyVector*>(p->getPropertyByName("Dimline"))->setValue(point);
+
+        p->addDynamicProperty(
+            "App::PropertyInteger",
+            "DxfDimensionType",
+            "Internal",
+            "Original dimension type flag"
+        );
+        static_cast<App::PropertyInteger*>(p->getPropertyByName("DxfDimensionType"))
+            ->setValue(dimensionType);
+
+        p->addDynamicProperty(
+            "App::PropertyAngle",
+            "DxfRotation",
+            "Internal",
+            "Original dimension rotation"
+        );
+        // rotation is already in radians from the caller
+        static_cast<App::PropertyAngle*>(p->getPropertyByName("DxfRotation"))->setValue(rotation);
+
+        p->addDynamicProperty("App::PropertyPlacement", "Placement", "Base", "Object placement");
+        Base::Placement pl;
+        // Correctly construct the rotation directly from the 4x4 matrix.
+        // The Base::Rotation constructor will extract the rotational part.
+        pl.setRotation(Base::Rotation(OCSOrientationTransform));
+        static_cast<App::PropertyPlacement*>(p->getPropertyByName("Placement"))->setValue(pl);
+
+        Collector->AddObject(p, "Dimension");
+    }
+}
+
+void ImpExpDxfRead::OnReadPolyline(std::list<VertexInfo>& vertices, int flags)
+{
+    if (shouldSkipEntity()) {
+        return;
+    }
+
+    if (vertices.size() < 2 && (flags & 1) == 0) {
+        return;  // Not enough vertices for an open polyline
+    }
+
+    TopoDS_Wire wire = BuildWireFromPolyline(vertices, flags);
+    if (wire.IsNull()) {
+        return;
+    }
+
+    if (m_importMode == ImportMode::EditableDraft) {
+        GeometryBuilder builder(wire);
+        builder.type = GeometryBuilder::PrimitiveType::PolylineFlattened;
+        Collector->AddGeometry(builder);
+    }
+    else if (m_importMode == ImportMode::EditablePrimitives) {
+        GeometryBuilder builder(wire);
+        builder.type = GeometryBuilder::PrimitiveType::PolylineParametric;
+        Collector->AddGeometry(builder);
+    }
+    else {
+        Collector->AddObject(wire, "Polyline");
+    }
+}
+
+void ImpExpDxfRead::DrawingEntityCollector::AddGeometry(const GeometryBuilder& builder)
+{
+    App::DocumentObject* newDocObj = nullptr;
+
+    switch (builder.type) {
+        case GeometryBuilder::PrimitiveType::Line: {
+            newDocObj = createLinePrimitive(TopoDS::Edge(builder.shape), Reader.document, "Line");
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::Circle: {
+            auto* p = createCirclePrimitive(TopoDS::Edge(builder.shape), Reader.document, "Circle");
+            if (p) {
+                p->Angle1.setValue(0.0);
+                p->Angle2.setValue(360.0);  // Ensure it's a full circle if it's a circle entity
+            }
+            newDocObj = p;
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::Arc: {
+            newDocObj = createCirclePrimitive(TopoDS::Edge(builder.shape), Reader.document, "Arc");
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::Point: {
+            newDocObj = createVertexPrimitive(TopoDS::Vertex(builder.shape), Reader.document, "Point");
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::Ellipse: {
+            newDocObj = createEllipsePrimitive(TopoDS::Edge(builder.shape), Reader.document, "Ellipse");
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::Spline: {
+            newDocObj = createGenericShapeFeature(builder.shape, Reader.document, "Spline");
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::PolylineFlattened: {
+            Reader.CreateFlattenedPolyline(TopoDS::Wire(builder.shape), "Polyline");
+            newDocObj = nullptr;  // Object handled by helper
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::PolylineParametric: {
+            Reader.CreateParametricPolyline(TopoDS::Wire(builder.shape), "Polyline");
+            newDocObj = nullptr;  // Object handled by helper
+            break;
+        }
+        case GeometryBuilder::PrimitiveType::None:  // Fallback for generic shapes (e.g., 3DFACE)
+        default: {
+            newDocObj = createGenericShapeFeature(builder.shape, Reader.document, "Shape");
+            break;
+        }
+    }
+
+    // Common post-creation steps for objects NOT handled by helper functions
+    if (newDocObj) {
+        Reader.IncrementCreatedObjectCount();
+        Reader._addOriginalLayerProperty(newDocObj);
+        Reader.MoveToLayer(newDocObj);
+        Reader.ApplyGuiStyles(static_cast<Part::Feature*>(newDocObj));
+    }
+}
+
+ImpExpDxfRead::Layer::Layer(
+    const std::string& name,
+    ColorIndex_t color,
+    std::string&& lineType,
+    PyObject* drawingLayer
+)
+    : CDxfRead::Layer(name, color, std::move(lineType))
+    , DraftLayerView(
+          drawingLayer == nullptr ? Py_None : PyObject_GetAttrString(drawingLayer, "ViewObject")
+      )
+    , GroupContents(
+          drawingLayer == nullptr ? nullptr
+                                  : dynamic_cast<App::PropertyLinkListHidden*>(
+                                        (((App::FeaturePythonPyT<App::DocumentObjectPy>*)drawingLayer)
+                                             ->getPropertyContainerPtr())
+                                            ->getDynamicPropertyByName("Group")
+                                    )
+      )
+{}
+ImpExpDxfRead::Layer::~Layer()
+{
+    Py_XDECREF(DraftLayerView);
+}
+
+void ImpExpDxfRead::Layer::FinishLayer() const
+{
+    if (GroupContents != nullptr) {
+        // We have to move the object to layer->DraftLayer
+        // The DraftLayer will have a Proxy attribute which has a addObject attribute which we
+        // call with (draftLayer, draftObject) Checking from python, the layer is a
+        // App::FeaturePython, and its Proxy is a draftobjects.layer.Layer
+        GroupContents->setValue(Contents);
+    }
+    if (DraftLayerView != Py_None && Hidden) {
+        // Hide the Hidden layers if possible (if GUI exists)
+        // We do this now rather than when the layer is created so all objects
+        // within the layers also become hidden.
+        PyObject_CallMethod(DraftLayerView, "hide", nullptr);
+    }
+}
+
+CDxfRead::Layer* ImpExpDxfRead::MakeLayer(const std::string& name, ColorIndex_t color, std::string&& lineType)
+{
+    if (m_preserveLayers) {
+        // Hidden layers are implemented in the wrapup code after the entire file has been read.
+        Base::Color appColor = ObjectColor(color);
+        PyObject* draftModule = nullptr;
+        PyObject* layer = nullptr;
+        draftModule = getDraftModule();
+        if (draftModule != nullptr) {
+            // After the colours, I also want to pass the draw_style, but there is an
+            // intervening line-width parameter. It is easier to just pass that parameter's
+            // default value than to do the handstands to pass a named parameter.
+            // TODO: Pass the appropriate draw_style (from "Solid" "Dashed" "Dotted" "DashDot")
+            // This needs an ObjectDrawStyleName analogous to ObjectColor but at the
+            // ImpExpDxfGui level.
+            layer =
+                // NOLINTNEXTLINE(readability/nolint)
+                // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
+                (Base::PyObjectBase*)PyObject_CallMethod(
+                    draftModule,
+                    "make_layer",
+                    "s(fff)(fff)fs",
+                    name.c_str(),
+                    appColor.r,
+                    appColor.g,
+                    appColor.b,
+                    appColor.r,
+                    appColor.g,
+                    appColor.b,
+                    2.0,
+                    "Solid"
+                );
+        }
+        auto result = new Layer(name, color, std::move(lineType), layer);
+        if (result->DraftLayerView != Py_None) {
+            // Get the correct boolean value based on the user's preference.
+            PyObject* overrideValue = m_preserveColors ? Py_True : Py_False;
+            PyObject_SetAttrString(result->DraftLayerView, "OverrideLineColorChildren", overrideValue);
+            PyObject_SetAttrString(
+                result->DraftLayerView,
+                "OverrideShapeAppearanceChildren",
+                overrideValue
+            );
+        }
+
+        // We make our own layer class even if we could not make a layer. MoveToLayer will
+        // ignore such layers but we have to do this because it is not a polymorphic type so we
+        // can't tell what we pull out of m_entityAttributes.m_Layer.
+        return result;
+    }
+    return CDxfRead::MakeLayer(name, color, std::move(lineType));
+}
+void ImpExpDxfRead::MoveToLayer(App::DocumentObject* object) const
+{
+    if (m_preserveLayers) {
+        static_cast<Layer*>(m_entityAttributes.m_Layer)->Contents.push_back(object);
+    }
+    // TODO: else Hide the object if it is in a Hidden layer? That won't work because we've
+    // cleared out m_entityAttributes.m_Layer
+}
+
+
+std::string ImpExpDxfRead::Deformat(const char* text)
+{
+    // this function removes DXF formatting from texts
+    std::stringstream ss;
+    bool escape = false;      // turned on when finding an escape character
+    bool longescape = false;  // turned on for certain escape codes that expect additional chars
+    for (unsigned int i = 0; i < strlen(text); i++) {
+        char ch = text[i];
+        if (ch == '\\') {
+            escape = true;
+        }
+        else if (escape) {
+            if (longescape) {
+                if (ch == ';') {
+                    escape = false;
+                    longescape = false;
+                }
+            }
+            else if (
+                (ch == 'H') || (ch == 'h') || (ch == 'Q') || (ch == 'q') || (ch == 'W')
+                || (ch == 'w') || (ch == 'F') || (ch == 'f') || (ch == 'A') || (ch == 'a')
+                || (ch == 'C') || (ch == 'c') || (ch == 'T') || (ch == 't')
+            ) {
+                longescape = true;
+            }
+            else {
+                if ((ch == 'P') || (ch == 'p')) {
+                    ss << "\n";
+                }
+                escape = false;
+            }
+        }
+        else if ((ch != '{') && (ch != '}')) {
+            ss << ch;
+        }
+    }
+    return ss.str();
+}
+
+void ImpExpDxfRead::_addOriginalLayerProperty(App::DocumentObject* obj)
+{
+    if (obj && m_entityAttributes.m_Layer) {
+        obj->addDynamicProperty(
+            "App::PropertyString",
+            "OriginalLayer",
+            "Internal",
+            "Layer name from the original DXF file.",
+            App::Property::Hidden
+        );
+        static_cast<App::PropertyString*>(obj->getPropertyByName("OriginalLayer"))
+            ->setValue(m_entityAttributes.m_Layer->Name.c_str());
+    }
+}
+
+void ImpExpDxfRead::DrawingEntityCollector::AddObject(const TopoDS_Shape& shape, const char* nameBase)
+{
+    auto pcFeature = Reader.document->addObject<Part::Feature>(nameBase);
+
+    if (pcFeature) {
+        Reader.IncrementCreatedObjectCount();
+        pcFeature->Shape.setValue(shape);
+        Reader._addOriginalLayerProperty(pcFeature);
+        Reader.MoveToLayer(pcFeature);
+        Reader.ApplyGuiStyles(pcFeature);
+    }
+}
+
+void ImpExpDxfRead::DrawingEntityCollector::AddObject(App::DocumentObject* obj, const char* /*nameBase*/)
+{
+    Reader.MoveToLayer(obj);
+    Reader._addOriginalLayerProperty(obj);
+
+    // Safely apply styles by checking the object's actual type (only for objects not replaced
+    // by Python)
+    if (auto feature = dynamic_cast<Part::Feature*>(obj)) {
+        Reader.ApplyGuiStyles(feature);
+    }
+    else if (auto pyFeature = dynamic_cast<App::FeaturePython*>(obj)) {
+        Reader.ApplyGuiStyles(pyFeature);
+    }
+    else if (auto link = dynamic_cast<App::Link*>(obj)) {
+        Reader.ApplyGuiStyles(link);
+    }
+}
+
+void ImpExpDxfRead::DrawingEntityCollector::AddObject(FeaturePythonBuilder shapeBuilder)
+{
+    Reader.IncrementCreatedObjectCount();
+    App::FeaturePython* shape = shapeBuilder(Reader.OCSOrientationTransform);
+    if (shape != nullptr) {
+        Reader._addOriginalLayerProperty(shape);
+    }
+}
+
+//******************************************************************************
+// writing
+
+void gPntToTuple(double result[3], gp_Pnt& p)
+{
+    result[0] = p.X();
+    result[1] = p.Y();
+    result[2] = p.Z();
+}
+
+point3D gPntTopoint3D(gp_Pnt& p)
+{
+    point3D result = {p.X(), p.Y(), p.Z()};
+    return result;
+}
+
+ImpExpDxfWrite::ImpExpDxfWrite(std::string filepath)
+    : CDxfWrite(filepath.c_str())
+{
+    setOptionSource("User parameter:BaseApp/Preferences/Mod/Draft");
+    setOptions();
+}
+
+ImpExpDxfWrite::~ImpExpDxfWrite() = default;
+
+void ImpExpDxfWrite::setOptions()
+{
+    ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
+        getOptionSource().c_str()
+    );
+    optionMaxLength = hGrp->GetFloat("maxsegmentlength", 5.0);
+    optionExpPoints = hGrp->GetBool("ExportPoints", false);
+    m_version = hGrp->GetInt("DxfVersionOut", 14);
+    optionPolyLine = hGrp->GetBool("DiscretizeEllipses", false);
+    m_polyOverride = hGrp->GetBool("DiscretizeEllipses", false);
+    setDataDir(App::Application::getResourceDir() + "Mod/Import/DxfPlate/");
+}
+
+void ImpExpDxfWrite::exportShape(const TopoDS_Shape input)
+{
+    // export Edges
+    TopExp_Explorer edges(input, TopAbs_EDGE);
+    for (int i = 1; edges.More(); edges.Next(), i++) {
+        const TopoDS_Edge& edge = TopoDS::Edge(edges.Current());
+        BRepAdaptor_Curve adapt(edge);
+        if (adapt.GetType() == GeomAbs_Circle) {
+            double f = adapt.FirstParameter();
+            double l = adapt.LastParameter();
+            gp_Pnt start = adapt.Value(f);
+            gp_Pnt e = adapt.Value(l);
+            if (fabs(l - f) > 1.0 && start.SquareDistance(e) < 0.001) {
+                exportCircle(adapt);
+            }
+            else {
+                exportArc(adapt);
+            }
+        }
+        else if (adapt.GetType() == GeomAbs_Ellipse) {
+            double f = adapt.FirstParameter();
+            double l = adapt.LastParameter();
+            gp_Pnt start = adapt.Value(f);
+            gp_Pnt e = adapt.Value(l);
+            if (fabs(l - f) > 1.0 && start.SquareDistance(e) < 0.001) {
+                if (m_polyOverride) {
+                    if (m_version >= 14) {
+                        exportLWPoly(adapt);
+                    }
+                    else {  // m_version < 14
+                        exportPolyline(adapt);
+                    }
+                }
+                else if (optionPolyLine) {
+                    if (m_version >= 14) {
+                        exportLWPoly(adapt);
+                    }
+                    else {  // m_version < 14
+                        exportPolyline(adapt);
+                    }
+                }
+                else {  // no overrides, do what's right!
+                    if (m_version < 14) {
+                        exportPolyline(adapt);
+                    }
+                    else {
+                        exportEllipse(adapt);
+                    }
+                }
+            }
+            else {  // it's an arc
+                if (m_polyOverride) {
+                    if (m_version >= 14) {
+                        exportLWPoly(adapt);
+                    }
+                    else {  // m_version < 14
+                        exportPolyline(adapt);
+                    }
+                }
+                else if (optionPolyLine) {
+                    if (m_version >= 14) {
+                        exportLWPoly(adapt);
+                    }
+                    else {  // m_version < 14
+                        exportPolyline(adapt);
+                    }
+                }
+                else {  // no overrides, do what's right!
+                    if (m_version < 14) {
+                        exportPolyline(adapt);
+                    }
+                    else {
+                        exportEllipseArc(adapt);
+                    }
+                }
+            }
+        }
+        else if (adapt.GetType() == GeomAbs_BSplineCurve) {
+            if (m_polyOverride) {
+                if (m_version >= 14) {
+                    exportLWPoly(adapt);
+                }
+                else {  // m_version < 14
+                    exportPolyline(adapt);
+                }
+            }
+            else if (optionPolyLine) {
+                if (m_version >= 14) {
+                    exportLWPoly(adapt);
+                }
+                else {  // m_version < 14
+                    exportPolyline(adapt);
+                }
+            }
+            else {  // no overrides, do what's right!
+                if (m_version < 14) {
+                    exportPolyline(adapt);
+                }
+                else {
+                    exportBSpline(adapt);
+                }
+            }
+        }
+        else if (adapt.GetType() == GeomAbs_BezierCurve) {
+            exportBCurve(adapt);
+        }
+        else if (adapt.GetType() == GeomAbs_Line) {
+            exportLine(adapt);
+        }
+        else {
+            Base::Console().warning(
+                "ImpExpDxf - unknown curve type: %d\n",
+                static_cast<int>(adapt.GetType())
+            );
+        }
+    }
+
+    if (optionExpPoints) {
+        TopExp_Explorer verts(input, TopAbs_VERTEX);
+        std::vector<gp_Pnt> duplicates;
+        for (int i = 1; verts.More(); verts.Next(), i++) {
+            const TopoDS_Vertex& v = TopoDS::Vertex(verts.Current());
+            gp_Pnt p = BRep_Tool::Pnt(v);
+            duplicates.push_back(p);
+        }
+
+        std::sort(duplicates.begin(), duplicates.end(), ImpExpDxfWrite::gp_PntCompare);
+        auto newEnd = std::unique(duplicates.begin(), duplicates.end(), ImpExpDxfWrite::gp_PntEqual);
+        std::vector<gp_Pnt> uniquePts(duplicates.begin(), newEnd);
+        for (auto& p : uniquePts) {
+            double point[3] = {0, 0, 0};
+            gPntToTuple(point, p);
+            writePoint(point);
+        }
+    }
+}
+
+bool ImpExpDxfWrite::gp_PntEqual(gp_Pnt p1, gp_Pnt p2)
+{
+    bool result = false;
+    if (p1.IsEqual(p2, Precision::Confusion())) {
+        result = true;
+    }
+    return result;
+}
+
+// is p1 "less than" p2?
+bool ImpExpDxfWrite::gp_PntCompare(gp_Pnt p1, gp_Pnt p2)
+{
+    bool result = false;
+    if (!(p1.IsEqual(p2, Precision::Confusion()))) {              // ie v1 != v2
+        if (!(fabs(p1.X() - p2.X()) < Precision::Confusion())) {  // x1 != x2
+            result = p1.X() < p2.X();
+        }
+        else if (!(fabs(p1.Y() - p2.Y()) < Precision::Confusion())) {  // y1 != y2
+            result = p1.Y() < p2.Y();
+        }
+        else {
+            result = p1.Z() < p2.Z();
+        }
+    }
+    return result;
+}
+
+
+void ImpExpDxfWrite::exportCircle(BRepAdaptor_Curve& c)
+{
+    gp_Circ circ = c.Circle();
+    gp_Pnt p = circ.Location();
+    double center[3] = {0, 0, 0};
+    gPntToTuple(center, p);
+
+    double radius = circ.Radius();
+
+    writeCircle(center, radius);
+}
+
+void ImpExpDxfWrite::exportEllipse(BRepAdaptor_Curve& c)
+{
+    gp_Elips ellp = c.Ellipse();
+    gp_Pnt p = ellp.Location();
+    double center[3] = {0, 0, 0};
+    gPntToTuple(center, p);
+
+    double major = ellp.MajorRadius();
+    double minor = ellp.MinorRadius();
+
+    gp_Dir xaxis = ellp.XAxis().Direction();  // direction of major axis
+    // rotation appears to be the clockwise(?) angle between major & +Y??
+    double rotation = xaxis.AngleWithRef(gp_Dir(0, 1, 0), gp_Dir(0, 0, 1));
+
+    // 2*pi = 6.28319 is invalid(doesn't display in LibreCAD), but 2PI = 6.28318 is valid!
+    // writeEllipse(center, major, minor, rotation, 0.0, 2 * std::numbers::pi, true );
+    writeEllipse(center, major, minor, rotation, 0.0, 6.28318, true);
+}
+
+void ImpExpDxfWrite::exportArc(BRepAdaptor_Curve& c)
+{
+    gp_Circ circ = c.Circle();
+    gp_Pnt p = circ.Location();
+    double center[3] = {0, 0, 0};
+    gPntToTuple(center, p);
+
+    double f = c.FirstParameter();
+    double l = c.LastParameter();
+    gp_Pnt s = c.Value(f);
+    double start[3];
+    gPntToTuple(start, s);
+    gp_Pnt m = c.Value((l + f) / 2.0);
+    gp_Pnt e = c.Value(l);
+    double end[3] = {0, 0, 0};
+    gPntToTuple(end, e);
+
+    gp_Vec v1(m, s);
+    gp_Vec v2(m, e);
+    gp_Vec v3(0, 0, 1);
+    double a = v3.DotCross(v1, v2);
+
+    bool dir = (a < 0) ? true : false;
+    writeArc(start, end, center, dir);
+}
+
+void ImpExpDxfWrite::exportEllipseArc(BRepAdaptor_Curve& c)
+{
+    gp_Elips ellp = c.Ellipse();
+    gp_Pnt p = ellp.Location();
+    double center[3] = {0, 0, 0};
+    gPntToTuple(center, p);
+
+    double major = ellp.MajorRadius();
+    double minor = ellp.MinorRadius();
+
+    gp_Dir xaxis = ellp.XAxis().Direction();  // direction of major axis
+    // rotation appears to be the clockwise angle between major & +Y??
+    double rotation = xaxis.AngleWithRef(gp_Dir(0, 1, 0), gp_Dir(0, 0, 1));
+
+    double f = c.FirstParameter();
+    double l = c.LastParameter();
+    gp_Pnt s = c.Value(f);
+    gp_Pnt m = c.Value((l + f) / 2.0);
+    gp_Pnt e = c.Value(l);
+
+    gp_Vec v1(m, s);
+    gp_Vec v2(m, e);
+    gp_Vec v3(0, 0, 1);
+    double a = v3.DotCross(v1, v2);  // a = v3 dot (v1 cross v2)
+                                     // relates to "handedness" of 3 vectors
+                                     // a > 0 ==> v2 is CCW from v1 (righthanded)?
+                                     // a < 0 ==> v2 is CW from v1 (lefthanded)?
+
+    double startAngle = fmod(f, 2.0 * std::numbers::pi);  // revolutions
+    double endAngle = fmod(l, 2.0 * std::numbers::pi);
+    bool endIsCW = (a < 0) ? true : false;  // if !endIsCW swap(start,end)
+    // not sure if this is a hack or not. seems to make valid arcs.
+    if (!endIsCW) {
+        startAngle = -startAngle;
+        endAngle = -endAngle;
+    }
+
+    writeEllipse(center, major, minor, rotation, startAngle, endAngle, endIsCW);
+}
+
+void ImpExpDxfWrite::exportBSpline(BRepAdaptor_Curve& c)
+{
+    SplineDataOut sd;
+    Handle(Geom_BSplineCurve) spline;
+    double f, l;
+    gp_Pnt s, ePt;
+
+    Standard_Real tol3D = 0.001;
+    Standard_Integer maxDegree = 3, maxSegment = 200;
+    Handle(BRepAdaptor_HCurve) hCurve = new BRepAdaptor_HCurve(c);
+    Approx_Curve3d approx(hCurve, tol3D, GeomAbs_C0, maxSegment, maxDegree);
+    if (approx.IsDone() && approx.HasResult()) {
+        spline = approx.Curve();
+    }
+    else {
+        if (approx.HasResult()) {  // result, but not within tolerance
+            spline = approx.Curve();
+            Base::Console().message("DxfWrite::exportBSpline - result not within tolerance\n");
+        }
+        else {
+            f = c.FirstParameter();
+            l = c.LastParameter();
+            s = c.Value(f);
+            ePt = c.Value(l);
+            Base::Console().message(
+                "DxfWrite::exportBSpline - no result- from:(%.3f,%.3f) to:(%.3f,%.3f)\n",
+                s.X(),
+                s.Y(),
+                ePt.X(),
+                ePt.Y()
+            );
+            TColgp_Array1OfPnt controlPoints(0, 1);
+            controlPoints.SetValue(0, s);
+            controlPoints.SetValue(1, ePt);
+            spline = GeomAPI_PointsToBSpline(controlPoints, 1).Curve();
+        }
+    }
+    // WF? norm of surface containing curve??
+    sd.norm.x = 0.0;
+    sd.norm.y = 0.0;
+    sd.norm.z = 1.0;
+
+    sd.flag = spline->IsClosed();
+    sd.flag += spline->IsPeriodic() * 2;
+    sd.flag += spline->IsRational() * 4;
+    sd.flag += 8;  // planar spline
+
+    sd.degree = spline->Degree();
+    sd.control_points = spline->NbPoles();
+    sd.knots = spline->NbKnots();
+    gp_Pnt p;
+    spline->D0(spline->FirstParameter(), p);
+    sd.starttan = gPntTopoint3D(p);
+    spline->D0(spline->LastParameter(), p);
+    sd.endtan = gPntTopoint3D(p);
+
+    // next bit is from DrawingExport.cpp (Dan Falk?).
+    Standard_Integer m = 0;
+    if (spline->IsPeriodic()) {
+        m = spline->NbPoles() + 2 * spline->Degree() - spline->Multiplicity(1) + 2;
+    }
+    else {
+        for (int i = 1; i <= spline->NbKnots(); i++) {
+            m += spline->Multiplicity(i);
+        }
+    }
+    TColStd_Array1OfReal knotsequence(1, m);
+    spline->KnotSequence(knotsequence);
+    for (int i = knotsequence.Lower(); i <= knotsequence.Upper(); i++) {
+        sd.knot.push_back(knotsequence(i));
+    }
+    sd.knots = knotsequence.Length();
+
+    TColgp_Array1OfPnt poles(1, spline->NbPoles());
+    spline->Poles(poles);
+    for (int i = poles.Lower(); i <= poles.Upper(); i++) {
+        sd.control.push_back(gPntTopoint3D(poles(i)));
+    }
+    // OCC doesn't have separate lists for control points and fit points.
+
+    writeSpline(sd);
+}
+
+void ImpExpDxfWrite::exportBCurve(BRepAdaptor_Curve& c)
+{
+    (void)c;
+    Base::Console().message("BCurve dxf export not yet supported\n");
+}
+
+void ImpExpDxfWrite::exportLine(BRepAdaptor_Curve& c)
+{
+    double f = c.FirstParameter();
+    double l = c.LastParameter();
+    gp_Pnt s = c.Value(f);
+    double start[3] = {0, 0, 0};
+    gPntToTuple(start, s);
+    gp_Pnt e = c.Value(l);
+    double end[3] = {0, 0, 0};
+    gPntToTuple(end, e);
+    writeLine(start, end);
+}
+
+// Helper function to discretize a curve into polyline vertices
+// Returns true if discretization was successful and pd was populated
+bool ImpExpDxfWrite::discretizeCurveToPolyline(BRepAdaptor_Curve& c, LWPolyDataOut& pd) const
+{
+    pd.Flag = c.IsClosed();
+    pd.Elev = 0.0;
+    pd.Thick = 0.0;
+    pd.Extr.x = 0.0;
+    pd.Extr.y = 0.0;
+    pd.Extr.z = 1.0;
+    pd.nVert = 0;
+
+    GCPnts_UniformAbscissa discretizer;
+    discretizer.Initialize(c, optionMaxLength);
+
+    if (!discretizer.IsDone() || discretizer.NbPoints() <= 0) {
+        return false;
+    }
+
+    int nbPoints = discretizer.NbPoints();
+    // for closed curves, don't include the last point if it duplicates the first
+    int endIndex = nbPoints;
+    if (pd.Flag && nbPoints > 1) {
+        gp_Pnt pFirst = c.Value(discretizer.Parameter(1));
+        gp_Pnt pLast = c.Value(discretizer.Parameter(nbPoints));
+        if (pFirst.Distance(pLast) < Precision::Confusion()) {
+            endIndex = nbPoints - 1;
+        }
+    }
+
+    for (int i = 1; i <= endIndex; i++) {
+        gp_Pnt p = c.Value(discretizer.Parameter(i));
+        pd.Verts.push_back(gPntTopoint3D(p));
+    }
+    pd.nVert = static_cast<int>(pd.Verts.size());
+
+    return true;
+}
+
+void ImpExpDxfWrite::exportLWPoly(BRepAdaptor_Curve& c)
+{
+    LWPolyDataOut pd;
+    if (discretizeCurveToPolyline(c, pd)) {
+        writeLWPolyLine(pd);
+    }
+}
+
+void ImpExpDxfWrite::exportPolyline(BRepAdaptor_Curve& c)
+{
+    LWPolyDataOut pd;
+    if (discretizeCurveToPolyline(c, pd)) {
+        writePolyline(pd);
+    }
+}
+
+void ImpExpDxfWrite::exportText(
+    const char* text,
+    Base::Vector3d position1,
+    Base::Vector3d position2,
+    double size,
+    int just
+)
+{
+    double location1[3] = {0, 0, 0};
+    location1[0] = position1.x;
+    location1[1] = position1.y;
+    location1[2] = position1.z;
+    double location2[3] = {0, 0, 0};
+    location2[0] = position2.x;
+    location2[1] = position2.y;
+    location2[2] = position2.z;
+
+    writeText(text, location1, location2, size, just);
+}
+
+void ImpExpDxfWrite::exportLinearDim(
+    Base::Vector3d textLocn,
+    Base::Vector3d lineLocn,
+    Base::Vector3d extLine1Start,
+    Base::Vector3d extLine2Start,
+    char* dimText,
+    int type
+)
+{
+    double text[3] = {0, 0, 0};
+    text[0] = textLocn.x;
+    text[1] = textLocn.y;
+    text[2] = textLocn.z;
+    double line[3] = {0, 0, 0};
+    line[0] = lineLocn.x;
+    line[1] = lineLocn.y;
+    line[2] = lineLocn.z;
+    double ext1[3] = {0, 0, 0};
+    ext1[0] = extLine1Start.x;
+    ext1[1] = extLine1Start.y;
+    ext1[2] = extLine1Start.z;
+    double ext2[3] = {0, 0, 0};
+    ext2[0] = extLine2Start.x;
+    ext2[1] = extLine2Start.y;
+    ext2[2] = extLine2Start.z;
+    writeLinearDim(text, line, ext1, ext2, dimText, type);
+}
+
+void ImpExpDxfWrite::exportAngularDim(
+    Base::Vector3d textLocn,
+    Base::Vector3d lineLocn,
+    Base::Vector3d extLine1End,
+    Base::Vector3d extLine2End,
+    Base::Vector3d apexPoint,
+    char* dimText
+)
+{
+    double text[3] = {0, 0, 0};
+    text[0] = textLocn.x;
+    text[1] = textLocn.y;
+    text[2] = textLocn.z;
+    double line[3] = {0, 0, 0};
+    line[0] = lineLocn.x;
+    line[1] = lineLocn.y;
+    line[2] = lineLocn.z;
+    double ext1[3] = {0, 0, 0};
+    ext1[0] = extLine1End.x;
+    ext1[1] = extLine1End.y;
+    ext1[2] = extLine1End.z;
+    double ext2[3] = {0, 0, 0};
+    ext2[0] = extLine2End.x;
+    ext2[1] = extLine2End.y;
+    ext2[2] = extLine2End.z;
+    double apex[3] = {0, 0, 0};
+    apex[0] = apexPoint.x;
+    apex[1] = apexPoint.y;
+    apex[2] = apexPoint.z;
+    writeAngularDim(text, line, apex, ext1, apex, ext2, dimText);
+}
+
+void ImpExpDxfWrite::exportRadialDim(
+    Base::Vector3d centerPoint,
+    Base::Vector3d textLocn,
+    Base::Vector3d arcPoint,
+    char* dimText
+)
+{
+    double center[3] = {0, 0, 0};
+    center[0] = centerPoint.x;
+    center[1] = centerPoint.y;
+    center[2] = centerPoint.z;
+    double text[3] = {0, 0, 0};
+    text[0] = textLocn.x;
+    text[1] = textLocn.y;
+    text[2] = textLocn.z;
+    double arc[3] = {0, 0, 0};
+    arc[0] = arcPoint.x;
+    arc[1] = arcPoint.y;
+    arc[2] = arcPoint.z;
+    writeRadialDim(center, text, arc, dimText);
+}
+
+void ImpExpDxfWrite::exportDiametricDim(
+    Base::Vector3d textLocn,
+    Base::Vector3d arcPoint1,
+    Base::Vector3d arcPoint2,
+    char* dimText
+)
+{
+    double text[3] = {0, 0, 0};
+    text[0] = textLocn.x;
+    text[1] = textLocn.y;
+    text[2] = textLocn.z;
+    double arc1[3] = {0, 0, 0};
+    arc1[0] = arcPoint1.x;
+    arc1[1] = arcPoint1.y;
+    arc1[2] = arcPoint1.z;
+    double arc2[3] = {0, 0, 0};
+    arc2[0] = arcPoint2.x;
+    arc2[1] = arcPoint2.y;
+    arc2[2] = arcPoint2.z;
+    writeDiametricDim(text, arc1, arc2, dimText);
+}
+
+Py::Object ImpExpDxfRead::getStatsAsPyObject()
+{
+    // Create a Python dictionary to hold all import statistics.
+    Py::Dict statsDict;
+
+    // Populate the dictionary with general information about the import.
+    statsDict.setItem("dxfVersion", Py::String(m_stats.dxfVersion));
+    statsDict.setItem("dxfEncoding", Py::String(m_stats.dxfEncoding));
+    statsDict.setItem("scalingSource", Py::String(m_stats.scalingSource));
+    statsDict.setItem("fileUnits", Py::String(m_stats.fileUnits));
+    statsDict.setItem("finalScalingFactor", Py::Float(m_stats.finalScalingFactor));
+    statsDict.setItem("importTimeSeconds", Py::Float(m_stats.importTimeSeconds));
+    statsDict.setItem("totalEntitiesCreated", Py::Long(m_stats.totalEntitiesCreated));
+
+    // Create a nested dictionary for the counts of each DXF entity type read.
+    Py::Dict entityCountsDict;
+    for (const auto& pair : m_stats.entityCounts) {
+        entityCountsDict.setItem(pair.first.c_str(), Py::Long(pair.second));
+    }
+    statsDict.setItem("entityCounts", entityCountsDict);
+
+    // Create a nested dictionary for the import settings used for this session.
+    Py::Dict importSettingsDict;
+    for (const auto& pair : m_stats.importSettings) {
+        importSettingsDict.setItem(pair.first.c_str(), Py::String(pair.second));
+    }
+    statsDict.setItem("importSettings", importSettingsDict);
+
+    // Create a nested dictionary for any unsupported DXF features encountered.
+    Py::Dict unsupportedFeaturesDict;
+    for (const auto& pair : m_stats.unsupportedFeatures) {
+        Py::List occurrencesList;
+        for (const auto& occurrence : pair.second) {
+            Py::Tuple infoTuple(2);
+            infoTuple.setItem(0, Py::Long(occurrence.first));
+            infoTuple.setItem(1, Py::String(occurrence.second));
+            occurrencesList.append(infoTuple);
+        }
+        unsupportedFeaturesDict.setItem(pair.first.c_str(), occurrencesList);
+    }
+    statsDict.setItem("unsupportedFeatures", unsupportedFeaturesDict);
+
+    // Create a nested dictionary for the counts of system blocks encountered.
+    Py::Dict systemBlockCountsDict;
+    for (const auto& pair : m_stats.systemBlockCounts) {
+        systemBlockCountsDict.setItem(pair.first.c_str(), Py::Long(pair.second));
+    }
+    statsDict.setItem("systemBlockCounts", systemBlockCountsDict);
+
+    // Return the fully populated statistics dictionary to the Python caller.
+    return statsDict;
+}

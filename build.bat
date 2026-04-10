@@ -57,7 +57,7 @@ if not exist "%SCRIPT_DIR%tests\lib\googletest\CMakeLists.txt" (
 
 REM ---- Set up Visual Studio compiler environment if cl.exe not found ----
 :check_compiler
-REM Use delayed expansion for ProgramFiles(x86) — parens break normal expansion
+REM Use delayed expansion for ProgramFiles(x86) � parens break normal expansion
 set "VSWHERE=!ProgramFiles(x86)!\Microsoft Visual Studio\Installer\vswhere.exe"
 where cl.exe >nul 2>&1
 if !errorlevel! equ 0 goto :compiler_ok
@@ -127,12 +127,49 @@ goto :eof
 :build
 echo [BUILD] Building with %NPROC% parallel jobs...
 cd "%SCRIPT_DIR%"
-pixi run build
-if %errorlevel% neq 0 (
+set "BUILD_LOG=%TEMP%\freecad_build_%RANDOM%.log"
+set "ICE_RETRIES=0"
+set "MAX_ICE_RETRIES=3"
+set "CCACHE_EXE=%SCRIPT_DIR%.pixi\envs\default\Library\bin\ccache.exe"
+
+:build_attempt
+powershell -NoProfile -Command "pixi run build 2>&1 | Tee-Object -FilePath '!BUILD_LOG!'; exit $LASTEXITCODE"
+set "BUILD_ERR=!errorlevel!"
+if !BUILD_ERR! equ 0 goto :build_done
+
+REM Check for MSVC Internal Compiler Error (C1001), commonly caused by ccache + /Z7 + /MP
+findstr /C:"fatal error C1001" "!BUILD_LOG!" >nul 2>&1
+if !errorlevel! neq 0 (
+    if exist "!BUILD_LOG!" del "!BUILD_LOG!"
     echo [ERROR] Build failed.
     echo         Check the compiler output above for specific errors.
     exit /b 1
 )
+
+REM ICE detected - clear ccache and retry
+set /a ICE_RETRIES+=1
+if !ICE_RETRIES! gtr %MAX_ICE_RETRIES% (
+    if exist "!BUILD_LOG!" del "!BUILD_LOG!"
+    echo [ERROR] Build failed with MSVC Internal Compiler Error ^(C1001^) after %MAX_ICE_RETRIES% retries.
+    echo         Consider upgrading to Visual Studio 2022 or disabling ccache.
+    exit /b 1
+)
+
+echo.
+echo [BUILD] *** MSVC Internal Compiler Error ^(C1001^) detected ***
+echo [BUILD] This is a known MSVC bug triggered by ccache + /Z7 + /MP.
+echo [BUILD] Clearing ccache and retrying ^(attempt !ICE_RETRIES!/%MAX_ICE_RETRIES%^)...
+if exist "!CCACHE_EXE!" (
+    "!CCACHE_EXE!" -C
+    echo [BUILD] ccache cleared.
+) else (
+    echo [BUILD] ccache not found at !CCACHE_EXE!, skipping cache clear.
+)
+echo.
+goto :build_attempt
+
+:build_done
+if exist "!BUILD_LOG!" del "!BUILD_LOG!"
 echo [BUILD] Build complete.
 goto :eof
 
@@ -171,11 +208,8 @@ if %errorlevel% neq 0 (
     echo [ERROR] Configure failed.
     exit /b 1
 )
-pixi run build
-if %errorlevel% neq 0 (
-    echo [ERROR] Build failed.
-    exit /b 1
-)
+call :build
+if %errorlevel% neq 0 exit /b 1
 echo [BUILD] Release build complete.
 goto :eof
 
@@ -187,13 +221,42 @@ if %errorlevel% neq 0 (
     echo [ERROR] Debug configure failed.
     exit /b 1
 )
-cmake --build "%BUILD_DIR%" --parallel %NPROC%
-if %errorlevel% neq 0 (
+set "DBG_LOG=%TEMP%\freecad_debug_build_%RANDOM%.log"
+set "DBG_ICE_RETRIES=0"
+set "CCACHE_EXE=%SCRIPT_DIR%.pixi\envs\default\Library\bin\ccache.exe"
+
+:debug_build_attempt
+powershell -NoProfile -Command "cmake --build '%BUILD_DIR%' --parallel %NPROC% 2>&1 | Tee-Object -FilePath '!DBG_LOG!'; exit $LASTEXITCODE"
+set "DBG_ERR=!errorlevel!"
+if !DBG_ERR! equ 0 (
+    if exist "!DBG_LOG!" del "!DBG_LOG!"
+    echo [BUILD] Debug build complete.
+    goto :eof
+)
+
+findstr /C:"fatal error C1001" "!DBG_LOG!" >nul 2>&1
+if !errorlevel! neq 0 (
+    if exist "!DBG_LOG!" del "!DBG_LOG!"
     echo [ERROR] Debug build failed.
     exit /b 1
 )
-echo [BUILD] Debug build complete.
-goto :eof
+
+set /a DBG_ICE_RETRIES+=1
+if !DBG_ICE_RETRIES! gtr 3 (
+    if exist "!DBG_LOG!" del "!DBG_LOG!"
+    echo [ERROR] Debug build failed with MSVC ICE ^(C1001^) after 3 retries.
+    exit /b 1
+)
+
+echo.
+echo [BUILD] *** MSVC Internal Compiler Error ^(C1001^) detected ***
+echo [BUILD] Clearing ccache and retrying ^(attempt !DBG_ICE_RETRIES!/3^)...
+if exist "!CCACHE_EXE!" (
+    "!CCACHE_EXE!" -C
+    echo [BUILD] ccache cleared.
+)
+echo.
+goto :debug_build_attempt
 
 :all
 echo [BUILD] Full pipeline: Configure + Build + Test + Install

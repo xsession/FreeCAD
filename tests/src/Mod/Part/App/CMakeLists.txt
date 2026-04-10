@@ -5,6 +5,7 @@ add_executable(Part_tests_run
         AttachExtension.cpp
         BRepMesh.cpp
         ChamferTNP.cpp
+        FaceMakerBullseye.cpp
         FeatureChamfer.cpp
         FeatureCompound.cpp
         FeatureExtrusion.cpp
