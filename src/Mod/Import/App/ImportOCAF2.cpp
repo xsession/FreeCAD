@@ -382,6 +382,8 @@ bool ImportOCAF2::createObject(
     }
     else {
         feature = doc->addObject<Part::Feature>(tshape.shapeName().c_str());
+        // Defer tessellation during import — ViewProviderPartExt checks ObjImporting
+        feature->setStatus(App::ObjectStatus::ObjImporting, true);
         feature->Shape.setValue(shape);
     }
     applyFaceColors(feature, {info.faceColor});
@@ -574,6 +576,14 @@ App::DocumentObject* ImportOCAF2::loadShapes()
     myNames.clear();
     myCollapsedObjects.clear();
 
+    // Clear ObjImporting flag on all objects before recompute so that
+    // tessellation can proceed when objects become visible
+    for (auto* obj : pDocument->getObjects()) {
+        if (obj->testStatus(App::ObjectStatus::ObjImporting)) {
+            obj->setStatus(App::ObjectStatus::ObjImporting, false);
+        }
+    }
+
     if (ret) {
         ret->recomputeFeature(true);
     }
@@ -583,6 +593,8 @@ App::DocumentObject* ImportOCAF2::loadShapes()
             Part::ShapeOption::ResolveLink | Part::ShapeOption::Transform
         );
         auto feature = pDocument->addObject<Part::Feature>("Feature");
+        // Defer tessellation during merge phase
+        feature->setStatus(App::ObjectStatus::ObjImporting, true);
         auto name = Tools::labelName(pDoc->Main());
         feature->Label.setValue(name.empty() ? default_name.c_str() : name.c_str());
         feature->Shape.setValue(shape);
@@ -596,6 +608,7 @@ App::DocumentObject* ImportOCAF2::loadShapes()
             v.first->removeObject(v.second.c_str());
         }
         ret = feature;
+        ret->setStatus(App::ObjectStatus::ObjImporting, false);
         ret->recomputeFeature(true);
     }
     sequencer = nullptr;

@@ -44,6 +44,7 @@
 #include <Inventor/misc/SoState.h>
 
 #include <Gui/Selection/SoFCUnifiedSelection.h>
+#include <Gui/SoFCInteractiveElement.h>
 #include <Gui/Inventor/So3DAnnotation.h>
 
 #include "ViewProviderExt.h"
@@ -70,6 +71,11 @@ void SoBrepPointSet::GLRender(SoGLRenderAction* action)
 {
     auto state = action->getState();
     selCounter.checkRenderCache(state);
+
+    // Skip point rendering during interactive navigation for smoother viewport
+    if (Gui::SoFCInteractiveElement::get(state)) {
+        return;
+    }
 
     const SoCoordinateElement* coords = SoCoordinateElement::getInstance(state);
     int num = coords->getNum() - this->startIndex.getValue();

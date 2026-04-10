@@ -49,6 +49,22 @@
 #endif
 
 #include <chrono>
+#include <vector>
+#include <cmath>
+
+#include <BRep_Builder.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <IMeshTools_Parameters.hxx>
+#include <Precision.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopoDS_Compound.hxx>
+#include <TopoDS_Shape.hxx>
+#include <gp.hxx>
+
+#include <Mod/Part/App/PartFeature.h>
+#include <Mod/Part/App/Tools.h>
+
 #include "dxf/ImpExpDxf.h"
 #include "SketchExportHelper.h"
 #include <App/Application.h>
@@ -225,7 +241,103 @@ private:
             if (mode >= 0) {
                 ocaf.setMode(mode);
             }
+
+            // Record existing objects to identify newly created ones
+            std::set<App::DocumentObject*> existingObjs(
+                pcDoc->getObjects().begin(), pcDoc->getObjects().end());
+
             ocaf.loadShapes();
+
+            // Batch-tessellate all newly imported shapes in parallel.
+            // ImportOCAF2::loadShapes() already clears ObjImporting flags,
+            // so this runs after import is complete. Pre-tessellating here
+            // avoids serial tessellation in the GUI thread on first render.
+            {
+                auto allObjs = pcDoc->getObjects();
+                std::vector<App::DocumentObject*> newObjs;
+                for (auto* obj : allObjs) {
+                    if (existingObjs.find(obj) == existingObjs.end()) {
+                        newObjs.push_back(obj);
+                    }
+                }
+
+                // Build a compound of all imported shapes and tessellate once.
+                // BRepMesh with InParallel=true handles internal parallelism
+                // safely across all CPU cores (OCCT uses OSD_Parallel internally).
+                // This avoids data races from threading on shared BRep topology.
+                BRep_Builder builder;
+                TopoDS_Compound compound;
+                builder.MakeCompound(compound);
+                int shapeCount = 0;
+
+                for (auto* obj : newObjs) {
+                    auto* partFeature = dynamic_cast<Part::Feature*>(obj);
+                    if (!partFeature) {
+                        continue;
+                    }
+                    const TopoDS_Shape& shape = partFeature->Shape.getValue();
+                    if (shape.IsNull()) {
+                        continue;
+                    }
+                    builder.Add(compound, shape);
+                    shapeCount++;
+                }
+
+                if (shapeCount > 0) {
+                    ParameterGrp::handle hPart = App::GetApplication().GetParameterGroupByPath(
+                        "User parameter:BaseApp/Preferences/Mod/Part"
+                    );
+                    double deviation = hPart->GetFloat("MeshDeviation", 0.2);
+                    double angularDeflection = hPart->GetFloat("MeshAngularDeflection", 28.65);
+                    bool useAdaptive = hPart->GetBool("AdaptiveDeviation", true);
+                    int faceThreshold = hPart->GetInt("AdaptiveDeviationFaceThreshold", 2000);
+                    double maxScale = hPart->GetFloat("AdaptiveDeviationMaxScale", 10.0);
+
+                    // Count total faces for adaptive deviation
+                    double dev = deviation;
+                    if (useAdaptive && faceThreshold > 0) {
+                        TopTools_IndexedMapOfShape faceMap;
+                        TopExp::MapShapes(compound, TopAbs_FACE, faceMap);
+                        int totalFaces = faceMap.Extent();
+                        if (totalFaces > faceThreshold) {
+                            double scale = std::sqrt(static_cast<double>(totalFaces) / faceThreshold);
+                            scale = std::min(scale, maxScale);
+                            dev *= scale;
+                            if (totalFaces > faceThreshold * 5) {
+                                angularDeflection = std::max(angularDeflection, 33.0);
+                            }
+                            Base::Console().Message(
+                                "Import: Adaptive tessellation for %d faces (deviation x%.2f)\n",
+                                totalFaces, scale);
+                        }
+                    }
+
+                    Standard_Real deflection = Part::Tools::getDeflection(compound, dev);
+                    if (deflection < gp::Resolution()) {
+                        deflection = Precision::Confusion();
+                    }
+                    Standard_Real angRads = angularDeflection * M_PI / 180.0;
+
+                    Base::Console().Message(
+                        "Import: Batch tessellating %d shapes (InParallel=true)...\n",
+                        shapeCount);
+                    auto tStart = std::chrono::steady_clock::now();
+
+                    IMeshTools_Parameters meshParams;
+                    meshParams.Deflection = deflection;
+                    meshParams.Relative = Standard_False;
+                    meshParams.Angle = angRads;
+                    meshParams.InParallel = Standard_True;  // OCCT parallel across all cores
+                    meshParams.AllowQualityDecrease = Standard_True;
+                    BRepMesh_IncrementalMesh(compound, meshParams);
+
+                    auto tEnd = std::chrono::steady_clock::now();
+                    double elapsed = std::chrono::duration<double>(tEnd - tStart).count();
+                    Base::Console().Message(
+                        "Import: Batch tessellation complete: %.2fs for %d shapes\n",
+                        elapsed, shapeCount);
+                }
+            }
 
             hApp->Close(hDoc);
 

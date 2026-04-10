@@ -50,6 +50,7 @@
 
 #include <Gui/Selection/SoFCUnifiedSelection.h>
 #include <Gui/Selection/Selection.h>
+#include <Gui/SoFCInteractiveElement.h>
 #include <Base/Console.h>
 #include "SoBrepEdgeSet.h"
 #include "SoBrepFaceSet.h"
@@ -83,6 +84,12 @@ void SoBrepEdgeSet::GLRender(SoGLRenderAction* action)
 {
     auto state = action->getState();
     selCounter.checkRenderCache(state);
+
+    // Skip edge rendering during interactive navigation (rotation/zoom/pan)
+    // for significantly smoother viewport interaction with large models.
+    if (Gui::SoFCInteractiveElement::get(state) && this->coordIndex.getNum() > 1000) {
+        return;
+    }
 
     SelContextPtr ctx2;
     SelContextPtr ctx = Gui::SoFCSelectionRoot::getRenderContext<SelContext>(this, selContext, ctx2);
