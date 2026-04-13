@@ -28,6 +28,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <sstream>
+#include <thread>
+#include <algorithm>
 #include <boost/regex.hpp>
 
 #include <APIHeaderSection_MakeHeader.hxx>
@@ -1033,7 +1035,6 @@ void TopoShape::exportFaceSet(
 
     bool supportFaceColors = (numFaces == colors.size());
 
-    std::size_t index = 0;
     BRepMesh_IncrementalMesh MESH(
         this->_Shape,
         dev,
@@ -1042,33 +1043,76 @@ void TopoShape::exportFaceSet(
         defaultAngularDeflection(dev),
         /*isInParallel*/ true
     );
-    for (ex.Init(this->_Shape, TopAbs_FACE); ex.More(); ex.Next(), index++) {
-        // get the shape and mesh it
-        const TopoDS_Face& aFace = TopoDS::Face(ex.Current());
-        std::vector<gp_Pnt> points;
-        std::vector<Poly_Triangle> facets;
-        if (!Tools::getTriangulation(aFace, points, facets)) {
-            continue;
-        }
 
+    // Collect faces for parallel triangulation extraction
+    std::vector<TopoDS_Face> allFaces;
+    allFaces.reserve(numFaces);
+    for (ex.Init(this->_Shape, TopAbs_FACE); ex.More(); ex.Next()) {
+        allFaces.push_back(TopoDS::Face(ex.Current()));
+    }
+
+    // Per-face data gathered in parallel, then serialized to InventorBuilder
+    struct FaceData {
         std::vector<Base::Vector3f> vertices;
         std::vector<int> indices;
-        vertices.resize(points.size());
-        indices.resize(4 * facets.size());
+        bool valid = false;
+    };
+    std::vector<FaceData> faceData(allFaces.size());
 
-        for (std::size_t i = 0; i < points.size(); i++) {
-            vertices[i] = Base::convertTo<Base::Vector3f>(points[i]);
+    auto extractRange = [&](size_t begin, size_t end) {
+        for (size_t idx = begin; idx < end; ++idx) {
+            std::vector<gp_Pnt> points;
+            std::vector<Poly_Triangle> facets;
+            if (!Tools::getTriangulation(allFaces[idx], points, facets)) {
+                continue;
+            }
+            auto& fd = faceData[idx];
+            fd.valid = true;
+            fd.vertices.resize(points.size());
+            fd.indices.resize(4 * facets.size());
+            for (std::size_t i = 0; i < points.size(); i++) {
+                fd.vertices[i] = Base::convertTo<Base::Vector3f>(points[i]);
+            }
+            for (std::size_t i = 0; i < facets.size(); i++) {
+                Standard_Integer n1, n2, n3;
+                facets[i].Get(n1, n2, n3);
+                fd.indices[4 * i] = n1;
+                fd.indices[4 * i + 1] = n2;
+                fd.indices[4 * i + 2] = n3;
+                fd.indices[4 * i + 3] = -1;
+            }
         }
+    };
 
-        for (std::size_t i = 0; i < facets.size(); i++) {
-            Standard_Integer n1, n2, n3;
-            facets[i].Get(n1, n2, n3);
-            indices[4 * i] = n1;
-            indices[4 * i + 1] = n2;
-            indices[4 * i + 2] = n3;
-            indices[4 * i + 3] = -1;
+    unsigned int nThreads = std::min(
+        static_cast<unsigned int>(std::thread::hardware_concurrency()),
+        static_cast<unsigned int>(allFaces.size()));
+    if (nThreads == 0) nThreads = 1;
+
+    if (nThreads <= 1 || allFaces.size() <= 1) {
+        extractRange(0, allFaces.size());
+    }
+    else {
+        std::vector<std::thread> threads;
+        threads.reserve(nThreads);
+        size_t chunkSize = (allFaces.size() + nThreads - 1) / nThreads;
+        for (unsigned int t = 0; t < nThreads; ++t) {
+            size_t begin = t * chunkSize;
+            size_t end = std::min(begin + chunkSize, allFaces.size());
+            if (begin >= end) break;
+            threads.emplace_back(extractRange, begin, end);
         }
+        for (auto& th : threads) {
+            th.join();
+        }
+    }
 
+    // Serialize gathered face data to InventorBuilder (must be sequential)
+    for (std::size_t index = 0; index < allFaces.size(); ++index) {
+        auto& fd = faceData[index];
+        if (!fd.valid) {
+            continue;
+        }
         builder.beginSeparator();
         Base::ShapeHintsItem shapeHints {static_cast<float>(ca)};
         builder.addNode(shapeHints);
@@ -1079,10 +1123,9 @@ void TopoShape::exportFaceSet(
             material.setTransparency({c.a});
             builder.addNode(material);
         }
-
-        Base::Coordinate3Item coords {vertices};
+        Base::Coordinate3Item coords {fd.vertices};
         builder.addNode(coords);
-        Base::IndexedFaceSetItem faceSet {indices};
+        Base::IndexedFaceSetItem faceSet {fd.indices};
         builder.addNode(faceSet);
         builder.endSeparator();
     }
@@ -3591,48 +3634,65 @@ TopoDS_Shape TopoShape::removeSplitter() const
 
 void TopoShape::getDomains(std::vector<Domain>& domains) const
 {
-    std::size_t countFaces = 0;
+    // Collect all faces first
+    std::vector<TopoDS_Face> faces;
     for (TopExp_Explorer xp(this->_Shape, TopAbs_FACE); xp.More(); xp.Next()) {
-        ++countFaces;
+        faces.push_back(TopoDS::Face(xp.Current()));
     }
-    domains.reserve(countFaces);
+    domains.resize(faces.size());
 
-    for (TopExp_Explorer xp(this->_Shape, TopAbs_FACE); xp.More(); xp.Next()) {
-        TopoDS_Face face = TopoDS::Face(xp.Current());
+    // Process faces in parallel — each face's triangulation extraction is independent
+    unsigned int nThreads = std::min(
+        static_cast<unsigned int>(std::thread::hardware_concurrency()),
+        static_cast<unsigned int>(faces.size()));
+    if (nThreads == 0) nThreads = 1;
 
-        std::vector<gp_Pnt> points;
-        std::vector<Poly_Triangle> facets;
-        if (!Tools::getTriangulation(face, points, facets)) {
-            // For a face that cannot be meshed append an empty domain.
-            // It's important for some algorithms (e.g. color mapping) that the numbers of
-            // faces and domains match
-            Domain domain;
-            domains.push_back(domain);
+    auto processRange = [&](size_t begin, size_t end) {
+        for (size_t idx = begin; idx < end; ++idx) {
+            std::vector<gp_Pnt> points;
+            std::vector<Poly_Triangle> facets;
+            if (!Tools::getTriangulation(faces[idx], points, facets)) {
+                // Empty domain preserves face-to-domain index mapping
+                domains[idx] = Domain();
+            }
+            else {
+                Domain domain;
+                domain.points.reserve(points.size());
+                for (const auto& it : points) {
+                    Standard_Real X, Y, Z;
+                    it.Coord(X, Y, Z);
+                    domain.points.emplace_back(X, Y, Z);
+                }
+                domain.facets.reserve(facets.size());
+                for (const auto& it : facets) {
+                    Standard_Integer N1, N2, N3;
+                    it.Get(N1, N2, N3);
+                    Facet tria;
+                    tria.I1 = N1;
+                    tria.I2 = N2;
+                    tria.I3 = N3;
+                    domain.facets.push_back(tria);
+                }
+                domains[idx] = std::move(domain);
+            }
         }
-        else {
-            Domain domain;
-            // copy the points
-            domain.points.reserve(points.size());
-            for (const auto& it : points) {
-                Standard_Real X, Y, Z;
-                it.Coord(X, Y, Z);
-                domain.points.emplace_back(X, Y, Z);
-            }
+    };
 
-            // copy the triangles
-            domain.facets.reserve(facets.size());
-            for (const auto& it : facets) {
-                Standard_Integer N1, N2, N3;
-                it.Get(N1, N2, N3);
-
-                Facet tria;
-                tria.I1 = N1;
-                tria.I2 = N2;
-                tria.I3 = N3;
-                domain.facets.push_back(tria);
-            }
-
-            domains.push_back(domain);
+    if (nThreads <= 1 || faces.size() <= 1) {
+        processRange(0, faces.size());
+    }
+    else {
+        std::vector<std::thread> threads;
+        threads.reserve(nThreads);
+        size_t chunkSize = (faces.size() + nThreads - 1) / nThreads;
+        for (unsigned int t = 0; t < nThreads; ++t) {
+            size_t begin = t * chunkSize;
+            size_t end = std::min(begin + chunkSize, faces.size());
+            if (begin >= end) break;
+            threads.emplace_back(processRange, begin, end);
+        }
+        for (auto& th : threads) {
+            th.join();
         }
     }
 }
@@ -3910,87 +3970,118 @@ void TopoShape::getPoints(
         }
     }
 
-    // sample inner points of all faces
-    BRepClass_FaceClassifier classifier;
-    bool hasFaces = false;
+    // Sample inner points of all faces — parallelized across faces.
+    // Each face's UV sampling, classification, and normal estimation is independent.
+    std::vector<TopoDS_Face> allFaces;
     for (TopExp_Explorer xp(_Shape, TopAbs_FACE); xp.More(); xp.Next()) {
-        hasFaces = true;
-        int pointsPerEdge = minPointsPerEdge;
-        TopoDS_Face face = TopoDS::Face(xp.Current());
-        BRepAdaptor_Surface surface(face);
-        Handle(Geom_Surface) aSurf = BRep_Tool::Surface(face);
+        allFaces.push_back(TopoDS::Face(xp.Current()));
+    }
 
-        // parameter ranges
-        Standard_Real uFirst = surface.FirstUParameter();
-        Standard_Real uLast = surface.LastUParameter();
-        Standard_Real uMid = (uFirst + uLast) / 2;
-        Standard_Real vFirst = surface.FirstVParameter();
-        Standard_Real vLast = surface.LastVParameter();
-        Standard_Real vMid = (vFirst + vLast) / 2;
+    if (!allFaces.empty()) {
+        // Per-face results to gather then merge
+        struct FaceResult {
+            std::vector<Base::Vector3d> pts;
+            std::vector<Base::Vector3d> norms;
+        };
+        std::vector<FaceResult> faceResults(allFaces.size());
 
-        // get geometrical length and width of the surface
-        //
-        gp_Pnt p1, p2;
-        Standard_Real fLengthU = 0.0, fLengthV = 0.0;
-        for (int i = 1; i <= pointsPerEdge; i++) {
-            double u1 = static_cast<double>(i - 1) / static_cast<double>(pointsPerEdge);
-            double s1 = (1.0 - u1) * uFirst + u1 * uLast;
-            p1 = surface.Value(s1, vMid);
+        auto sampleFaceRange = [&](size_t begin, size_t end) {
+            for (size_t fi = begin; fi < end; ++fi) {
+                const TopoDS_Face& face = allFaces[fi];
+                BRepAdaptor_Surface surface(face);
+                Handle(Geom_Surface) aSurf = BRep_Tool::Surface(face);
+                BRepClass_FaceClassifier classifier;
 
-            double u2 = static_cast<double>(i) / static_cast<double>(pointsPerEdge);
-            double s2 = (1.0 - u2) * uFirst + u2 * uLast;
-            p2 = surface.Value(s2, vMid);
+                Standard_Real uFirst = surface.FirstUParameter();
+                Standard_Real uLast = surface.LastUParameter();
+                Standard_Real uMid = (uFirst + uLast) / 2;
+                Standard_Real vFirst = surface.FirstVParameter();
+                Standard_Real vLast = surface.LastVParameter();
+                Standard_Real vMid = (vFirst + vLast) / 2;
 
-            fLengthU += p1.Distance(p2);
-        }
+                gp_Pnt p1, p2;
+                Standard_Real fLengthU = 0.0, fLengthV = 0.0;
+                for (int i = 1; i <= minPointsPerEdge; i++) {
+                    double u1 = static_cast<double>(i - 1) / static_cast<double>(minPointsPerEdge);
+                    double s1 = (1.0 - u1) * uFirst + u1 * uLast;
+                    p1 = surface.Value(s1, vMid);
+                    double u2 = static_cast<double>(i) / static_cast<double>(minPointsPerEdge);
+                    double s2 = (1.0 - u2) * uFirst + u2 * uLast;
+                    p2 = surface.Value(s2, vMid);
+                    fLengthU += p1.Distance(p2);
+                }
+                for (int i = 1; i <= minPointsPerEdge; i++) {
+                    double v1 = static_cast<double>(i - 1) / static_cast<double>(minPointsPerEdge);
+                    double t1 = (1.0 - v1) * vFirst + v1 * vLast;
+                    p1 = surface.Value(uMid, t1);
+                    double v2 = static_cast<double>(i) / static_cast<double>(minPointsPerEdge);
+                    double t2 = (1.0 - v2) * vFirst + v2 * vLast;
+                    p2 = surface.Value(uMid, t2);
+                    fLengthV += p1.Distance(p2);
+                }
 
-        for (int i = 1; i <= pointsPerEdge; i++) {
-            double v1 = static_cast<double>(i - 1) / static_cast<double>(pointsPerEdge);
-            double t1 = (1.0 - v1) * vFirst + v1 * vLast;
-            p1 = surface.Value(uMid, t1);
+                int uPointsPerEdge = std::max(static_cast<int>(fLengthU / lateralDistance), 1);
+                int vPointsPerEdge = std::max(static_cast<int>(fLengthV / lateralDistance), 1);
 
-            double v2 = static_cast<double>(i) / static_cast<double>(pointsPerEdge);
-            double t2 = (1.0 - v2) * vFirst + v2 * vLast;
-            p2 = surface.Value(uMid, t2);
-
-            fLengthV += p1.Distance(p2);
-        }
-
-        int uPointsPerEdge = static_cast<int>(fLengthU / lateralDistance);
-        int vPointsPerEdge = static_cast<int>(fLengthV / lateralDistance);
-        uPointsPerEdge = std::max(uPointsPerEdge, 1);
-        vPointsPerEdge = std::max(vPointsPerEdge, 1);
-
-        for (int i = 0; i <= uPointsPerEdge; i++) {
-            double u = static_cast<double>(i) / static_cast<double>(uPointsPerEdge);
-            double s = (1.0 - u) * uFirst + u * uLast;
-
-            for (int j = 0; j <= vPointsPerEdge; j++) {
-                double v = static_cast<double>(j) / static_cast<double>(vPointsPerEdge);
-                double t = (1.0 - v) * vFirst + v * vLast;
-
-                gp_Pnt2d p2d(s, t);
-                classifier.Perform(face, p2d, 1.0e-4);
-                if (classifier.State() == TopAbs_IN || classifier.State() == TopAbs_ON) {
-                    gp_Pnt p = surface.Value(s, t);
-                    Points.push_back(Base::convertTo<Base::Vector3d>(p));
-                    gp_Dir normal;
-                    if (GeomLib::NormEstim(aSurf, p2d, Precision::Confusion(), normal) <= 1) {
-                        if (face.Orientation() == TopAbs_REVERSED) {
-                            normal.Reverse();
+                auto& result = faceResults[fi];
+                for (int i = 0; i <= uPointsPerEdge; i++) {
+                    double u = static_cast<double>(i) / static_cast<double>(uPointsPerEdge);
+                    double s = (1.0 - u) * uFirst + u * uLast;
+                    for (int j = 0; j <= vPointsPerEdge; j++) {
+                        double v = static_cast<double>(j) / static_cast<double>(vPointsPerEdge);
+                        double t = (1.0 - v) * vFirst + v * vLast;
+                        gp_Pnt2d p2d(s, t);
+                        classifier.Perform(face, p2d, 1.0e-4);
+                        if (classifier.State() == TopAbs_IN || classifier.State() == TopAbs_ON) {
+                            gp_Pnt p = surface.Value(s, t);
+                            result.pts.push_back(Base::convertTo<Base::Vector3d>(p));
+                            gp_Dir normal;
+                            if (GeomLib::NormEstim(aSurf, p2d, Precision::Confusion(), normal) <= 1) {
+                                if (face.Orientation() == TopAbs_REVERSED) {
+                                    normal.Reverse();
+                                }
+                                result.norms.push_back(Base::convertTo<Base::Vector3d>(normal));
+                            }
+                            else {
+                                result.norms.emplace_back(0, 0, 0);
+                            }
                         }
-                        Normals.push_back(Base::convertTo<Base::Vector3d>(normal));
-                    }
-                    else {
-                        Normals.emplace_back(0, 0, 0);
                     }
                 }
             }
+        };
+
+        unsigned int nThreads = std::min(
+            static_cast<unsigned int>(std::thread::hardware_concurrency()),
+            static_cast<unsigned int>(allFaces.size()));
+        if (nThreads == 0) nThreads = 1;
+
+        if (nThreads <= 1 || allFaces.size() <= 1) {
+            sampleFaceRange(0, allFaces.size());
+        }
+        else {
+            std::vector<std::thread> threads;
+            threads.reserve(nThreads);
+            size_t chunkSize = (allFaces.size() + nThreads - 1) / nThreads;
+            for (unsigned int t = 0; t < nThreads; ++t) {
+                size_t beg = t * chunkSize;
+                size_t en = std::min(beg + chunkSize, allFaces.size());
+                if (beg >= en) break;
+                threads.emplace_back(sampleFaceRange, beg, en);
+            }
+            for (auto& th : threads) {
+                th.join();
+            }
+        }
+
+        // Merge per-face results into output vectors
+        for (auto& fr : faceResults) {
+            Points.insert(Points.end(), fr.pts.begin(), fr.pts.end());
+            Normals.insert(Normals.end(), fr.norms.begin(), fr.norms.end());
         }
     }
-
-    // if no faces are found then the normals can be cleared
-    if (!hasFaces) {
+    else {
+        // if no faces are found then the normals can be cleared
         Normals.clear();
     }
 }

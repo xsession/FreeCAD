@@ -51,6 +51,10 @@
 #include <chrono>
 #include <vector>
 #include <cmath>
+#include <thread>
+#include <future>
+#include <algorithm>
+#include <mutex>
 
 #include <BRep_Builder.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -261,14 +265,11 @@ private:
                     }
                 }
 
-                // Build a compound of all imported shapes and tessellate once.
-                // BRepMesh with InParallel=true handles internal parallelism
-                // safely across all CPU cores (OCCT uses OSD_Parallel internally).
-                // This avoids data races from threading on shared BRep topology.
-                BRep_Builder builder;
-                TopoDS_Compound compound;
-                builder.MakeCompound(compound);
-                int shapeCount = 0;
+                // Collect all imported shapes for parallel tessellation.
+                // OCCT's InParallel relies on TBB which may not be linked,
+                // so we use explicit std::thread workers for reliable parallelism.
+                std::vector<TopoDS_Shape> shapes;
+                shapes.reserve(newObjs.size());
 
                 for (auto* obj : newObjs) {
                     auto* partFeature = dynamic_cast<Part::Feature*>(obj);
@@ -279,11 +280,10 @@ private:
                     if (shape.IsNull()) {
                         continue;
                     }
-                    builder.Add(compound, shape);
-                    shapeCount++;
+                    shapes.push_back(shape);
                 }
 
-                if (shapeCount > 0) {
+                if (!shapes.empty()) {
                     ParameterGrp::handle hPart = App::GetApplication().GetParameterGroupByPath(
                         "User parameter:BaseApp/Preferences/Mod/Part"
                     );
@@ -294,6 +294,13 @@ private:
                     double maxScale = hPart->GetFloat("AdaptiveDeviationMaxScale", 10.0);
 
                     // Count total faces for adaptive deviation
+                    BRep_Builder builder;
+                    TopoDS_Compound compound;
+                    builder.MakeCompound(compound);
+                    for (auto& s : shapes) {
+                        builder.Add(compound, s);
+                    }
+
                     double dev = deviation;
                     if (useAdaptive && faceThreshold > 0) {
                         TopTools_IndexedMapOfShape faceMap;
@@ -318,24 +325,58 @@ private:
                     }
                     Standard_Real angRads = angularDeflection * M_PI / 180.0;
 
+                    // Parallel tessellation using thread workers.
+                    // Each shape is independent — BRepMesh operates on disjoint
+                    // topology so concurrent tessellation is safe.
+                    unsigned int nThreads = std::thread::hardware_concurrency();
+                    if (nThreads == 0) {
+                        nThreads = 4;
+                    }
+                    nThreads = std::min(nThreads, static_cast<unsigned int>(shapes.size()));
+
                     Base::Console().Message(
-                        "Import: Batch tessellating %d shapes (InParallel=true)...\n",
-                        shapeCount);
+                        "Import: Parallel tessellating %zu shapes across %u threads...\n",
+                        shapes.size(), nThreads);
                     auto tStart = std::chrono::steady_clock::now();
 
-                    IMeshTools_Parameters meshParams;
-                    meshParams.Deflection = deflection;
-                    meshParams.Relative = Standard_False;
-                    meshParams.Angle = angRads;
-                    meshParams.InParallel = Standard_True;  // OCCT parallel across all cores
-                    meshParams.AllowQualityDecrease = Standard_True;
-                    BRepMesh_IncrementalMesh(compound, meshParams);
+                    // Worker function: tessellate a range of shapes
+                    auto tessellateRange = [&](size_t begin, size_t end) {
+                        for (size_t idx = begin; idx < end; ++idx) {
+                            IMeshTools_Parameters meshParams;
+                            meshParams.Deflection = deflection;
+                            meshParams.Relative = Standard_False;
+                            meshParams.Angle = angRads;
+                            meshParams.InParallel = Standard_False;
+                            meshParams.AllowQualityDecrease = Standard_True;
+                            BRepMesh_IncrementalMesh(shapes[idx], meshParams);
+                        }
+                    };
+
+                    if (nThreads <= 1 || shapes.size() <= 1) {
+                        // Single-threaded fallback
+                        tessellateRange(0, shapes.size());
+                    }
+                    else {
+                        // Distribute shapes across threads
+                        std::vector<std::thread> threads;
+                        threads.reserve(nThreads);
+                        size_t chunkSize = (shapes.size() + nThreads - 1) / nThreads;
+                        for (unsigned int t = 0; t < nThreads; ++t) {
+                            size_t begin = t * chunkSize;
+                            size_t end = std::min(begin + chunkSize, shapes.size());
+                            if (begin >= end) break;
+                            threads.emplace_back(tessellateRange, begin, end);
+                        }
+                        for (auto& th : threads) {
+                            th.join();
+                        }
+                    }
 
                     auto tEnd = std::chrono::steady_clock::now();
                     double elapsed = std::chrono::duration<double>(tEnd - tStart).count();
                     Base::Console().Message(
-                        "Import: Batch tessellation complete: %.2fs for %d shapes\n",
-                        elapsed, shapeCount);
+                        "Import: Parallel tessellation complete: %.2fs for %zu shapes (%u threads)\n",
+                        elapsed, shapes.size(), nThreads);
                 }
             }
 

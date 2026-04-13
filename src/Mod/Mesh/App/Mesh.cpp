@@ -24,6 +24,7 @@
 
 #include <algorithm>
 #include <sstream>
+#include <thread>
 
 
 #include <Base/Builder3D.h>
@@ -1139,11 +1140,38 @@ void MeshObject::crossSections(
     kernel.Transform(this->_Mtrx);
 
     MeshCore::MeshFacetGrid grid(kernel);
-    MeshCore::MeshAlgorithm algo(kernel);
-    for (const auto& plane : planes) {
-        MeshObject::TPolylines polylines;
-        algo.CutWithPlane(plane.first, plane.second, grid, polylines, fMinEps, bConnectPolygons);
-        sections.push_back(polylines);
+    sections.resize(planes.size());
+
+    // Each plane cut is independent — parallelize across planes
+    auto cutRange = [&](size_t begin, size_t end) {
+        MeshCore::MeshAlgorithm algo(kernel);
+        for (size_t i = begin; i < end; ++i) {
+            algo.CutWithPlane(planes[i].first, planes[i].second, grid,
+                              sections[i], fMinEps, bConnectPolygons);
+        }
+    };
+
+    unsigned int nThreads = std::min(
+        static_cast<unsigned int>(std::thread::hardware_concurrency()),
+        static_cast<unsigned int>(planes.size()));
+    if (nThreads == 0) nThreads = 1;
+
+    if (nThreads <= 1 || planes.size() <= 1) {
+        cutRange(0, planes.size());
+    }
+    else {
+        std::vector<std::thread> threads;
+        threads.reserve(nThreads);
+        size_t chunkSize = (planes.size() + nThreads - 1) / nThreads;
+        for (unsigned int t = 0; t < nThreads; ++t) {
+            size_t beg = t * chunkSize;
+            size_t en = std::min(beg + chunkSize, planes.size());
+            if (beg >= en) break;
+            threads.emplace_back(cutRange, beg, en);
+        }
+        for (auto& th : threads) {
+            th.join();
+        }
     }
 }
 

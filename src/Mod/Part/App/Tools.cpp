@@ -23,6 +23,8 @@
  ***************************************************************************/
 
 #include <cassert>
+#include <thread>
+#include <algorithm>
 #include <BRep_Tool.hxx>
 #include <BRepAdaptor_Curve.hxx>
 #include <BRepAdaptor_Surface.hxx>
@@ -457,26 +459,51 @@ void Part::Tools::getPointNormals(
         return;
     }
 
-    // normalize all vertex normals
-    for (std::size_t i = 0; i < points.size(); i++) {
-        try {
-            GeomAPI_ProjectPointOnSurf ProPntSrf(points[i], hSurface);
-            Standard_Real u, v;
-            ProPntSrf.Parameters(1, u, v);
+    // Parallelize per-point surface projection and normal computation.
+    // Each point's projection is independent and CPU-intensive.
+    auto processRange = [&](size_t begin, size_t end) {
+        for (size_t i = begin; i < end; i++) {
+            try {
+                GeomAPI_ProjectPointOnSurf ProPntSrf(points[i], hSurface);
+                Standard_Real u, v;
+                ProPntSrf.Parameters(1, u, v);
 
-            GeomLProp_SLProps propOfFace(hSurface, u, v, 2, gp::Resolution());
+                GeomLProp_SLProps propOfFace(hSurface, u, v, 2, gp::Resolution());
 
-            gp_Dir normal = propOfFace.Normal();
-            gp_Vec temp = normal;
-            if (temp * vertexnormals[i] < 0.0) {
-                temp = -temp;
+                gp_Dir normal = propOfFace.Normal();
+                gp_Vec temp = normal;
+                if (temp * vertexnormals[i] < 0.0) {
+                    temp = -temp;
+                }
+                vertexnormals[i] = temp;
             }
-            vertexnormals[i] = temp;
+            catch (...) {
+            }
+            vertexnormals[i].Normalize();
         }
-        catch (...) {
-        }
+    };
 
-        vertexnormals[i].Normalize();
+    unsigned int nThreads = std::min(
+        static_cast<unsigned int>(std::thread::hardware_concurrency()),
+        static_cast<unsigned int>(points.size()));
+    if (nThreads == 0) nThreads = 1;
+
+    if (nThreads <= 1 || points.size() <= 64) {
+        processRange(0, points.size());
+    }
+    else {
+        std::vector<std::thread> threads;
+        threads.reserve(nThreads);
+        size_t chunkSize = (points.size() + nThreads - 1) / nThreads;
+        for (unsigned int t = 0; t < nThreads; ++t) {
+            size_t begin = t * chunkSize;
+            size_t end = std::min(begin + chunkSize, points.size());
+            if (begin >= end) break;
+            threads.emplace_back(processRange, begin, end);
+        }
+        for (auto& th : threads) {
+            th.join();
+        }
     }
 }
 
