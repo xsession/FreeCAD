@@ -89,3 +89,18 @@ void ProgramInformation::getDpiInformation(std::stringstream& str)
         << QApplication::primaryScreen()->physicalDotsPerInch() << "/"
         << QApplication::primaryScreen()->devicePixelRatio() << "\n";
 }
+
+void ProgramInformation::getGpuInformation(std::stringstream& str)
+{
+    const auto& cfg = App::Application::Config();
+
+    auto getVal = [&](const char* key) -> std::string {
+        auto it = cfg.find(key);
+        return (it != cfg.end()) ? it->second : "unknown";
+    };
+
+    str << "GPU: " << getVal("GpuRenderer")
+        << " (" << getVal("GpuVendor") << ")\n";
+    str << "GPU Type: " << getVal("GpuType") << "\n";
+    str << "OpenGL: " << getVal("GpuOpenGLVersion") << "\n";
+}

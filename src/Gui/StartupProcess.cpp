@@ -386,7 +386,67 @@ void StartupPostProcess::checkOpenGL()
         }
 #endif
         const char* glVersion = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+        const char* glRenderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+        const char* glVendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
         Base::Console().log("OpenGL version is: %d.%d (%s)\n", major, minor, glVersion);
+        Base::Console().log("GPU: %s (%s)\n",
+            glRenderer ? glRenderer : "unknown",
+            glVendor ? glVendor : "unknown");
+
+        // Store GPU info in application config for use by About dialog and diagnostics
+        App::Application::Config()["GpuRenderer"] = glRenderer ? glRenderer : "unknown";
+        App::Application::Config()["GpuVendor"] = glVendor ? glVendor : "unknown";
+        App::Application::Config()["GpuOpenGLVersion"] = glVersion ? glVersion : "unknown";
+
+        // Check GPU preference setting and inform user
+        ParameterGrp::handle hOpenGL = App::GetApplication().GetParameterGroupByPath(
+            "User parameter:BaseApp/Preferences/OpenGL"
+        );
+        int gpuPref = hOpenGL->GetInt("GpuPreference", 0);  // 0=Dedicated, 1=Integrated
+        std::string rendererStr = glRenderer ? glRenderer : "";
+        std::string vendorStr = glVendor ? glVendor : "";
+
+        // Detect GPU type from vendor/renderer strings
+        bool isIntegrated = false;
+        if (vendorStr.find("Intel") != std::string::npos
+            || rendererStr.find("Intel") != std::string::npos
+            || rendererStr.find("UHD") != std::string::npos
+            || rendererStr.find("Iris") != std::string::npos) {
+            isIntegrated = true;
+        }
+
+        bool isDedicated = false;
+        if (vendorStr.find("NVIDIA") != std::string::npos
+            || vendorStr.find("ATI") != std::string::npos
+            || vendorStr.find("AMD") != std::string::npos
+            || rendererStr.find("GeForce") != std::string::npos
+            || rendererStr.find("Quadro") != std::string::npos
+            || rendererStr.find("RTX") != std::string::npos
+            || rendererStr.find("Radeon") != std::string::npos) {
+            isDedicated = true;
+        }
+
+        if (isDedicated) {
+            App::Application::Config()["GpuType"] = "Dedicated";
+            Base::Console().log("GPU type: Dedicated (high-performance)\n");
+        }
+        else if (isIntegrated) {
+            App::Application::Config()["GpuType"] = "Integrated";
+            Base::Console().log("GPU type: Integrated (power-saving)\n");
+        }
+        else {
+            App::Application::Config()["GpuType"] = "Unknown";
+            Base::Console().log("GPU type: Unknown\n");
+        }
+
+        if (gpuPref == 1 && isDedicated) {
+            Base::Console().warning(
+                "GPU preference is set to 'Integrated' but a dedicated GPU is active.\n"
+                "On Windows, go to Settings > System > Display > Graphics to assign "
+                "FreeCAD to the integrated GPU. The application exports request a "
+                "dedicated GPU by default for best performance.\n"
+            );
+        }
     }
 }
 

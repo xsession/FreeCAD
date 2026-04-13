@@ -483,6 +483,7 @@ void AboutDialog::copyToClipboard()
     const auto& config = App::Application::Config();
     std::stringstream str;
     App::ProgramInformation::getVerboseCommonInfo(str, config);
+    Gui::ProgramInformation::getGpuInformation(str);
     Gui::ProgramInformation::getStyleInformation(str);
     Gui::ProgramInformation::getNavigationStyleInformation(str);
     Gui::ProgramInformation::getDpiInformation(str);

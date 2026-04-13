@@ -35,6 +35,7 @@ public:
     static void getStyleInformation(std::stringstream& str);
     static void getNavigationStyleInformation(std::stringstream& str);
     static void getDpiInformation(std::stringstream& str);
+    static void getGpuInformation(std::stringstream& str);
 };
 
 }  // namespace Gui

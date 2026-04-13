@@ -29,6 +29,17 @@
 # include <dbghelp.h>
 #endif
 
+// Request dedicated GPU on systems with switchable graphics (laptops).
+// NVIDIA Optimus: setting NvOptimusEnablement to 1 selects the discrete GPU.
+// AMD PowerXpress: setting AmdPowerXpressRequestHighPerformance to 1 does the same.
+// These must be exported C symbols from the main executable to be detected by drivers.
+#if defined(_WIN32) || defined(_WIN64)
+extern "C" {
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+    __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+}
+#endif
+
 #if HAVE_CONFIG_H
 # include <config.h>
 #endif  // HAVE_CONFIG_H

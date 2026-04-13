@@ -323,6 +323,43 @@ report this setting as enabled when seeking support.</string>
        </widget>
       </item>
       <item>
+       <layout class="QHBoxLayout" name="gpuPreferenceLayout">
+        <item>
+         <widget class="QLabel" name="gpuPreferenceLabel">
+          <property name="text">
+           <string>GPU preference</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="Gui::PrefComboBox" name="comboBox_gpuPreference">
+          <property name="toolTip">
+           <string>Select which GPU to prefer for rendering.
+Dedicated GPU (default) requests the discrete/high-performance GPU on laptops with switchable graphics (NVIDIA Optimus / AMD PowerXpress).
+Integrated GPU may save battery on laptops.
+Changing this option requires a restart of the application.</string>
+          </property>
+          <item>
+           <property name="text">
+            <string>Dedicated GPU (High Performance)</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Integrated GPU (Power Saving)</string>
+           </property>
+          </item>
+          <property name="prefEntry" stdset="0">
+           <cstring>GpuPreference</cstring>
+          </property>
+          <property name="prefPath" stdset="0">
+           <cstring>OpenGL</cstring>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
        <layout class="QGridLayout" name="gridLayout">
         <item row="0" column="0">
          <widget class="QLabel" name="renderCacheLabel">
