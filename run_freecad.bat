@@ -1,7 +1,7 @@
 @echo off
 REM SPDX-License-Identifier: LGPL-2.1-or-later
 REM
-REM FreeCAD Launcher — sets all required environment variables and starts FreeCAD.
+REM FreeCAD Launcher ? sets all required environment variables and starts FreeCAD.
 REM
 REM Usage:
 REM   run_freecad.bat              Launch FreeCAD GUI
@@ -48,7 +48,7 @@ echo [LAUNCHER] Pixi env: !PIXI_ENV!
 REM ---- PATH: build output + pixi libraries + pixi base ----
 set "PATH=!BUILD_BIN!;!BUILD_LIB!;!PIXI_ENV!\Library\bin;!PIXI_ENV!\Library\lib;!PIXI_ENV!;!PIXI_ENV!\Scripts;!PIXI_ENV!\bin;%PATH%"
 
-REM ---- Qt 6 plugin path (required — FreeCAD won't start without this) ----
+REM ---- Qt 6 plugin path (required ? FreeCAD won't start without this) ----
 set "QT_PLUGIN_PATH=!PIXI_ENV!\Library\lib\qt6\plugins"
 if not exist "!QT_PLUGIN_PATH!\platforms" (
     echo [ERROR] Qt platform plugins not found at: !QT_PLUGIN_PATH!
@@ -59,7 +59,7 @@ REM ---- Python (embedded in pixi env) ----
 set "PYTHONHOME=!PIXI_ENV!"
 set "PYTHONPATH=!BUILD_LIB!;!BUILD_MOD!;%SCRIPT_DIR%src\Mod;%SCRIPT_DIR%src\Ext"
 
-REM ---- PROJ (geospatial coordinate transforms — used by some workbenches) ----
+REM ---- PROJ (geospatial coordinate transforms ? used by some workbenches) ----
 if exist "!PIXI_ENV!\Library\share\proj" (
     set "PROJ_DATA=!PIXI_ENV!\Library\share\proj"
 )
@@ -72,7 +72,7 @@ if exist "!PIXI_ENV!\Library\ssl\certs" (
     if not defined SSL_CERT_DIR set "SSL_CERT_DIR=!PIXI_ENV!\Library\ssl\certs"
 )
 
-REM ---- OpenCL ICD (GPU compute — used by some FEM solvers) ----
+REM ---- OpenCL ICD (GPU compute ? used by some FEM solvers) ----
 if exist "!PIXI_ENV!\Library\etc\OpenCL\vendors" (
     REM Let the pixi OpenCL helper populate this if needed
     set "OCL_ICD_FILENAMES="
@@ -114,11 +114,11 @@ if !FC_EXIT! neq 0 (
     echo.
     echo [LAUNCHER] FreeCAD exited with code !FC_EXIT!
     if !FC_EXIT! equ -1073741515 (
-        echo [LAUNCHER] This is STATUS_DLL_NOT_FOUND — a required DLL is missing from PATH.
+        echo [LAUNCHER] This is STATUS_DLL_NOT_FOUND ? a required DLL is missing from PATH.
         echo            Try running: where /R "!BUILD_BIN!" *.dll
     )
     if !FC_EXIT! equ -1073741701 (
-        echo [LAUNCHER] This is STATUS_DLL_INIT_FAILED — a DLL failed to initialize.
+        echo [LAUNCHER] This is STATUS_DLL_INIT_FAILED ? a DLL failed to initialize.
         echo            Check that all pixi dependencies are installed: pixi install
     )
 )
