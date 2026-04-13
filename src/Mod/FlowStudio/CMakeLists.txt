@@ -129,6 +129,54 @@ SET(FlowStudioTests_SRCS
     flow_studio/tests/test_registry_detailed.py
 )
 
+SET(FlowStudioIcons_SRCS
+    Resources/icons/FlowStudioAnalysis.svg
+    Resources/icons/FlowStudioBoundaryLayer.svg
+    Resources/icons/FlowStudioConvection.svg
+    Resources/icons/FlowStudioCurrentDensity.svg
+    Resources/icons/FlowStudioDielectricMaterial.svg
+    Resources/icons/FlowStudioElectricPotential.svg
+    Resources/icons/FlowStudioElectromagnetic.svg
+    Resources/icons/FlowStudioElectromagneticPhysics.svg
+    Resources/icons/FlowStudioElectrostatic.svg
+    Resources/icons/FlowStudioElectrostaticPhysics.svg
+    Resources/icons/FlowStudioEMMaterial.svg
+    Resources/icons/FlowStudioFixedDisplacement.svg
+    Resources/icons/FlowStudioForce.svg
+    Resources/icons/FlowStudioGeneric.svg
+    Resources/icons/FlowStudioHeatFlux.svg
+    Resources/icons/FlowStudioInitial.svg
+    Resources/icons/FlowStudioInlet.svg
+    Resources/icons/FlowStudioMagneticPotential.svg
+    Resources/icons/FlowStudioMaterial.svg
+    Resources/icons/FlowStudioMesh.svg
+    Resources/icons/FlowStudioMeshRegion.svg
+    Resources/icons/FlowStudioOpen.svg
+    Resources/icons/FlowStudioOutlet.svg
+    Resources/icons/FlowStudioPhysics.svg
+    Resources/icons/FlowStudioPost.svg
+    Resources/icons/FlowStudioPostContour.svg
+    Resources/icons/FlowStudioPostForce.svg
+    Resources/icons/FlowStudioPostProbe.svg
+    Resources/icons/FlowStudioPostStreamlines.svg
+    Resources/icons/FlowStudioPressureLoad.svg
+    Resources/icons/FlowStudioRadiation.svg
+    Resources/icons/FlowStudioRunSolver.svg
+    Resources/icons/FlowStudioSolidMaterial.svg
+    Resources/icons/FlowStudioSolver.svg
+    Resources/icons/FlowStudioSolverSettings.svg
+    Resources/icons/FlowStudioStructural.svg
+    Resources/icons/FlowStudioStructuralPhysics.svg
+    Resources/icons/FlowStudioSurfaceCharge.svg
+    Resources/icons/FlowStudioSymmetry.svg
+    Resources/icons/FlowStudioTemperature.svg
+    Resources/icons/FlowStudioThermal.svg
+    Resources/icons/FlowStudioThermalMaterial.svg
+    Resources/icons/FlowStudioThermalPhysics.svg
+    Resources/icons/FlowStudioWall.svg
+    Resources/icons/FlowStudioWorkbench.svg
+)
+
 SET(all_files
     ${FlowStudioBase_SRCS}
     ${FlowStudioPackage_SRCS}
@@ -139,6 +187,7 @@ SET(all_files
     ${FlowStudioUtils_SRCS}
     ${FlowStudioViewproviders_SRCS}
     ${FlowStudioTests_SRCS}
+    ${FlowStudioIcons_SRCS}
 )
 
 ADD_CUSTOM_TARGET(FlowStudio ALL
@@ -156,7 +205,4 @@ INSTALL(FILES ${FlowStudioTaskpanels_SRCS} DESTINATION Mod/FlowStudio/flow_studi
 INSTALL(FILES ${FlowStudioUtils_SRCS} DESTINATION Mod/FlowStudio/flow_studio/utils)
 INSTALL(FILES ${FlowStudioViewproviders_SRCS} DESTINATION Mod/FlowStudio/flow_studio/viewproviders)
 INSTALL(FILES ${FlowStudioTests_SRCS} DESTINATION Mod/FlowStudio/flow_studio/tests)
-
-# Icons
-FILE(GLOB FlowStudioIcons_SRCS CONFIGURE_DEPENDS "Resources/icons/*.svg")
 INSTALL(FILES ${FlowStudioIcons_SRCS} DESTINATION Mod/FlowStudio/Resources/icons)
