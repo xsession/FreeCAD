@@ -26,6 +26,10 @@ if(BUILD_FEM)
     add_subdirectory(Fem)
 endif(BUILD_FEM)
 
+if(BUILD_FLOW_STUDIO)
+    add_subdirectory(FlowStudio)
+endif(BUILD_FLOW_STUDIO)
+
 if(BUILD_HELP)
   add_subdirectory(Help)
 endif(BUILD_HELP)

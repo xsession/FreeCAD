@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="sym" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#7E57C2"/>
+      <stop offset="100%" stop-color="#4527A0"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#sym)"/>
+  <!-- Symmetry line (center vertical dashed) -->
+  <line x1="32" y1="10" x2="32" y2="54" stroke="#fff" stroke-width="2.5" stroke-dasharray="4,3"/>
+  <!-- Left half geometry -->
+  <path d="M14 20 L28 16 L28 48 L14 44 Z" fill="#B39DDB" opacity="0.7"/>
+  <!-- Right half mirrored (ghosted) -->
+  <path d="M50 20 L36 16 L36 48 L50 44 Z" fill="#D1C4E9" opacity="0.35" stroke="#EDE7F6" stroke-width="0.5" stroke-dasharray="2,2"/>
+  <!-- Mirror symbol arrows -->
+  <line x1="22" y1="32" x2="26" y2="32" stroke="#fff" stroke-width="1.5"/>
+  <polygon points="25,30 28,32 25,34" fill="#fff"/>
+  <line x1="42" y1="32" x2="38" y2="32" stroke="#EDE7F6" stroke-width="1.5" opacity="0.5"/>
+  <polygon points="39,30 36,32 39,34" fill="#EDE7F6" opacity="0.5"/>
+</svg>

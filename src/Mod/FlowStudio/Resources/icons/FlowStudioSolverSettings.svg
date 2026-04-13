@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ss" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF8A65"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#ss)"/>
+  <!-- Gear / settings -->
+  <path d="M32 14 l3 2 5-1 2 4-3 4 1 4 4 2-1 5-4 1-3 3-4-1-2 4-4-2-4-1-2-4 3-4-1-4-4-2 1-5 4-1 3-3Z" fill="#FBE9E7" stroke="#FFCCBC" stroke-width="1"/>
+  <circle cx="32" cy="30" r="6" fill="url(#ss)"/>
+  <!-- Sliders below gear -->
+  <rect x="14" y="48" width="16" height="3" rx="1.5" fill="#FFCCBC" opacity="0.7"/>
+  <circle cx="24" cy="49.5" r="3" fill="#fff"/>
+  <rect x="34" y="48" width="16" height="3" rx="1.5" fill="#FFCCBC" opacity="0.7"/>
+  <circle cx="40" cy="49.5" r="3" fill="#fff"/>
+</svg>

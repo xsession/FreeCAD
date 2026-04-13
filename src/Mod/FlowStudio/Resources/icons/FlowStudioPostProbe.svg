@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="prb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#546E7A"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#prb)"/>
+  <!-- Crosshair -->
+  <circle cx="28" cy="28" r="12" fill="none" stroke="#42A5F5" stroke-width="2"/>
+  <circle cx="28" cy="28" r="3" fill="#42A5F5"/>
+  <line x1="28" y1="12" x2="28" y2="20" stroke="#42A5F5" stroke-width="1.5"/>
+  <line x1="28" y1="36" x2="28" y2="44" stroke="#42A5F5" stroke-width="1.5"/>
+  <line x1="12" y1="28" x2="20" y2="28" stroke="#42A5F5" stroke-width="1.5"/>
+  <line x1="36" y1="28" x2="44" y2="28" stroke="#42A5F5" stroke-width="1.5"/>
+  <!-- Value readout box -->
+  <rect x="34" y="40" width="22" height="14" rx="3" fill="#37474F" stroke="#42A5F5" stroke-width="1"/>
+  <text x="45" y="50" font-family="Arial,sans-serif" font-weight="bold" font-size="8" fill="#42A5F5" text-anchor="middle">3.14</text>
+</svg>

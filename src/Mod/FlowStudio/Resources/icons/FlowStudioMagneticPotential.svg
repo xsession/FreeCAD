@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BA68C8"/>
+      <stop offset="100%" stop-color="#6A1B9A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#mp)"/>
+  <!-- Magnetic vector potential A -->
+  <text x="32" y="30" font-family="Arial,sans-serif" font-weight="bold" font-size="24" fill="#E1BEE7" text-anchor="middle">A</text>
+  <!-- Vector arrow accent -->
+  <line x1="22" y1="10" x2="42" y2="10" stroke="#E1BEE7" stroke-width="2"/>
+  <polygon points="40,7 44,10 40,13" fill="#E1BEE7"/>
+  <!-- Magnetic field loop -->
+  <ellipse cx="32" cy="44" rx="14" ry="6" fill="none" stroke="#CE93D8" stroke-width="2"/>
+  <polygon points="44,42 48,44 44,46" fill="#CE93D8"/>
+</svg>

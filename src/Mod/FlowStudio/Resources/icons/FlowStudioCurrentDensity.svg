@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="cd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BA68C8"/>
+      <stop offset="100%" stop-color="#6A1B9A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#cd)"/>
+  <!-- Wire cross-section with current -->
+  <circle cx="32" cy="28" r="12" fill="#4A148C" stroke="#CE93D8" stroke-width="2"/>
+  <!-- Current dot (out of screen) -->
+  <circle cx="32" cy="28" r="4" fill="#E1BEE7"/>
+  <circle cx="32" cy="28" r="1.5" fill="#6A1B9A"/>
+  <!-- J label -->
+  <text x="32" y="54" font-family="Arial,sans-serif" font-weight="bold" font-size="16" fill="#E1BEE7" text-anchor="middle">J</text>
+  <!-- Current direction arrows (circular B field) -->
+  <path d="M18 20 A16,16 0 0,0 18 36" fill="none" stroke="#CE93D8" stroke-width="1.5" stroke-dasharray="3,2"/>
+  <path d="M46 20 A16,16 0 0,1 46 36" fill="none" stroke="#CE93D8" stroke-width="1.5" stroke-dasharray="3,2"/>
+</svg>

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="wl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#90A4AE"/>
+      <stop offset="100%" stop-color="#455A64"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#wl)"/>
+  <!-- Brick wall pattern -->
+  <rect x="10" y="12" width="20" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="34" y="12" width="20" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="16" y="22" width="20" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="40" y="22" width="14" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="10" y="22" width="4" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="10" y="32" width="20" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <rect x="34" y="32" width="20" height="8" rx="1" fill="#78909C" stroke="#B0BEC5" stroke-width="0.8"/>
+  <!-- No-slip symbol -->
+  <text x="32" y="54" font-family="Arial,sans-serif" font-weight="bold" font-size="9" fill="#ECEFF1" text-anchor="middle">NO-SLIP</text>
+</svg>

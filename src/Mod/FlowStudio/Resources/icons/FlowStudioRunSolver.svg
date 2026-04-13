@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="rs" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF8A65"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#rs)"/>
+  <!-- Play triangle -->
+  <polygon points="22,14 50,32 22,50" fill="#fff" opacity="0.95"/>
+  <!-- Progress bar -->
+  <rect x="12" y="52" width="40" height="4" rx="2" fill="#5D4037" opacity="0.5"/>
+  <rect x="12" y="52" width="24" height="4" rx="2" fill="#4CAF50"/>
+</svg>

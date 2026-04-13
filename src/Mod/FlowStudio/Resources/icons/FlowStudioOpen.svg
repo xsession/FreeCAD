@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ob" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#80DEEA"/>
+      <stop offset="100%" stop-color="#00838F"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#ob)"/>
+  <!-- Open boundary: dashed border with expanding arrows -->
+  <rect x="14" y="14" width="36" height="36" rx="4" fill="none" stroke="#E0F7FA" stroke-width="2" stroke-dasharray="4,3"/>
+  <!-- Outward arrows from center -->
+  <line x1="32" y1="32" x2="32" y2="16" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="29,18 32,12 35,18" fill="#fff"/>
+  <line x1="32" y1="32" x2="32" y2="48" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="29,46 32,52 35,46" fill="#fff"/>
+  <line x1="32" y1="32" x2="16" y2="32" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="18,29 12,32 18,35" fill="#fff"/>
+  <line x1="32" y1="32" x2="48" y2="32" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="46,29 52,32 46,35" fill="#fff"/>
+  <!-- Infinity / far-field hint -->
+  <text x="32" y="56" font-family="Arial,sans-serif" font-size="7" fill="#B2EBF2" text-anchor="middle">FAR-FIELD</text>
+</svg>

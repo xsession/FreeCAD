@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="pc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#546E7A"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#pc)"/>
+  <!-- Contour bands (topographic-like) -->
+  <ellipse cx="32" cy="32" rx="22" ry="16" fill="none" stroke="#1565C0" stroke-width="2"/>
+  <ellipse cx="32" cy="32" rx="17" ry="12" fill="none" stroke="#00BCD4" stroke-width="2"/>
+  <ellipse cx="32" cy="32" rx="12" ry="8" fill="none" stroke="#4CAF50" stroke-width="2"/>
+  <ellipse cx="32" cy="32" rx="7" ry="5" fill="none" stroke="#FFEB3B" stroke-width="2"/>
+  <ellipse cx="32" cy="32" rx="3" ry="2" fill="#F44336"/>
+  <!-- Label -->
+  <text x="32" y="56" font-family="Arial,sans-serif" font-size="7" fill="#B0BEC5" text-anchor="middle">CONTOUR</text>
+</svg>

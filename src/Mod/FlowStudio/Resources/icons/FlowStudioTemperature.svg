@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="tmp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#tmp)"/>
+  <!-- Thermometer -->
+  <circle cx="24" cy="42" r="7" fill="#FFCCBC"/>
+  <circle cx="24" cy="42" r="4.5" fill="#F44336"/>
+  <rect x="21" y="14" width="6" height="24" rx="3" fill="#FFCCBC"/>
+  <rect x="22.5" y="22" width="3" height="16" rx="1.5" fill="#F44336"/>
+  <!-- Temperature value -->
+  <text x="46" y="32" font-family="Arial,sans-serif" font-weight="bold" font-size="12" fill="#fff" text-anchor="middle">T</text>
+  <!-- Degree marks -->
+  <rect x="30" y="18" width="4" height="1.5" rx="0.5" fill="#FFCCBC" opacity="0.6"/>
+  <rect x="30" y="24" width="4" height="1.5" rx="0.5" fill="#FFCCBC" opacity="0.6"/>
+  <rect x="30" y="30" width="4" height="1.5" rx="0.5" fill="#FFCCBC" opacity="0.6"/>
+</svg>

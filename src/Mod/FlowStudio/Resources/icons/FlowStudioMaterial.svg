@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mt" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#66BB6A"/>
+      <stop offset="100%" stop-color="#1B5E20"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#mt)"/>
+  <!-- Flask / beaker -->
+  <path d="M24 12 L24 28 L16 48 Q14 52,20 52 L44 52 Q50 52,48 48 L40 28 L40 12 Z" fill="#C8E6C9" stroke="#fff" stroke-width="1.5"/>
+  <!-- Liquid level -->
+  <path d="M19 40 Q28 36,37 40 Q42 42,46 40 L48 48 Q50 52,44 52 L20 52 Q14 52,16 48 Z" fill="#2E7D32" opacity="0.6"/>
+  <!-- Cap -->
+  <rect x="22" y="10" width="20" height="4" rx="2" fill="#fff" opacity="0.8"/>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="emm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BA68C8"/>
+      <stop offset="100%" stop-color="#6A1B9A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#emm)"/>
+  <!-- Iron core (U shape) -->
+  <path d="M16 14 L16 40 Q16 48,24 48 L40 48 Q48 48,48 40 L48 14" fill="none" stroke="#E1BEE7" stroke-width="4" stroke-linecap="round"/>
+  <!-- Coil windings on left leg -->
+  <ellipse cx="16" cy="20" rx="6" ry="3" fill="none" stroke="#CE93D8" stroke-width="1.5"/>
+  <ellipse cx="16" cy="26" rx="6" ry="3" fill="none" stroke="#CE93D8" stroke-width="1.5"/>
+  <ellipse cx="16" cy="32" rx="6" ry="3" fill="none" stroke="#CE93D8" stroke-width="1.5"/>
+  <!-- Mu label -->
+  <text x="32" y="36" font-family="Arial,sans-serif" font-weight="bold" font-size="14" fill="#fff" text-anchor="middle">&#x03BC;r</text>
+</svg>

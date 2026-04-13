@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="rd" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#rd)"/>
+  <!-- Hot surface -->
+  <rect x="16" y="28" width="32" height="6" rx="2" fill="#F44336"/>
+  <!-- Radiation waves (concentric arcs emanating outward) -->
+  <path d="M18 26 C18 20,26 14,32 14" fill="none" stroke="#FFD54F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 26 C14 16,26 8,32 8" fill="none" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <path d="M46 26 C46 20,38 14,32 14" fill="none" stroke="#FFD54F" stroke-width="2" stroke-linecap="round"/>
+  <path d="M50 26 C50 16,38 8,32 8" fill="none" stroke="#FFC107" stroke-width="1.5" stroke-linecap="round" opacity="0.7"/>
+  <!-- Downward radiation -->
+  <path d="M18 36 C18 42,26 48,32 48" fill="none" stroke="#FFCC80" stroke-width="2" stroke-linecap="round"/>
+  <path d="M46 36 C46 42,38 48,32 48" fill="none" stroke="#FFCC80" stroke-width="2" stroke-linecap="round"/>
+  <!-- Epsilon label -->
+  <text x="32" y="56" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#FFCCBC" text-anchor="middle">&#x03B5;</text>
+</svg>

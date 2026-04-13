@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="tm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+    <linearGradient id="tbar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#42A5F5"/>
+      <stop offset="100%" stop-color="#EF5350"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#tm)"/>
+  <!-- Material block with thermal gradient -->
+  <rect x="14" y="16" width="36" height="24" rx="4" fill="url(#tbar)" opacity="0.6" stroke="#FFCCBC" stroke-width="1.5"/>
+  <!-- k (thermal conductivity) label -->
+  <text x="32" y="34" font-family="Arial,sans-serif" font-weight="bold" font-size="16" fill="#fff" text-anchor="middle">k</text>
+  <!-- Heat arrows -->
+  <line x1="20" y1="46" x2="44" y2="46" stroke="#FFCCBC" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="42,43 48,46 42,49" fill="#FFCCBC"/>
+  <text x="32" y="56" font-family="Arial,sans-serif" font-size="7" fill="#FFCCBC" text-anchor="middle">W/m&#xB7;K</text>
+</svg>

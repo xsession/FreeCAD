@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="fr" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#546E7A"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#fr)"/>
+  <!-- Aerofoil shape -->
+  <path d="M12 32 Q20 18,42 24 Q54 28,42 36 Q20 42,12 32Z" fill="#455A64" stroke="#B0BEC5" stroke-width="1.5"/>
+  <!-- Lift arrow (up) -->
+  <line x1="32" y1="24" x2="32" y2="10" stroke="#4CAF50" stroke-width="2.5" stroke-linecap="round"/>
+  <polygon points="29,13 32,7 35,13" fill="#4CAF50"/>
+  <text x="38" y="12" font-family="Arial,sans-serif" font-weight="bold" font-size="7" fill="#4CAF50">L</text>
+  <!-- Drag arrow (right) -->
+  <line x1="42" y1="32" x2="56" y2="32" stroke="#EF5350" stroke-width="2.5" stroke-linecap="round"/>
+  <polygon points="53,29 59,32 53,35" fill="#EF5350"/>
+  <text x="56" y="42" font-family="Arial,sans-serif" font-weight="bold" font-size="7" fill="#EF5350">D</text>
+  <!-- Moment arrow (curved) -->
+  <path d="M20 48 A8,8 0 0,1 36 48" fill="none" stroke="#FFC107" stroke-width="2" stroke-linecap="round"/>
+  <polygon points="34,46 38,50 34,52" fill="#FFC107"/>
+</svg>

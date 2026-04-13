@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="pl" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#78909C"/>
+      <stop offset="100%" stop-color="#37474F"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#pl)"/>
+  <!-- Surface/plate -->
+  <path d="M12 20 L52 20 L48 44 L16 44 Z" fill="#CFD8DC" opacity="0.6"/>
+  <!-- Pressure arrows (uniform, pointing down onto surface) -->
+  <line x1="20" y1="10" x2="20" y2="18" stroke="#42A5F5" stroke-width="2"/>
+  <polygon points="17,16 20,22 23,16" fill="#42A5F5"/>
+  <line x1="28" y1="10" x2="28" y2="18" stroke="#42A5F5" stroke-width="2"/>
+  <polygon points="25,16 28,22 31,16" fill="#42A5F5"/>
+  <line x1="36" y1="10" x2="36" y2="18" stroke="#42A5F5" stroke-width="2"/>
+  <polygon points="33,16 36,22 39,16" fill="#42A5F5"/>
+  <line x1="44" y1="10" x2="44" y2="18" stroke="#42A5F5" stroke-width="2"/>
+  <polygon points="41,16 44,22 47,16" fill="#42A5F5"/>
+  <!-- P label -->
+  <text x="32" y="54" font-family="Arial,sans-serif" font-weight="bold" font-size="12" fill="#90CAF9" text-anchor="middle">P</text>
+</svg>

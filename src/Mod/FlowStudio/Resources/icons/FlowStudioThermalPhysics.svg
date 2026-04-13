@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="thp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+    <linearGradient id="thbar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#1565C0"/>
+      <stop offset="50%" stop-color="#4CAF50"/>
+      <stop offset="100%" stop-color="#F44336"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#thp)"/>
+  <!-- Heat equation: nabla^2 T -->
+  <text x="32" y="24" font-family="Arial,sans-serif" font-weight="bold" font-size="12" fill="#FFCCBC" text-anchor="middle">&#x2207;&#xB2;T</text>
+  <!-- Temperature gradient bar -->
+  <rect x="12" y="30" width="40" height="8" rx="3" fill="url(#thbar)"/>
+  <!-- Scale labels -->
+  <text x="14" y="50" font-family="Arial,sans-serif" font-size="8" fill="#BBDEFB" text-anchor="start">cool</text>
+  <text x="50" y="50" font-family="Arial,sans-serif" font-size="8" fill="#FFCDD2" text-anchor="end">hot</text>
+</svg>

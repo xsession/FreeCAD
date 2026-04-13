@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="fc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#78909C"/>
+      <stop offset="100%" stop-color="#37474F"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#fc)"/>
+  <!-- Beam -->
+  <rect x="10" y="26" width="30" height="12" rx="2" fill="#CFD8DC"/>
+  <!-- Force arrow -->
+  <line x1="44" y1="32" x2="56" y2="32" stroke="#F44336" stroke-width="3" stroke-linecap="round"/>
+  <polygon points="42,26 42,38 34,32" fill="#F44336"/>
+  <!-- F label -->
+  <text x="52" y="24" font-family="Arial,sans-serif" font-weight="bold" font-size="14" fill="#EF9A9A">F</text>
+  <!-- Deformation hint (dashed) -->
+  <path d="M10 40 Q24 48,40 40" fill="none" stroke="#81D4FA" stroke-width="1.5" stroke-dasharray="3,2"/>
+</svg>

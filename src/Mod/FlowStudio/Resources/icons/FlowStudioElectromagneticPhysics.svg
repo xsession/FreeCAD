@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="emp" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#BA68C8"/>
+      <stop offset="100%" stop-color="#6A1B9A"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#emp)"/>
+  <!-- Maxwell's equations hint: curl symbol -->
+  <text x="32" y="26" font-family="Arial,sans-serif" font-weight="bold" font-size="16" fill="#E1BEE7" text-anchor="middle">&#x2207;&#xD7;B</text>
+  <!-- Magnetic dipole field lines -->
+  <path d="M20 36 C20 44,32 52,32 52 C32 52,44 44,44 36" fill="none" stroke="#CE93D8" stroke-width="2" stroke-linecap="round"/>
+  <path d="M24 36 C24 42,32 48,32 48 C32 48,40 42,40 36" fill="none" stroke="#E1BEE7" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- N S poles -->
+  <text x="20" y="38" font-family="Arial,sans-serif" font-weight="bold" font-size="7" fill="#fff" text-anchor="middle">N</text>
+  <text x="44" y="38" font-family="Arial,sans-serif" font-weight="bold" font-size="7" fill="#fff" text-anchor="middle">S</text>
+</svg>

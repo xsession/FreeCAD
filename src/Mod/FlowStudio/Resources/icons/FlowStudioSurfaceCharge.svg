@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="sc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFD54F"/>
+      <stop offset="100%" stop-color="#F9A825"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#sc)"/>
+  <!-- Surface -->
+  <path d="M10 32 L32 20 L54 32 L32 44 Z" fill="#F57F17" opacity="0.5"/>
+  <!-- Charge symbols scattered on surface -->
+  <text x="22" y="30" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#5D4037" text-anchor="middle">+</text>
+  <text x="32" y="35" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#5D4037" text-anchor="middle">+</text>
+  <text x="42" y="30" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#5D4037" text-anchor="middle">+</text>
+  <text x="27" y="38" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#5D4037" text-anchor="middle">+</text>
+  <text x="37" y="38" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#5D4037" text-anchor="middle">+</text>
+  <!-- Sigma label -->
+  <text x="32" y="56" font-family="Arial,sans-serif" font-weight="bold" font-size="13" fill="#5D4037" text-anchor="middle">&#x03C3;</text>
+</svg>

@@ -57,7 +57,7 @@ if not exist "%SCRIPT_DIR%tests\lib\googletest\CMakeLists.txt" (
 
 REM ---- Set up Visual Studio compiler environment if cl.exe not found ----
 :check_compiler
-REM Use delayed expansion for ProgramFiles(x86) � parens break normal expansion
+REM Use delayed expansion for ProgramFiles(x86) ? parens break normal expansion
 set "VSWHERE=!ProgramFiles(x86)!\Microsoft Visual Studio\Installer\vswhere.exe"
 where cl.exe >nul 2>&1
 if !errorlevel! equ 0 goto :compiler_ok

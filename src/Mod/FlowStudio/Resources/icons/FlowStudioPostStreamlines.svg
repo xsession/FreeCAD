@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ps" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#546E7A"/>
+      <stop offset="100%" stop-color="#263238"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#ps)"/>
+  <!-- Streamlines (flowing curves) -->
+  <path d="M8 16 C16 14,24 24,32 20 C40 16,48 26,56 22" stroke="#42A5F5" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <polygon points="54,20 58,22 54,24" fill="#42A5F5"/>
+  <path d="M8 28 C16 26,24 36,32 32 C40 28,48 38,56 34" stroke="#66BB6A" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <polygon points="54,32 58,34 54,36" fill="#66BB6A"/>
+  <path d="M8 40 C16 38,24 48,32 44 C40 40,48 50,56 46" stroke="#FFA726" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <polygon points="54,44 58,46 54,48" fill="#FFA726"/>
+  <path d="M8 52 C16 50,24 56,32 54 C40 52,48 58,56 56" stroke="#EF5350" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <polygon points="54,54 58,56 54,58" fill="#EF5350"/>
+</svg>

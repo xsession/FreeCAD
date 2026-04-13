@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="cv" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FF7043"/>
+      <stop offset="100%" stop-color="#BF360C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#cv)"/>
+  <!-- Hot surface -->
+  <rect x="10" y="40" width="44" height="4" rx="1" fill="#F44336"/>
+  <!-- Convection currents (rising wavy lines) -->
+  <path d="M16 38 C16 34,20 32,20 28 C20 24,16 22,16 18" stroke="#FFCC80" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M26 38 C26 34,30 32,30 28 C30 24,26 22,26 18" stroke="#FFB74D" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M36 38 C36 34,40 32,40 28 C40 24,36 22,36 18" stroke="#FFCC80" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M46 38 C46 34,50 32,50 28 C50 24,46 22,46 18" stroke="#FFB74D" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <!-- Arrow tips -->
+  <polygon points="14,20 16,14 18,20" fill="#FFCC80"/>
+  <polygon points="24,20 26,14 28,20" fill="#FFB74D"/>
+  <polygon points="34,20 36,14 38,20" fill="#FFCC80"/>
+  <polygon points="44,20 46,14 48,20" fill="#FFB74D"/>
+  <!-- h label -->
+  <text x="32" y="54" font-family="Arial,sans-serif" font-weight="bold" font-size="10" fill="#FFCCBC" text-anchor="middle">h</text>
+</svg>
