@@ -29,7 +29,7 @@
 #include <Base/Persistence.h>
 #include <boost/any.hpp>
 #include <fastsignals/signal.h>
-#include <bitset>
+#include <Base/AtomicBitset.h>
 #include <string>
 #include <FCGlobal.h>
 
@@ -551,7 +551,7 @@ protected:
      *
      * @see Property::Status that defines the position of the status bits.
      */
-    std::bitset<32> StatusBits;
+    Base::AtomicBitset StatusBits;
 
 protected:
 

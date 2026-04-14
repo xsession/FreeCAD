@@ -81,9 +81,10 @@ void SoFCBackgroundGradient::finish()
 SoFCBackgroundGradient::SoFCBackgroundGradient()
 {
     SO_NODE_CONSTRUCTOR(SoFCBackgroundGradient);
-    fCol.setValue(0.5f, 0.5f, 0.8f);
-    tCol.setValue(0.7f, 0.7f, 0.9f);
-    mCol.setValue(1.0f, 1.0f, 1.0f);
+    // Autodesk Inventor-style light gradient — clean professional look
+    fCol.setValue(0.93f, 0.93f, 0.95f);   // top: very light cool gray
+    tCol.setValue(0.74f, 0.76f, 0.80f);   // bottom: medium warm gray
+    mCol.setValue(0.85f, 0.86f, 0.89f);   // mid: transition point
     gradient = Gradient::LINEAR;
 }
 

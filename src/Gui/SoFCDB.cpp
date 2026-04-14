@@ -84,6 +84,8 @@
 #include "Inventor/SoMouseWheelEvent.h"
 #include "Inventor/SoFCTransform.h"
 #include "Inventor/SoToggleSwitch.h"
+#include "Inventor/SoFCPostProcessing.h"
+#include "Inventor/SoFCSmallFeatureCull.h"
 #include "propertyeditor/PropertyItem.h"
 #include "ArcEngine.h"
 
@@ -172,6 +174,8 @@ void Gui::SoFCDB::init()
     So3DAnnotation ::initClass();
     SoDelayedAnnotationsElement ::initClass();
     SoFCPlacementIndicatorKit ::initClass();
+    SoFCPostProcessing ::initClass();
+    SoFCSmallFeatureCull ::initClass();
 
     PropertyItem ::init();
     PropertySeparatorItem ::init();
@@ -458,7 +462,8 @@ bool Gui::SoFCDB::writeToX3D(SoNode* node, bool exportViewpoints, std::string& b
     vrmlRoot->setInstancePrefix(SbString("o"));
     vrmlRoot->ref();
 
-    // Search for SoVRMLIndexedFaceSet nodes and set creaseAngle to 0.5
+    // Search for SoVRMLIndexedFaceSet nodes and set creaseAngle to 1.05 (~60°)
+    // for smoother shading on curved surfaces
     {
         SoSearchAction sa;
         sa.setType(SoVRMLShape::getClassTypeId());
@@ -479,7 +484,7 @@ bool Gui::SoFCDB::writeToX3D(SoNode* node, bool exportViewpoints, std::string& b
                     }
                 }
                 else {
-                    static_cast<SoVRMLIndexedFaceSet*>(geom)->creaseAngle.setValue(0.5f);
+                    static_cast<SoVRMLIndexedFaceSet*>(geom)->creaseAngle.setValue(1.0472f);
                 }
             }
         }

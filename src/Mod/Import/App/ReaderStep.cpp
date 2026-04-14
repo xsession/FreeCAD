@@ -42,6 +42,7 @@
 #include <Base/Console.h>
 #include <Base/Exception.h>
 #include <Base/FileInfo.h>
+#include <Base/Sequencer.h>
 #include <Mod/Part/App/encodeFilename.h>
 
 using namespace Import;
@@ -151,9 +152,14 @@ void ReaderStep::read(Handle(TDocStd_Document) hDoc)  // NOLINT
         parseTimeMs / 1000.0, (int)nRoots);
 
     // --- Transfer phase (timed) ---
+    // Use a SequencerLauncher so the GUI progress bar pumps events
+    // and the application stays responsive during the long transfer.
     auto transferStart = std::chrono::steady_clock::now();
 
-    aReader.Transfer(hDoc);
+    {
+        Base::SequencerLauncher seq("Transferring STEP geometry...", nRoots);
+        aReader.Transfer(hDoc);
+    }
 
     auto transferEnd = std::chrono::steady_clock::now();
     transferTimeMs = std::chrono::duration_cast<std::chrono::milliseconds>(transferEnd - transferStart).count();

@@ -122,8 +122,8 @@ SoFCUnifiedSelection::SoFCUnifiedSelection()
 {
     SO_NODE_CONSTRUCTOR(SoFCUnifiedSelection);
 
-    SO_NODE_ADD_FIELD(colorHighlight, (SbColor(1.0f, 0.6f, 0.0f)));
-    SO_NODE_ADD_FIELD(colorSelection, (SbColor(0.1f, 0.8f, 0.1f)));
+    SO_NODE_ADD_FIELD(colorHighlight, (SbColor(0.0f, 0.75f, 1.0f)));   // Inventor-style cyan preselect
+    SO_NODE_ADD_FIELD(colorSelection, (SbColor(0.13f, 0.55f, 0.13f)));  // Inventor-style green select
     SO_NODE_ADD_FIELD(preselectionMode, (AUTO));
     SO_NODE_ADD_FIELD(selectionMode, (ON));
     SO_NODE_ADD_FIELD(selectionEnabled, (true));

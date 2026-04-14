@@ -111,7 +111,7 @@ AntiAliasing Multisample::readMSAAFromSettings()
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/View"
     );
-    return AntiAliasing(hGrp->GetInt("AntiAliasing", int(Gui::AntiAliasing::None)));
+    return AntiAliasing(hGrp->GetInt("AntiAliasing", int(Gui::AntiAliasing::MSAA4x)));
 }
 
 void Multisample::writeMSAAToSettings(AntiAliasing msaa)

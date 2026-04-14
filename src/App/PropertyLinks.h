@@ -25,6 +25,7 @@
 
 #pragma once
 
+#include <bitset>
 #include <list>
 #include <map>
 #include <string>

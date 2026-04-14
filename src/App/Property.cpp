@@ -340,7 +340,7 @@ void Property::setStatusValue(unsigned long status)
     status &= ~mask;
     status |= StatusBits.to_ulong() & mask;
     unsigned long oldStatus = StatusBits.to_ulong();
-    StatusBits = decltype(StatusBits)(status);
+    StatusBits = static_cast<uint32_t>(status);
 
     if (father) {
         static unsigned long _signalMask = (1 << ReadOnly) | (1 << Hidden);

@@ -31,10 +31,11 @@
 #include <App/PropertyGeo.h>
 #include <App/PropertyLinks.h>
 #include <App/PropertyStandard.h>
+#include <Base/AtomicBitset.h>
 #include <Base/SmartPtrPy.h>
 #include <Base/Placement.h>
 
-#include <bitset>
+#include <shared_mutex>
 #include <unordered_map>
 #include <memory>
 #include <map>
@@ -1283,7 +1284,7 @@ protected:
      *
      * For the status bits, see ObjectStatus.
      */
-    std::bitset<32> StatusBits;
+    Base::AtomicBitset StatusBits;
 
     /// Set this object in the error state.
     void setError()
@@ -1361,6 +1362,22 @@ private:
     mutable std::unordered_map<const char*, App::DocumentObject*, CStringHasher, CStringHasher>
         _outListMap;
     mutable bool _outListCached = false;
+
+    /// Per-object read-write lock for thread-safe property access.
+    /// Readers (GUI, dependency reads) take shared lock; recompute takes exclusive lock.
+    mutable std::shared_mutex _objectMutex;
+
+public:
+    /// Acquire a shared (read) lock on this object.
+    std::shared_lock<std::shared_mutex> readLock() const
+    {
+        return std::shared_lock(_objectMutex);
+    }
+    /// Acquire an exclusive (write) lock on this object.
+    std::unique_lock<std::shared_mutex> writeLock()
+    {
+        return std::unique_lock(_objectMutex);
+    }
 };
 
 }  // namespace App

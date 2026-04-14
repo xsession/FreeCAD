@@ -492,11 +492,12 @@ Application::Application(bool GUIenabled)
             hPGrp->GetASCII("Language", (const char*)lang.toLatin1()).c_str());
         GetWidgetFactorySupplier();
 
-        // Coin3d disabled VBO support for all Intel drivers but in the meantime they have improved
-        // so we can try to override the workaround by setting COIN_VBO
+        // VBO (Vertex Buffer Objects) — enabled by default for GPU-accelerated rendering.
+        // Modern GPUs (Intel HD 4000+ / 2012+) handle VBO correctly.
+        // Users can disable via Preferences > Display > UseVBO = false if issues occur.
         ParameterGrp::handle hViewGrp = App::GetApplication().GetParameterGroupByPath(
             "User parameter:BaseApp/Preferences/View");
-        if (hViewGrp->GetBool("UseVBO", false)) {
+        if (!hViewGrp->GetBool("UseVBO", true)) {
             (void)coin_setenv("COIN_VBO", "0", true);
         }
 
@@ -2569,23 +2570,18 @@ void Application::runApplication()
         defaultFormat.setRenderableType(QSurfaceFormat::OpenGL);
         defaultFormat.setProfile(QSurfaceFormat::CompatibilityProfile);
         defaultFormat.setOption(QSurfaceFormat::DeprecatedFunctions, true);
-#if defined(FC_OS_LINUX) || defined(FC_OS_BSD)
-        // QGuiApplication::platformName() doesn't yet work at this point, so we use the env var
-        if (getenv("WAYLAND_DISPLAY")) {
-            // In some settings (at least EGL on Wayland) we get RGB565 by default.
-            // Request something better.
-            defaultFormat.setRedBufferSize(8);
-            defaultFormat.setGreenBufferSize(8);
-            defaultFormat.setBlueBufferSize(8);
-            // Qt's behavior with format requests seems opaque, underdocumented and,
-            // unfortunately, inconsistent between platforms. Requesting an alpha
-            // channel tends to steer it away from weird legacy choices like RGB565.
-            defaultFormat.setAlphaBufferSize(8);
-            // And a depth/stencil buffer is generally useful if we can have it.
-            defaultFormat.setDepthBufferSize(24);
-            defaultFormat.setStencilBufferSize(8);
-        }
-#endif
+
+        // Request a high-quality framebuffer on all platforms:
+        // 24-bit depth, 8-bit stencil, MSAA 4x, proper color depth.
+        // This eliminates z-fighting and gives clean anti-aliased edges.
+        defaultFormat.setDepthBufferSize(24);
+        defaultFormat.setStencilBufferSize(8);
+        defaultFormat.setSamples(4);
+        defaultFormat.setRedBufferSize(8);
+        defaultFormat.setGreenBufferSize(8);
+        defaultFormat.setBlueBufferSize(8);
+        defaultFormat.setAlphaBufferSize(8);
+
         QSurfaceFormat::setDefaultFormat(defaultFormat);
     }
 

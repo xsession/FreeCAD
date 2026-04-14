@@ -111,6 +111,7 @@
 #include "Inventor/SoAxisCrossKit.h"
 #include "Inventor/SoFCBackgroundGradient.h"
 #include "Inventor/SoFCBoundingBox.h"
+#include "Inventor/SoFCPostProcessing.h"
 #include "MainWindow.h"
 #include "Multisample.h"
 #include "NaviCube.h"
@@ -497,20 +498,25 @@ void View3DInventorViewer::init()
     environment = new SoEnvironment();
     environment->ref();
     environment->setName("environment");
+    // Boost ambient light for softer shadows and better depth perception.
+    // Default SoEnvironment ambientIntensity is 0.2 which creates harsh contrast.
+    environment->ambientIntensity.setValue(0.45F);
+    environment->ambientColor.setValue(1.0F, 1.0F, 1.0F);  // neutral white ambient
 
     backlight = new SoDirectionalLight();
     backlight->ref();
     backlight->setName("backlight");
     backlight->direction.setValue(-hl->direction.getValue());
-    backlight->on.setValue(false);  // by default off
+    backlight->intensity.setValue(0.25F);  // subtle rim/back fill
+    backlight->on.setValue(true);   // 3-point lighting: always on
 
     fillLight = new SoDirectionalLight();
     fillLight->ref();
     fillLight->setName("filllight");
     fillLight->direction.setValue(-0.60F, -0.35F, -0.79F);
-    fillLight->intensity.setValue(0.6F);
-    fillLight->color.setValue(0.95F, 0.95F, 1.0F);
-    fillLight->on.setValue(false);  // by default off
+    fillLight->intensity.setValue(0.45F);
+    fillLight->color.setValue(1.0F, 0.98F, 0.95F);  // warm fill for natural look
+    fillLight->on.setValue(true);   // 3-point lighting: always on
 
     // Set up background scenegraph with image in it.
     backgroundroot = new SoSeparator;
@@ -530,6 +536,41 @@ void View3DInventorViewer::init()
     this->decorationroot = new SoSeparator;
     this->decorationroot->ref();
     this->decorationroot->setName("decorationroot");
+
+    // Post-processing effects (SSAO, silhouette edges)
+    postProcessing = new SoFCPostProcessing;
+    postProcessing->ref();
+    postProcessing->setName("postProcessing");
+    // Sync with user preferences
+    postProcessing->enableSSAO.setValue(ViewParams::instance()->getEnableSSAO());
+    postProcessing->ssaoRadius.setValue(static_cast<float>(ViewParams::instance()->getSSAORadius()));
+    postProcessing->ssaoIntensity.setValue(static_cast<float>(ViewParams::instance()->getSSAOIntensity()));
+    postProcessing->ssaoSamples.setValue(ViewParams::instance()->getSSAOSamples());
+    postProcessing->enableEdgeOverlay.setValue(ViewParams::instance()->getEnableEdgeOverlay());
+    postProcessing->edgeThreshold.setValue(static_cast<float>(ViewParams::instance()->getEdgeOverlayThreshold()));
+    postProcessing->edgeWidth.setValue(static_cast<float>(ViewParams::instance()->getEdgeOverlayWidth()));
+    // Phase D: Bloom & Vignette
+    postProcessing->enableBloom.setValue(ViewParams::instance()->getEnableBloom());
+    postProcessing->bloomIntensity.setValue(static_cast<float>(ViewParams::instance()->getBloomIntensity()));
+    postProcessing->bloomThreshold.setValue(static_cast<float>(ViewParams::instance()->getBloomThreshold()));
+    postProcessing->enableVignette.setValue(ViewParams::instance()->getEnableVignette());
+    postProcessing->vignetteIntensity.setValue(static_cast<float>(ViewParams::instance()->getVignetteIntensity()));
+    // Phase E: Shadows & Sharpening
+    postProcessing->enableShadows.setValue(ViewParams::instance()->getEnableShadows());
+    postProcessing->shadowDarkness.setValue(static_cast<float>(ViewParams::instance()->getShadowDarkness()));
+    postProcessing->enableSharpening.setValue(ViewParams::instance()->getEnableSharpening());
+    postProcessing->sharpenStrength.setValue(static_cast<float>(ViewParams::instance()->getSharpenStrength()));
+
+    // Phase F: Idle timer — restores full-quality post-processing after
+    // navigation stops.  Single-shot at 150 ms gives instant visual snap-back
+    // without flickering during brief pauses in navigation.
+    postProcessIdleTimer = new QTimer(this);
+    postProcessIdleTimer->setSingleShot(true);
+    postProcessIdleTimer->setInterval(150);
+    QObject::connect(postProcessIdleTimer, &QTimer::timeout, this, [this]() {
+        postProcessing->interactiveMode.setValue(FALSE);
+        this->getSoRenderManager()->scheduleRedraw();
+    });
 
     naviCubeAnnotation = new SoAnnotation();
     naviCubeAnnotation->ref();
@@ -684,7 +725,7 @@ void View3DInventorViewer::init()
     setSeekDistance(100);  // NOLINT
     setViewing(false);
 
-    setBackgroundColor(QColor(25, 25, 25));  // NOLINT
+    setBackgroundColor(QColor(237, 237, 242));  // NOLINT — Inventor-style light gray
     setGradientBackground(Background::LinearGradient);
 
     // set some callback functions for user interaction
@@ -763,6 +804,8 @@ View3DInventorViewer::~View3DInventorViewer()
     this->foregroundroot = nullptr;
     this->decorationroot->unref();
     this->decorationroot = nullptr;
+    this->postProcessing->unref();
+    this->postProcessing = nullptr;
     this->pcBackGround->unref();
     this->pcBackGround = nullptr;
 
@@ -2187,22 +2230,42 @@ bool View3DInventorViewer::dumpToFile(SoNode* node, const char* filename, bool b
 
 /**
  * Sets the SoFCInteractiveElement to \a true.
+ * Phase F: Also switches post-processing to lightweight interactive mode
+ * and cancels any pending full-quality idle timer.
  */
 void View3DInventorViewer::interactionStartCB(void* ud, SoQTQuarterAdaptor* viewer)
 {
     Q_UNUSED(ud)
     SoGLRenderAction* glra = viewer->getSoRenderManager()->getGLRenderAction();
     SoFCInteractiveElement::set(glra->getState(), viewer->getSceneGraph(), true);
+
+    // Phase F: drop to lightweight rendering for smooth navigation
+    auto* v3d = static_cast<View3DInventorViewer*>(viewer);
+    if (ViewParams::instance()->getAdaptiveRenderQuality()) {
+        v3d->postProcessIdleTimer->stop();
+        v3d->postProcessing->interactiveMode.setValue(TRUE);
+    }
 }
 
 /**
  * Sets the SoFCInteractiveElement to \a false and forces a redraw.
+ * Phase F: Starts the idle timer that will restore full-quality rendering
+ * after a brief pause — gives the illusion of instant quality snap-back
+ * when the user stops navigating.
  */
 void View3DInventorViewer::interactionFinishCB(void* ud, SoQTQuarterAdaptor* viewer)
 {
     Q_UNUSED(ud)
     SoGLRenderAction* glra = viewer->getSoRenderManager()->getGLRenderAction();
     SoFCInteractiveElement::set(glra->getState(), viewer->getSceneGraph(), false);
+
+    // Phase F: start idle timer to restore full quality after navigation
+    auto* v3d = static_cast<View3DInventorViewer*>(viewer);
+    if (ViewParams::instance()->getAdaptiveRenderQuality()) {
+        v3d->postProcessIdleTimer->setInterval(
+            ViewParams::instance()->getIdleRenderDelay());
+        v3d->postProcessIdleTimer->start();
+    }
     viewer->redraw();
 }
 
@@ -2504,6 +2567,7 @@ void View3DInventorViewer::renderToFramebuffer(QOpenGLFramebufferObject* fbo)
     // the exact same result set it explicitly to GL_LESS.
     glDepthFunc(GL_LESS);
     gl.apply(this->getSoRenderManager()->getSceneGraph());
+    gl.apply(this->postProcessing);
     gl.apply(this->foregroundroot);
     if (shouldRenderDecorations(currentRenderIntent())) {
         gl.apply(this->decorationroot);
@@ -2685,6 +2749,14 @@ void View3DInventorViewer::renderScene()
 
     if (!this->shading) {
         state->pop();
+    }
+
+    // ── Post-processing: SSAO + silhouette edge overlay ──
+    // Runs after the main scene has written depth/color, multiplicatively
+    // blends contact shadows and edge detection onto the framebuffer.
+    {
+        ZoneScopedN("PostProcessing");
+        glra->apply(this->postProcessing);
     }
 
 #if defined(ENABLE_GL_DEPTH_RANGE)

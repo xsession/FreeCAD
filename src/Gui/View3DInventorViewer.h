@@ -93,6 +93,7 @@ namespace Gui
 {
 class NavigationAnimation;
 class ViewProvider;
+class SoFCPostProcessing;
 class SoFCBackgroundGradient;
 class NavigationStyle;
 class SoFCUnifiedSelection;
@@ -610,6 +611,11 @@ private:
     SoDirectionalLight* backlight;
     SoDirectionalLight* fillLight;
     SoEnvironment* environment;
+
+    SoFCPostProcessing* postProcessing;
+
+    // Phase F: Idle timer for deferred full-quality re-render
+    QTimer* postProcessIdleTimer;
 
     SoRotation* lightRotation;
 

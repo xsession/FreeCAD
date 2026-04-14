@@ -95,6 +95,50 @@
 namespace Import
 {
 
+namespace
+{
+
+struct StepImportPerfProfile
+{
+    bool speedMode = false;
+    bool reduceObjects = false;
+    double minMeshDeviation = 0.0;
+    double minAngularDeflection = 0.0;
+};
+
+StepImportPerfProfile getStepImportPerfProfile(const Base::FileInfo& file)
+{
+    StepImportPerfProfile profile;
+    if (!file.hasExtension({"stp", "step"})) {
+        return profile;
+    }
+
+    const int64_t fileSize = file.size();
+    const bool isMedium = fileSize > 25LL * 1024 * 1024;
+    const bool isLarge = fileSize > 100LL * 1024 * 1024;
+    const bool isVeryLarge = fileSize > 500LL * 1024 * 1024;
+
+    profile.speedMode = isMedium;
+    profile.reduceObjects = isLarge;
+
+    if (isVeryLarge) {
+        profile.minMeshDeviation = 5.0;
+        profile.minAngularDeflection = 40.0;
+    }
+    else if (isLarge) {
+        profile.minMeshDeviation = 2.5;
+        profile.minAngularDeflection = 33.0;
+    }
+    else if (isMedium) {
+        profile.minMeshDeviation = 1.0;
+        profile.minAngularDeflection = 30.0;
+    }
+
+    return profile;
+}
+
+}  // namespace
+
 class Module: public Py::ExtensionModule<Module>
 {
 public:
@@ -232,7 +276,16 @@ private:
             }
 
             ImportOCAFExt ocaf(hDoc, pcDoc, file.fileNamePure());
-            ocaf.setImportOptions(ImportOCAFExt::customImportOptions());
+            auto ocafOptions = ImportOCAFExt::customImportOptions();
+            const auto perfProfile = getStepImportPerfProfile(file);
+            if (perfProfile.speedMode) {
+                // Large STEP assemblies render and navigate much faster when we avoid
+                // collapsing everything into one heavy compound.
+                ocafOptions.merge = false;
+                ocafOptions.useLinkGroup = true;
+                ocafOptions.reduceObjects = perfProfile.reduceObjects;
+            }
+            ocaf.setImportOptions(ocafOptions);
             if (merge != Py_None) {
                 ocaf.setMerge(Base::asBoolean(merge));
             }
@@ -292,6 +345,18 @@ private:
                     bool useAdaptive = hPart->GetBool("AdaptiveDeviation", true);
                     int faceThreshold = hPart->GetInt("AdaptiveDeviationFaceThreshold", 2000);
                     double maxScale = hPart->GetFloat("AdaptiveDeviationMaxScale", 10.0);
+
+                    if (perfProfile.speedMode) {
+                        deviation = std::max(deviation, perfProfile.minMeshDeviation);
+                        angularDeflection = std::max(
+                            angularDeflection, perfProfile.minAngularDeflection);
+                        Base::Console().Message(
+                            "Import: Speed mode enabled for %.1f MB STEP file "
+                            "(deviation %.2f, angular %.1f deg)\n",
+                            file.size() / (1024.0 * 1024.0),
+                            deviation,
+                            angularDeflection);
+                    }
 
                     // Count total faces for adaptive deviation
                     BRep_Builder builder;

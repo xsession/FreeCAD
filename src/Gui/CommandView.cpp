@@ -74,6 +74,8 @@
 #include "MainWindow.h"
 #include "Navigation/NavigationStyle.h"
 #include "RibbonBar.h"
+#include "WorkbenchManager.h"
+#include "Workbench.h"
 #include "OverlayParams.h"
 #include "OverlayManager.h"
 #include "SceneInspector.h"
@@ -4328,22 +4330,14 @@ void StdCmdToggleRibbonBar::activated(int iMsg)
 
     bool useRibbon = !ribbon->isVisible();
 
-    // Save preference
-    auto hGrp = App::GetApplication().GetParameterGroupByPath(
-        "User parameter:BaseApp/Preferences/General"
-    );
-    hGrp->SetBool("UseRibbonBar", useRibbon);
+    // Save preference using the canonical path (must match RibbonBar::isRibbonEnabled)
+    RibbonBar::setRibbonEnabled(useRibbon);
 
-    // Toggle ribbon visibility
-    ribbon->setVisible(useRibbon);
-
-    // Toggle classic toolbars
-    auto* mainWindow = getMainWindow();
-    if (mainWindow) {
-        auto toolBars = mainWindow->findChildren<QToolBar*>(Qt::FindDirectChildrenOnly);
-        for (auto* tb : toolBars) {
-            tb->setVisible(!useRibbon);
-        }
+    // Re-run the full workbench activation so ToolBarManager::setup() populates
+    // the ribbon with buttons and manages classic toolbar visibility correctly.
+    Workbench* wb = WorkbenchManager::instance()->active();
+    if (wb) {
+        wb->activate();
     }
 
     // Sync checked state
@@ -4357,11 +4351,8 @@ Action* StdCmdToggleRibbonBar::createAction()
     _pcAction = Command::createAction();
     _pcAction->setCheckable(true);
 
-    // Set initial checked state from preference
-    auto hGrp = App::GetApplication().GetParameterGroupByPath(
-        "User parameter:BaseApp/Preferences/General"
-    );
-    _pcAction->setChecked(hGrp->GetBool("UseRibbonBar", false));
+    // Set initial checked state from preference (canonical path)
+    _pcAction->setChecked(RibbonBar::isRibbonEnabled());
 
     return _pcAction;
 }

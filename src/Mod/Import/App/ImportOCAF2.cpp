@@ -801,6 +801,10 @@ bool ImportOCAF2::createAssembly(
         if (!childLabel.IsNull() && !options.importHidden && !aColorTool->IsVisible(childLabel)) {
             continue;
         }
+        // Yield to GUI for each assembly child so the UI stays responsive
+        if (sequencer) {
+            sequencer->next(true);
+        }
         auto obj = loadShape(doc, childLabel, childShape, options.reduceObjects);
         if (!obj) {
             continue;

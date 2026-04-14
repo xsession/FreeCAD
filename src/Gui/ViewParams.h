@@ -49,7 +49,7 @@ public:
     FC_VIEW_PARAM(UseNewSelection, bool, Bool, true) \
     FC_VIEW_PARAM(UseSelectionRoot, bool, Bool, true) \
     FC_VIEW_PARAM(EnableSelection, bool, Bool, true) \
-    FC_VIEW_PARAM(RenderCache, int, Int, 0) \
+    FC_VIEW_PARAM(RenderCache, int, Int, 1) \
     FC_VIEW_PARAM(RandomColor, bool, Bool, false) \
     FC_VIEW_PARAM(BoundingBoxColor, unsigned long, Unsigned, 4294967295UL) \
     FC_VIEW_PARAM(AnnotationTextColor, unsigned long, Unsigned, 4294967295UL) \
@@ -57,9 +57,9 @@ public:
     FC_VIEW_PARAM(DefaultLinkColor, unsigned long, Unsigned, 0x66FFFF00) \
     FC_VIEW_PARAM(DefaultShapeLineColor, unsigned long, Unsigned, 421075455UL) \
     FC_VIEW_PARAM(DefaultShapeVertexColor, unsigned long, Unsigned, 421075455UL) \
-    FC_VIEW_PARAM(DefaultShapeColor, unsigned long, Unsigned, 0xCCCCCC00) \
+    FC_VIEW_PARAM(DefaultShapeColor, unsigned long, Unsigned, 0xBEC3C800) \
     FC_VIEW_PARAM(DefaultShapeTransparency, int, Int, 0) \
-    FC_VIEW_PARAM(DefaultShapeLineWidth, int, Int, 2) \
+    FC_VIEW_PARAM(DefaultShapeLineWidth, int, Int, 1) \
     FC_VIEW_PARAM(DefaultShapePointSize, int, Int, 2) \
     FC_VIEW_PARAM(CoinCycleCheck, bool, Bool, true) \
     FC_VIEW_PARAM(EnablePropertyViewForInactiveDocument, bool, Bool, true) \
@@ -75,7 +75,32 @@ public:
     FC_VIEW_PARAM(DatumScale, double, Float, 100.0) \
     FC_VIEW_PARAM(DatumPlaneSize, double, Float, 62.0) \
     FC_VIEW_PARAM(DatumLineSize, double, Float, 70.0) \
-    FC_VIEW_PARAM(DatumTemporaryScaleFactor, double, Float, 2.0)
+    FC_VIEW_PARAM(DatumTemporaryScaleFactor, double, Float, 2.0) \
+    /* Phase B: Post-processing */ \
+    FC_VIEW_PARAM(EnableSSAO, bool, Bool, true) \
+    FC_VIEW_PARAM(SSAORadius, double, Float, 0.35) \
+    FC_VIEW_PARAM(SSAOIntensity, double, Float, 0.4) \
+    FC_VIEW_PARAM(SSAOSamples, int, Int, 16) \
+    FC_VIEW_PARAM(EnableEdgeOverlay, bool, Bool, true) \
+    FC_VIEW_PARAM(EdgeOverlayThreshold, double, Float, 0.002) \
+    FC_VIEW_PARAM(EdgeOverlayWidth, double, Float, 0.8) \
+    /* Phase C: Performance & LOD */ \
+    FC_VIEW_PARAM(EnableSmallFeatureCull, bool, Bool, true) \
+    FC_VIEW_PARAM(SmallFeatureCullArea, double, Float, 25.0) \
+    /* Phase D: Bloom & Vignette */ \
+    FC_VIEW_PARAM(EnableBloom, bool, Bool, true) \
+    FC_VIEW_PARAM(BloomIntensity, double, Float, 0.08) \
+    FC_VIEW_PARAM(BloomThreshold, double, Float, 0.85) \
+    FC_VIEW_PARAM(EnableVignette, bool, Bool, true) \
+    FC_VIEW_PARAM(VignetteIntensity, double, Float, 0.12) \
+    /* Phase E: Shadows & Sharpening */ \
+    FC_VIEW_PARAM(EnableShadows, bool, Bool, true) \
+    FC_VIEW_PARAM(ShadowDarkness, double, Float, 0.25) \
+    FC_VIEW_PARAM(EnableSharpening, bool, Bool, true) \
+    FC_VIEW_PARAM(SharpenStrength, double, Float, 0.4) \
+    /* Phase F: Adaptive quality during navigation */ \
+    FC_VIEW_PARAM(AdaptiveRenderQuality, bool, Bool, true) \
+    FC_VIEW_PARAM(IdleRenderDelay, int, Int, 150)
 
 #undef FC_VIEW_PARAM
 #define FC_VIEW_PARAM(_name, _ctype, _type, _def) \

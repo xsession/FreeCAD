@@ -115,6 +115,9 @@ ViewProvider::ViewProvider()
     // pcRoot = new SoFCSeparator(true);
     pcRoot = new SoFCSelectionRoot(true);
     pcRoot->ref();
+    // Enable Coin3D's built-in frustum culling — objects whose bounding box
+    // lies entirely outside the view frustum are skipped during rendering.
+    pcRoot->renderCulling = SoSeparator::ON;
     pcModeSwitch = new SoSwitch();
     pcModeSwitch->ref();
     pcModeSwitch->setName("ModeSwitch");

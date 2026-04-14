@@ -340,7 +340,7 @@ void NavigationStyle::initialize()
     this->resetcursorpos = false;
     this->currentmode = NavigationStyle::IDLE;
     this->animationEnabled = true;
-    this->spinningAnimationEnabled = false;
+    this->spinningAnimationEnabled = true;  // inertial spin — smooth UX after drag release
     this->spinsamplecounter = 0;
     this->spinincrement = SbRotation::identity();
     this->rotationCenterFound = false;

@@ -28,6 +28,7 @@
 #pragma warning(disable : 4834)
 #endif
 
+#include <atomic>
 #include <map>
 #include <string>
 #include <memory>
@@ -43,6 +44,7 @@
 
 #include <App/DocumentObject.h>
 #include <App/DocumentObserver.h>
+#include <Base/AtomicBitset.h>
 #include <App/StringHasher.h>
 #include <App/ExportInfo.h>
 #include <Base/UniqueNameManager.h>
@@ -90,11 +92,11 @@ struct DocumentP
     bool undoing {false};  ///< document in the middle of undo or redo
     bool committing {false};
     bool opentransaction {false};
-    std::bitset<32> StatusBits;
+    Base::AtomicBitset StatusBits;
     int iUndoMode {0};
     unsigned int UndoMemSize {0};
     unsigned int UndoMaxStackSize {20};
-    unsigned int TransactionLock {0};
+    std::atomic<unsigned int> TransactionLock {0};
     // Id and name that the next transaction will take
     // as soon as there is a change to the document
     int bookedTransaction { 0 }; 

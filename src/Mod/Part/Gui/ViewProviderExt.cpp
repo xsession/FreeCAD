@@ -79,6 +79,7 @@
 
 #include <Gui/BitmapFactory.h>
 #include <Gui/Control.h>
+#include <Gui/Inventor/SoFCSmallFeatureCull.h>
 #include <Gui/Selection/SoFCSelectionAction.h>
 #include <Gui/Selection/SoFCUnifiedSelection.h>
 #include <Gui/ViewParams.h>
@@ -279,6 +280,7 @@ ViewProviderPartExt::ViewProviderPartExt()
 
     pShapeHints = new SoShapeHints;
     pShapeHints->shapeType = SoShapeHints::UNKNOWN_SHAPE_TYPE;
+    pShapeHints->creaseAngle = 1.0472F;  // 60° — smoother curved surfaces
     pShapeHints->ref();
     Lighting.touch();
     DrawStyle.touch();
@@ -497,8 +499,10 @@ void ViewProviderPartExt::attach(App::DocumentObject* pcFeat)
     pcNormalRoot->renderCaching = pcFlatRoot->renderCaching = pcWireframeRoot->renderCaching
         = pcPointsRoot->renderCaching = wireframe->renderCaching = SoSeparator::OFF;
 
+    // Enable bounding box caching (cheap, separate from render caching) so
+    // Coin3D can perform efficient frustum culling on sub-graphs.
     pcNormalRoot->boundingBoxCaching = pcFlatRoot->boundingBoxCaching = pcWireframeRoot->boundingBoxCaching
-        = pcPointsRoot->boundingBoxCaching = wireframe->boundingBoxCaching = SoSeparator::OFF;
+        = pcPointsRoot->boundingBoxCaching = wireframe->boundingBoxCaching = SoSeparator::ON;
 
     // Avoid any Z-buffer artifacts, so that the lines always appear on top of the faces
     // The correct order is Edges, Polygon offset, Faces.
@@ -542,6 +546,25 @@ void ViewProviderPartExt::attach(App::DocumentObject* pcFeat)
 
     // Move 'coords' before the switch
     pcRoot->insertChild(coords, pcRoot->findChild(pcModeSwitch));
+
+    // Wrap coords + pcModeSwitch in a small-feature cull node that skips
+    // rendering when the shape projects to fewer than N pixels on screen.
+    // This is critical for large assemblies with hundreds of distant parts.
+    if (Gui::ViewParams::instance()->getEnableSmallFeatureCull()) {
+        auto* featureCull = new Gui::SoFCSmallFeatureCull();
+        featureCull->minScreenArea =
+            static_cast<float>(Gui::ViewParams::instance()->getSmallFeatureCullArea());
+        featureCull->setName("SmallFeatureCull");
+
+        // Move coords and pcModeSwitch from pcRoot into the cull wrapper
+        int coordIdx = pcRoot->findChild(coords);
+        int modeIdx  = pcRoot->findChild(pcModeSwitch);
+        pcRoot->removeChild(std::max(coordIdx, modeIdx));
+        pcRoot->removeChild(std::min(coordIdx, modeIdx));
+        featureCull->addChild(coords);
+        featureCull->addChild(pcModeSwitch);
+        pcRoot->addChild(featureCull);
+    }
 
     // putting all together with the switch
     addDisplayMaskMode(pcNormalRoot, "Flat Lines");
@@ -941,8 +964,8 @@ bool ViewProviderPartExt::loadParameter()
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/Mod/Part"
     );
-    float deviation = hGrp->GetFloat("MeshDeviation", 0.2);
-    float angularDeflection = hGrp->GetFloat("MeshAngularDeflection", 28.65);
+    float deviation = hGrp->GetFloat("MeshDeviation", 0.1);
+    float angularDeflection = hGrp->GetFloat("MeshAngularDeflection", 20.0);
     NormalsFromUV = hGrp->GetBool("NormalsFromUVNodes", NormalsFromUV);
 
     if (Deviation.getValue() != deviation) {
