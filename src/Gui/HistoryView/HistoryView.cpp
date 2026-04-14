@@ -24,6 +24,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPainter>
+#include <QLinearGradient>
 #include <QMenu>
 #include <QAction>
 #include <QClipboard>
@@ -57,234 +58,14 @@ namespace sp = std::placeholders;
 
 
 // ============================================================================
-// HistoryDelegate — Vertical list view rendering (detail view)
-// ============================================================================
-
-HistoryDelegate::HistoryDelegate(QObject* parent)
-    : QStyledItemDelegate(parent)
-{
-}
-
-void HistoryDelegate::paint(QPainter* painter,
-                             const QStyleOptionViewItem& option,
-                             const QModelIndex& index) const
-{
-    painter->save();
-    painter->setRenderHint(QPainter::Antialiasing, true);
-
-    QRect rect = option.rect;
-    bool isSelected = option.state & QStyle::State_Selected;
-    bool isHovered = option.state & QStyle::State_MouseOver;
-    bool isUndone = index.data(IsUndoneRole).toBool();
-    bool isRollbackTarget = index.data(IsRollbackTargetRole).toBool();
-    bool isSuppressed = index.data(IsSuppressedRole).toBool();
-    bool isCheckpoint = index.data(IsCheckpointRole).toBool();
-    QColor typeColor = index.data(ColorRole).value<QColor>();
-    QString description = index.data(DescriptionRole).toString();
-    QString typeLabel = index.data(TypeLabelRole).toString();
-    QString featureLabel = index.data(FeatureLabelRole).toString();
-    QDateTime timestamp = index.data(TimestampRole).toDateTime();
-
-    // --- Background ---
-    QColor bgColor;
-    if (isSelected) {
-        bgColor = option.palette.highlight().color();
-    }
-    else if (isHovered) {
-        bgColor = option.palette.midlight().color();
-    }
-    else if (isUndone) {
-        bgColor = option.palette.base().color();
-        bgColor.setAlpha(128);
-    }
-    else {
-        bgColor = option.palette.base().color();
-    }
-    painter->fillRect(rect, bgColor);
-
-    // --- Checkpoint special background (green tint) ---
-    if (isCheckpoint) {
-        QColor cpBg(0x00, 0xE6, 0x76, 30);  // subtle green overlay
-        painter->fillRect(rect, cpBg);
-    }
-
-    // --- Colored left edge indicator (4px wide) ---
-    QRect edgeRect(rect.left(), rect.top(), 4, rect.height());
-    if (isRollbackTarget) {
-        QLinearGradient gradient(edgeRect.topLeft(), edgeRect.bottomLeft());
-        gradient.setColorAt(0, QColor(0xFF, 0xD5, 0x4F));
-        gradient.setColorAt(1, QColor(0xFF, 0xA0, 0x00));
-        painter->fillRect(edgeRect, gradient);
-    }
-    else if (isSuppressed) {
-        painter->fillRect(edgeRect, QColor(0xF4, 0x43, 0x36));  // red for suppressed
-    }
-    else {
-        painter->fillRect(edgeRect, typeColor);
-    }
-
-    // --- Timeline line (vertical connecting line) ---
-    int lineX = rect.left() + 20;
-    QPen linePen(isUndone ? QColor(0x60, 0x60, 0x60) : QColor(0x90, 0x90, 0x90), 2);
-    if (isSuppressed) {
-        linePen.setStyle(Qt::DashLine);  // Dashed for suppressed (Fusion 360)
-    }
-    painter->setPen(linePen);
-    painter->drawLine(lineX, rect.top(), lineX, rect.bottom());
-
-    // --- Timeline dot ---
-    int dotY = rect.top() + rect.height() / 2;
-    if (isCheckpoint) {
-        // Checkpoint: render as a diamond (git commit marker)
-        int diamondSize = 7;
-        QColor cpColor(0x00, 0xE6, 0x76);
-        painter->setPen(QPen(cpColor.darker(120), 2));
-        painter->setBrush(cpColor);
-        QPainterPath diamond;
-        diamond.moveTo(lineX, dotY - diamondSize);
-        diamond.lineTo(lineX + diamondSize, dotY);
-        diamond.lineTo(lineX, dotY + diamondSize);
-        diamond.lineTo(lineX - diamondSize, dotY);
-        diamond.closeSubpath();
-        painter->drawPath(diamond);
-    }
-    else {
-        int dotRadius = isRollbackTarget ? 6 : 4;
-    QColor dotColor = isRollbackTarget ? QColor(0xFF, 0xA0, 0x00) : typeColor;
-    if (isUndone) {
-        dotColor.setAlpha(100);
-    }
-    painter->setPen(Qt::NoPen);
-    painter->setBrush(dotColor);
-    painter->drawEllipse(QPoint(lineX, dotY), dotRadius, dotRadius);
-
-    if (isRollbackTarget) {
-        QPen ringPen(QColor(0xFF, 0xD5, 0x4F), 2);
-        painter->setPen(ringPen);
-        painter->setBrush(Qt::NoBrush);
-        painter->drawEllipse(QPoint(lineX, dotY), 8, 8);
-    }
-    } // end else (not checkpoint)
-
-    // --- Icon ---
-    QIcon icon = index.data(Qt::DecorationRole).value<QIcon>();
-    QRect iconRect(rect.left() + 32, rect.top() + (rect.height() - 18) / 2, 18, 18);
-    if (!icon.isNull()) {
-        QIcon::Mode iconMode = isUndone ? QIcon::Disabled : QIcon::Normal;
-        icon.paint(painter, iconRect, Qt::AlignCenter, iconMode);
-    }
-
-    // --- Suppressed X overlay ---
-    if (isSuppressed) {
-        painter->setPen(QPen(QColor(0xF4, 0x43, 0x36, 200), 2));
-        painter->drawLine(iconRect.topLeft() + QPoint(2, 2),
-                          iconRect.bottomRight() - QPoint(2, 2));
-        painter->drawLine(iconRect.topRight() + QPoint(-2, 2),
-                          iconRect.bottomLeft() + QPoint(2, -2));
-    }
-
-    // --- Feature label badge ---
-    if (!featureLabel.isEmpty()) {
-        QFont badgeFont = option.font;
-        badgeFont.setPointSize(badgeFont.pointSize() - 2);
-        badgeFont.setBold(true);
-        QFontMetrics badgeFm(badgeFont);
-        int badgeWidth = badgeFm.horizontalAdvance(featureLabel) + 8;
-        QRect badgeRect(rect.left() + 56, rect.top() + 3, badgeWidth, 16);
-
-        QColor badgeBg = typeColor;
-        badgeBg.setAlpha(isUndone ? 60 : 180);
-        painter->setPen(Qt::NoPen);
-        painter->setBrush(badgeBg);
-        painter->drawRoundedRect(badgeRect, 3, 3);
-
-        painter->setPen(isUndone ? QColor(0x80, 0x80, 0x80) : Qt::white);
-        painter->setFont(badgeFont);
-        painter->drawText(badgeRect, Qt::AlignCenter, featureLabel);
-    }
-
-    // --- Description text ---
-    QFont descFont = option.font;
-    if (isRollbackTarget) {
-        descFont.setBold(true);
-    }
-    if (isSuppressed || isUndone) {
-        descFont.setStrikeOut(true);
-    }
-    QFontMetrics descFm(descFont);
-    painter->setFont(descFont);
-
-    QColor textColor = isSelected ? option.palette.highlightedText().color()
-                                  : (isUndone ? QColor(0x80, 0x80, 0x80)
-                                              : option.palette.text().color());
-    if (isSuppressed && !isUndone) {
-        textColor = QColor(0xA0, 0x60, 0x60);  // muted red
-    }
-    painter->setPen(textColor);
-
-    int textLeft = rect.left() + 56;
-    int textTop = rect.top() + 20;
-    int textWidth = rect.width() - textLeft - 70;
-
-    QString elidedDesc = descFm.elidedText(description, Qt::ElideRight, textWidth);
-    painter->drawText(textLeft, textTop, rect.width() - textLeft - 10, 20,
-                      Qt::AlignLeft | Qt::AlignVCenter, elidedDesc);
-
-    // --- Timestamp (right side) ---
-    QFont timeFont = option.font;
-    timeFont.setPointSize(timeFont.pointSize() - 2);
-    timeFont.setStrikeOut(false);  // never strikethrough timestamp
-    painter->setFont(timeFont);
-    QColor timeColor = isUndone ? QColor(0x60, 0x60, 0x60) : QColor(0x90, 0x90, 0x90);
-    painter->setPen(timeColor);
-
-    QString timeStr = timestamp.toString(QStringLiteral("HH:mm:ss"));
-    QRect timeRect(rect.right() - 65, rect.top() + 4, 60, rect.height() - 8);
-    painter->drawText(timeRect, Qt::AlignRight | Qt::AlignTop, timeStr);
-
-    // --- Rollback marker label ---
-    if (isRollbackTarget) {
-        QFont markerFont = option.font;
-        markerFont.setPointSize(markerFont.pointSize() - 2);
-        markerFont.setItalic(true);
-        markerFont.setStrikeOut(false);
-        painter->setFont(markerFont);
-        painter->setPen(QColor(0xFF, 0xA0, 0x00));
-        painter->drawText(rect.right() - 90, rect.bottom() - 16, 85, 14,
-                          Qt::AlignRight | Qt::AlignVCenter,
-                          tr("▶ Current"));
-    }
-
-    // --- Bottom separator ---
-    QPen sepPen(option.palette.mid().color(), 1);
-    painter->setPen(sepPen);
-    painter->drawLine(rect.left() + 32, rect.bottom(), rect.right(), rect.bottom());
-
-    painter->restore();
-}
-
-QSize HistoryDelegate::sizeHint(const QStyleOptionViewItem& option,
-                                 const QModelIndex& index) const
-{
-    Q_UNUSED(option);
-    bool isRollbackTarget = index.data(IsRollbackTargetRole).toBool();
-    bool isCheckpoint = index.data(IsCheckpointRole).toBool();
-    if (isCheckpoint) {
-        return QSize(250, 52);  // larger for checkpoint entries
-    }
-    return QSize(250, isRollbackTarget ? 48 : 40);
-}
-
-
-// ============================================================================
-// TimelineBar — Fusion 360-style horizontal timeline
+// TimelineBar — Autodesk Inventor-style horizontal timeline
 // ============================================================================
 
 TimelineBar::TimelineBar(QWidget* parent)
     : QWidget(parent)
 {
-    setMinimumHeight(TimelineHeight);
-    setMaximumHeight(TimelineHeight);
+    setMinimumHeight(BarHeight);
+    setMaximumHeight(BarHeight);
     setMouseTracking(true);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     setFocusPolicy(Qt::ClickFocus);
@@ -321,12 +102,12 @@ void TimelineBar::setFilterProxy(QSortFilterProxyModel* proxy)
 
 QSize TimelineBar::sizeHint() const
 {
-    return QSize(400, TimelineHeight);
+    return QSize(600, BarHeight);
 }
 
 QSize TimelineBar::minimumSizeHint() const
 {
-    return QSize(100, TimelineHeight);
+    return QSize(100, BarHeight);
 }
 
 int TimelineBar::visibleToSource(int visibleIdx) const
@@ -357,30 +138,29 @@ int TimelineBar::rollbackVisibleIndex() const
     return sourceToVisible(histModel->rollbackPosition());
 }
 
-QRect TimelineBar::nodeRect(int visibleIndex) const
+QRect TimelineBar::cellRect(int visibleIndex) const
 {
-    int x = LeftMargin + visibleIndex * nodeSpacing - scrollOffset;
-    int y = NodeY;
-    return QRect(x - nodeSize / 2, y, nodeSize, nodeSize);
+    int cx = LeftMargin + visibleIndex * cellSpacing - scrollOffset;
+    return QRect(cx - cellSize / 2, CellY, cellSize, cellSize);
 }
 
-QRect TimelineBar::rollbackMarkerRect() const
+QRect TimelineBar::endOfPartRect() const
 {
     int rbIdx = rollbackVisibleIndex();
     if (rbIdx < 0) {
         return {};
     }
-    int x = LeftMargin + rbIdx * nodeSpacing - scrollOffset;
-    return QRect(x - MarkerTriangleSize, LineY + 2,
-                 MarkerTriangleSize * 2, MarkerTriangleSize + 4);
+    // End-of-Part marker sits right after the rollback cell
+    int x = LeftMargin + rbIdx * cellSpacing - scrollOffset + cellSize / 2 + 6;
+    return QRect(x - MarkerWidth / 2, 2, MarkerWidth, BarHeight - 4);
 }
 
-int TimelineBar::nodeAtPos(const QPoint& pos) const
+int TimelineBar::cellAtPos(const QPoint& pos) const
 {
     int count = filterProxy ? filterProxy->rowCount() : (histModel ? histModel->rowCount() : 0);
     for (int i = 0; i < count; ++i) {
-        QRect r = nodeRect(i);
-        r.adjust(-4, -4, 4, 4);  // slight hit-area expansion
+        QRect r = cellRect(i);
+        r.adjust(-4, -4, 4, 4);  // expand hit area slightly
         if (r.contains(pos)) {
             return i;
         }
@@ -391,67 +171,101 @@ int TimelineBar::nodeAtPos(const QPoint& pos) const
 void TimelineBar::scrollToEnd()
 {
     int count = filterProxy ? filterProxy->rowCount() : (histModel ? histModel->rowCount() : 0);
-    int totalWidth = LeftMargin * 2 + count * nodeSpacing;
+    int totalWidth = LeftMargin * 2 + count * cellSpacing;
     int maxScroll = qMax(0, totalWidth - width());
     scrollOffset = maxScroll;
 }
 
 void TimelineBar::paintEvent(QPaintEvent* /*event*/)
 {
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing, true);
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing, true);
 
     int w = width();
-    int h = height();
 
-    // Background
-    QColor bgColor = palette().window().color();
-    bgColor = bgColor.darker(110);
-    painter.fillRect(rect(), bgColor);
+    // --- Background: Inventor-style warm gray gradient ---
+    QLinearGradient bgGrad(0, 0, 0, BarHeight);
+    bgGrad.setColorAt(0.0, QColor(0xEA, 0xEA, 0xEA));
+    bgGrad.setColorAt(0.3, QColor(0xE0, 0xE0, 0xE0));
+    bgGrad.setColorAt(1.0, QColor(0xD0, 0xD0, 0xD0));
+    p.fillRect(rect(), bgGrad);
+
+    // Top edge highlight + bottom edge shadow (toolbar feel)
+    p.setPen(QPen(QColor(0xF4, 0xF4, 0xF4), 1));
+    p.drawLine(0, 0, w, 0);
+    p.setPen(QPen(QColor(0xA0, 0xA0, 0xA0), 1));
+    p.drawLine(0, BarHeight - 1, w, BarHeight - 1);
 
     int count = filterProxy ? filterProxy->rowCount() : (histModel ? histModel->rowCount() : 0);
     if (count == 0) {
-        painter.setPen(palette().mid().color());
+        p.setPen(QColor(0x80, 0x80, 0x80));
         QFont f = font();
         f.setItalic(true);
-        painter.setFont(f);
-        painter.drawText(rect(), Qt::AlignCenter, tr("No history entries"));
+        p.setFont(f);
+        p.drawText(rect(), Qt::AlignCenter, tr("No history — Inventor Timeline"));
         return;
     }
 
-    // --- Connecting line ---
-    int lineStartX = LeftMargin - scrollOffset;
-    int lineEndX = LeftMargin + (count - 1) * nodeSpacing - scrollOffset;
-
-    // Draw line in two sections: active (before rollback) and inactive (after)
+    // --- Horizontal rail/track ---
     int rbVisIdx = rollbackVisibleIndex();
+    int railStartX = LeftMargin - scrollOffset - cellSpacing / 2;
+    int railEndX = LeftMargin + (count - 1) * cellSpacing - scrollOffset + cellSpacing / 2;
 
-    // Active portion
-    if (rbVisIdx >= 0) {
-        int activeEndX = LeftMargin + rbVisIdx * nodeSpacing - scrollOffset;
-        painter.setPen(QPen(QColor(0x90, 0x90, 0x90), 2));
-        painter.drawLine(qMax(0, lineStartX), LineY,
-                         qMin(w, activeEndX), LineY);
+    // Active portion (before End-of-Part)
+    int activeEndX = (rbVisIdx >= 0)
+        ? LeftMargin + rbVisIdx * cellSpacing - scrollOffset + cellSize / 2 + 4
+        : railEndX;
 
-        // Inactive portion (past rollback)
-        if (rbVisIdx < count - 1) {
-            painter.setPen(QPen(QColor(0x50, 0x50, 0x50), 1, Qt::DashLine));
-            painter.drawLine(qMin(w, activeEndX), LineY,
-                             qMin(w, lineEndX), LineY);
+    p.setPen(QPen(QColor(0x90, 0x90, 0x90), 2));
+    p.drawLine(qMax(0, railStartX), RailY, qMin(w, activeEndX), RailY);
+
+    // Inactive portion (past End-of-Part) — dashed
+    if (rbVisIdx >= 0 && rbVisIdx < count - 1) {
+        QPen dashPen(QColor(0xA8, 0xA8, 0xA8), 1, Qt::DashLine);
+        p.setPen(dashPen);
+        p.drawLine(qMin(w, activeEndX), RailY,
+                   qMin(w, railEndX), RailY);
+    }
+
+    // --- Group brackets ---
+    if (histModel) {
+        const auto& groups = histModel->groups();
+        for (const auto& group : groups) {
+            if (group.collapsed) {
+                continue;
+            }
+            int startVis = sourceToVisible(group.startIndex);
+            int endVis = sourceToVisible(group.endIndex);
+            if (startVis < 0 || endVis < 0) {
+                continue;
+            }
+
+            int gx1 = LeftMargin + startVis * cellSpacing - scrollOffset - cellSize / 2 - 2;
+            int gx2 = LeftMargin + endVis * cellSpacing - scrollOffset + cellSize / 2 + 2;
+            int gy = CellY - 3;
+
+            // Bracket line
+            p.setPen(QPen(QColor(0x60, 0x60, 0x60), 1));
+            p.drawLine(gx1, gy, gx2, gy);
+            p.drawLine(gx1, gy, gx1, gy + 4);
+            p.drawLine(gx2, gy, gx2, gy + 4);
+
+            // Group name label centered above bracket
+            QFont gf = font();
+            gf.setPointSize(gf.pointSize() - 3);
+            gf.setBold(true);
+            p.setFont(gf);
+            p.setPen(QColor(0x50, 0x50, 0x50));
+            // no room above; skip if cramped
         }
     }
-    else {
-        painter.setPen(QPen(QColor(0x90, 0x90, 0x90), 2));
-        painter.drawLine(qMax(0, lineStartX), LineY,
-                         qMin(w, lineEndX), LineY);
-    }
 
-    // --- Feature nodes ---
+    // --- Feature cells ---
     for (int i = 0; i < count; ++i) {
-        QRect nRect = nodeRect(i);
+        QRect cr = cellRect(i);
 
         // Skip if off-screen
-        if (nRect.right() < -nodeSize || nRect.left() > w + nodeSize) {
+        if (cr.right() < -cellSize || cr.left() > w + cellSize) {
             continue;
         }
 
@@ -463,204 +277,266 @@ void TimelineBar::paintEvent(QPaintEvent* /*event*/)
         bool isRollbackTarget = idx.data(IsRollbackTargetRole).toBool();
         bool isSuppressed = idx.data(IsSuppressedRole).toBool();
         bool isCheckpoint = idx.data(IsCheckpointRole).toBool();
-        QColor color = idx.data(ColorRole).value<QColor>();
+        QColor familyColor = idx.data(ColorRole).value<QColor>();
         QIcon icon = idx.data(Qt::DecorationRole).value<QIcon>();
 
-        // Node background
-        QColor nodeBg = bgColor.lighter(120);
-        if (i == hoveredNode) {
-            nodeBg = nodeBg.lighter(130);
+        // --- Cell background ---
+        QColor cellBg(0xF8, 0xF8, 0xF8);
+        if (i == selectedCell) {
+            cellBg = QColor(0xD6, 0xE8, 0xFF);  // light blue selection
         }
-        if (i == selectedNode) {
-            nodeBg = palette().highlight().color();
-        }
-        if (isUndone) {
-            nodeBg.setAlpha(80);
-        }
-
-        // Selection glow effect — pulsing highlight ring around clicked node
-        if (i == selectedNode && !isUndone) {
-            QColor glowColor = color;
-            glowColor.setAlpha(60);
-            for (int g = 3; g >= 1; --g) {
-                QRect glowRect = nRect.adjusted(-g * 2, -g * 2, g * 2, g * 2);
-                glowColor.setAlpha(30 + (3 - g) * 20);
-                painter.setPen(QPen(glowColor, 1));
-                painter.setBrush(Qt::NoBrush);
-                painter.drawRoundedRect(glowRect, 4 + g, 4 + g);
-            }
-        }
-
-        // Node border
-        QPen borderPen(color, isRollbackTarget ? 3 : 2);
-        if (i == selectedNode && !isUndone) {
-            borderPen.setWidth(3);
-            borderPen.setColor(color.lighter(140));
+        else if (i == hoveredCell) {
+            cellBg = QColor(0xEE, 0xEE, 0xEE);
         }
         if (isUndone) {
-            borderPen.setColor(QColor(0x60, 0x60, 0x60));
+            cellBg.setAlpha(120);
+        }
+        if (isCheckpoint) {
+            cellBg = QColor(0xE8, 0xF5, 0xE9); // faint green
+        }
+
+        // --- Cell border ---
+        QPen borderPen(familyColor, 1.5);
+        if (i == selectedCell) {
+            borderPen = QPen(QColor(0x21, 0x96, 0xF3), 2.5);  // blue selected
+        }
+        else if (i == hoveredCell) {
+            borderPen = QPen(familyColor.lighter(120), 2.0);
+        }
+        if (isUndone) {
+            borderPen.setColor(QColor(0xB0, 0xB0, 0xB0));
         }
         if (isSuppressed) {
-            borderPen.setStyle(Qt::DashLine);
             borderPen.setColor(QColor(0xF4, 0x43, 0x36));
+            borderPen.setStyle(Qt::DashLine);
         }
 
-        painter.setPen(borderPen);
-        painter.setBrush(nodeBg);
+        // Hover glow effect (Inventor highlight)
+        if (i == hoveredCell && !isUndone) {
+            QColor glow = familyColor;
+            glow.setAlpha(30);
+            QRect glowR = cr.adjusted(-3, -3, 3, 3);
+            p.setPen(Qt::NoPen);
+            p.setBrush(glow);
+            p.drawRoundedRect(glowR, 5, 5);
+        }
+
+        // Selected glow
+        if (i == selectedCell && !isUndone) {
+            QColor selGlow(0x21, 0x96, 0xF3, 40);
+            QRect selR = cr.adjusted(-4, -4, 4, 4);
+            p.setPen(Qt::NoPen);
+            p.setBrush(selGlow);
+            p.drawRoundedRect(selR, 6, 6);
+        }
+
+        // Draw cell rectangle
+        p.setPen(borderPen);
+        p.setBrush(cellBg);
         if (isCheckpoint) {
-            // Checkpoint: render as rotated diamond (git commit style)
-            painter.save();
-            painter.translate(nRect.center());
-            painter.rotate(45);
-            QRect rotRect(-nRect.width() / 3, -nRect.height() / 3,
-                          nRect.width() * 2 / 3, nRect.height() * 2 / 3);
-            painter.drawRect(rotRect);
-            painter.restore();
+            // Checkpoint: render as rotated diamond
+            p.save();
+            p.translate(cr.center());
+            p.rotate(45);
+            int sz = cellSize * 2 / 3;
+            QRect dRect(-sz / 2, -sz / 2, sz, sz);
+            p.drawRect(dRect);
+            p.restore();
         }
         else {
-            painter.drawRoundedRect(nRect, 4, 4);
+            p.drawRoundedRect(cr, 4, 4);
         }
 
-        // Icon inside node
+        // Color tint strip at bottom of cell (2px, family color)
+        if (!isCheckpoint) {
+            QRect tintR(cr.left() + 1, cr.bottom() - 2, cr.width() - 2, 2);
+            QColor tint = familyColor;
+            if (isUndone) {
+                tint.setAlpha(60);
+            }
+            p.setPen(Qt::NoPen);
+            p.setBrush(tint);
+            p.drawRect(tintR);
+        }
+
+        // --- Icon centered in cell ---
         if (!icon.isNull()) {
-            QIcon::Mode iconMode = isUndone ? QIcon::Disabled : QIcon::Normal;
-            QRect iconR = nRect.adjusted(4, 4, -4, -4);
-            icon.paint(&painter, iconR, Qt::AlignCenter, iconMode);
+            QIcon::Mode mode = isUndone ? QIcon::Disabled : QIcon::Normal;
+            QRect iconR = cr.adjusted(5, 5, -5, -5);
+            icon.paint(&p, iconR, Qt::AlignCenter, mode);
         }
 
-        // Suppressed X overlay
+        // --- Suppressed X overlay ---
         if (isSuppressed) {
-            painter.setPen(QPen(QColor(0xF4, 0x43, 0x36, 200), 2));
-            painter.drawLine(nRect.topLeft() + QPoint(4, 4),
-                             nRect.bottomRight() - QPoint(4, 4));
-            painter.drawLine(nRect.topRight() + QPoint(-4, 4),
-                             nRect.bottomLeft() + QPoint(4, -4));
+            p.setPen(QPen(QColor(0xF4, 0x43, 0x36, 200), 2));
+            p.drawLine(cr.topLeft() + QPoint(4, 4),
+                       cr.bottomRight() - QPoint(4, 4));
+            p.drawLine(cr.topRight() + QPoint(-4, 4),
+                       cr.bottomLeft() + QPoint(4, -4));
         }
 
-        // Connection dot on the timeline line
-        int centerX = nRect.center().x();
-        int dotR = isRollbackTarget ? 5 : 3;
-        QColor dotColor = isRollbackTarget ? QColor(0xFF, 0xA0, 0x00) : color;
-        if (isUndone) {
-            dotColor.setAlpha(80);
+        // --- Connection tick from cell to rail ---
+        int cx = cr.center().x();
+        if (!isCheckpoint) {
+            QColor tickColor = isUndone ? QColor(0xB0, 0xB0, 0xB0)
+                                        : QColor(0x90, 0x90, 0x90);
+            p.setPen(QPen(tickColor, 1));
+            // small vertical tick from cell bottom to rail
+            if (cr.bottom() < RailY) {
+                p.drawLine(cx, cr.bottom(), cx, RailY);
+            }
         }
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(dotColor);
-        painter.drawEllipse(QPoint(centerX, LineY), dotR, dotR);
 
-        // Feature name below the line
+        // --- Feature label below the rail ---
         QString featureLabel = idx.data(FeatureLabelRole).toString();
         if (!featureLabel.isEmpty()) {
-            QFont labelFont = font();
-            labelFont.setPointSize(labelFont.pointSize() - 2);
-            if (isRollbackTarget) {
-                labelFont.setBold(true);
-            }
-            if (i == selectedNode) {
-                labelFont.setBold(true);
+            QFont lf = font();
+            lf.setPointSize(lf.pointSize() - 2);
+            if (isRollbackTarget || i == selectedCell) {
+                lf.setBold(true);
             }
             if (isSuppressed || isUndone) {
-                labelFont.setStrikeOut(true);
+                lf.setStrikeOut(true);
             }
-            painter.setFont(labelFont);
+            p.setFont(lf);
 
-            QColor textCol = isUndone ? QColor(0x60, 0x60, 0x60)
+            QColor textCol = isUndone ? QColor(0x90, 0x90, 0x90)
                            : isSuppressed ? QColor(0xA0, 0x60, 0x60)
-                           : palette().text().color();
-            painter.setPen(textCol);
+                           : QColor(0x40, 0x40, 0x40);
+            p.setPen(textCol);
 
-            QFontMetrics fm(labelFont);
-            QString elided = fm.elidedText(featureLabel, Qt::ElideRight, nodeSpacing - 4);
-            QRect textRect(centerX - nodeSpacing / 2, LineY + 6,
-                           nodeSpacing, 16);
-            painter.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop, elided);
+            QFontMetrics fm(lf);
+            QString elided = fm.elidedText(featureLabel, Qt::ElideRight, cellSpacing - 6);
+            QRect textRect(cx - cellSpacing / 2, LabelY, cellSpacing, 16);
+            p.drawText(textRect, Qt::AlignHCenter | Qt::AlignTop, elided);
         }
     }
 
-    // --- Rollback marker (triangle below the line) ---
-    int markerVisIdx = (draggingRollback && dragTargetNode >= 0)
-                           ? dragTargetNode
+    // --- End-of-Part marker (Inventor gold vertical bar) ---
+    int markerVisIdx = (draggingMarker && dragTargetCell >= 0)
+                           ? dragTargetCell
                            : rollbackVisibleIndex();
     if (markerVisIdx >= 0) {
-        int markerX = LeftMargin + markerVisIdx * nodeSpacing - scrollOffset;
+        int mx = LeftMargin + markerVisIdx * cellSpacing - scrollOffset + cellSize / 2 + 6;
 
-        QPainterPath triangle;
-        triangle.moveTo(markerX, LineY + 3);
-        triangle.lineTo(markerX - MarkerTriangleSize, LineY + 3 + MarkerTriangleSize);
-        triangle.lineTo(markerX + MarkerTriangleSize, LineY + 3 + MarkerTriangleSize);
-        triangle.closeSubpath();
+        // Vertical bar
+        QLinearGradient markerGrad(mx - MarkerWidth / 2, 0, mx + MarkerWidth / 2, 0);
+        QColor markerBase = draggingMarker ? QColor(0xFF, 0x80, 0x00) : QColor(0xFF, 0xA0, 0x00);
+        markerGrad.setColorAt(0.0, markerBase.lighter(130));
+        markerGrad.setColorAt(0.5, markerBase);
+        markerGrad.setColorAt(1.0, markerBase.darker(115));
+        p.setPen(QPen(markerBase.darker(130), 1));
+        p.setBrush(markerGrad);
 
-        QColor markerColor = draggingRollback ? QColor(0xFF, 0x80, 0x00)
-                                              : QColor(0xFF, 0xA0, 0x00);
-        painter.setPen(QPen(markerColor.darker(120), 1));
-        painter.setBrush(markerColor);
-        painter.drawPath(triangle);
+        QRect barR(mx - MarkerWidth / 2, 4, MarkerWidth, BarHeight - 8);
+        p.drawRoundedRect(barR, 2, 2);
 
-        // Marker label
-        if (!draggingRollback) {
-            QFont mFont = font();
-            mFont.setPointSize(mFont.pointSize() - 3);
-            mFont.setBold(true);
-            painter.setFont(mFont);
-            painter.setPen(markerColor);
-            // Show below triangle
+        // Small triangle handle at top
+        QPainterPath tri;
+        tri.moveTo(mx, 0);
+        tri.lineTo(mx - 6, -1);
+        tri.lineTo(mx + 6, -1);
+        tri.closeSubpath();
+        // Actually draw it pointing down at the top of bar
+        QPainterPath topTri;
+        topTri.moveTo(mx, 4);
+        topTri.lineTo(mx - 5, 0);
+        topTri.lineTo(mx + 5, 0);
+        topTri.closeSubpath();
+        p.setPen(Qt::NoPen);
+        p.setBrush(markerBase);
+        p.drawPath(topTri);
+
+        // Bottom triangle handle
+        QPainterPath botTri;
+        botTri.moveTo(mx, BarHeight - 4);
+        botTri.lineTo(mx - 5, BarHeight);
+        botTri.lineTo(mx + 5, BarHeight);
+        botTri.closeSubpath();
+        p.drawPath(botTri);
+
+        // "End of Part" label
+        QFont mf = font();
+        mf.setPointSize(mf.pointSize() - 3);
+        mf.setItalic(true);
+        p.setFont(mf);
+        p.setPen(markerBase.darker(140));
+        QRect labelR(mx - 30, BarHeight - 14, 60, 12);
+        // Only draw if there's space (not overlapping cells)
+        if (markerVisIdx == count - 1 || cellSpacing > 55) {
+            // skip label to avoid clutter in tight layouts
         }
     }
 
-    // --- Scroll indicators ---
+    // --- Scroll indicators (left / right arrows) ---
     if (scrollOffset > 0) {
-        // Left arrow
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 120));
+        // Left fade + arrow
+        QLinearGradient leftFade(0, 0, 24, 0);
+        leftFade.setColorAt(0.0, QColor(0xD0, 0xD0, 0xD0, 200));
+        leftFade.setColorAt(1.0, QColor(0xD0, 0xD0, 0xD0, 0));
+        p.fillRect(0, 0, 24, BarHeight, leftFade);
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x60, 0x60, 0x60));
         QPainterPath leftArr;
-        leftArr.moveTo(12, LineY);
-        leftArr.lineTo(4, LineY - 6);
-        leftArr.lineTo(4, LineY + 6);
+        leftArr.moveTo(10, RailY);
+        leftArr.lineTo(4, RailY - 5);
+        leftArr.lineTo(4, RailY + 5);
         leftArr.closeSubpath();
-        painter.drawPath(leftArr);
+        p.drawPath(leftArr);
     }
 
-    int totalWidth = LeftMargin * 2 + count * nodeSpacing;
+    int totalWidth = LeftMargin * 2 + count * cellSpacing;
     if (scrollOffset < totalWidth - w) {
-        // Right arrow
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(QColor(255, 255, 255, 120));
+        // Right fade + arrow
+        QLinearGradient rightFade(w - 24, 0, w, 0);
+        rightFade.setColorAt(0.0, QColor(0xD0, 0xD0, 0xD0, 0));
+        rightFade.setColorAt(1.0, QColor(0xD0, 0xD0, 0xD0, 200));
+        p.fillRect(w - 24, 0, 24, BarHeight, rightFade);
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x60, 0x60, 0x60));
         QPainterPath rightArr;
-        rightArr.moveTo(w - 12, LineY);
-        rightArr.lineTo(w - 4, LineY - 6);
-        rightArr.lineTo(w - 4, LineY + 6);
+        rightArr.moveTo(w - 10, RailY);
+        rightArr.lineTo(w - 4, RailY - 5);
+        rightArr.lineTo(w - 4, RailY + 5);
         rightArr.closeSubpath();
-        painter.drawPath(rightArr);
+        p.drawPath(rightArr);
     }
 }
+
+
+// ============================================================================
+// TimelineBar — Mouse interaction
+// ============================================================================
 
 void TimelineBar::mousePressEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        // Check if pressing on rollback marker
-        QRect rbRect = rollbackMarkerRect();
-        if (rbRect.isValid() && rbRect.contains(event->pos())) {
-            draggingRollback = true;
-            dragTargetNode = rollbackVisibleIndex();
+        // Check if pressing on End-of-Part marker
+        QRect eopRect = endOfPartRect();
+        if (eopRect.isValid() && eopRect.adjusted(-4, 0, 4, 0).contains(event->pos())) {
+            draggingMarker = true;
+            dragTargetCell = rollbackVisibleIndex();
             setCursor(Qt::SizeHorCursor);
             event->accept();
             return;
         }
 
-        int node = nodeAtPos(event->pos());
-        if (node >= 0) {
-            selectedNode = node;
+        int cell = cellAtPos(event->pos());
+        if (cell >= 0) {
+            selectedCell = cell;
             update();
-            int srcIdx = visibleToSource(node);
+            int srcIdx = visibleToSource(cell);
             Q_EMIT featureClicked(srcIdx);
         }
     }
     else if (event->button() == Qt::RightButton) {
-        int node = nodeAtPos(event->pos());
-        if (node >= 0) {
-            selectedNode = node;
+        int cell = cellAtPos(event->pos());
+        if (cell >= 0) {
+            selectedCell = cell;
             update();
-            int srcIdx = visibleToSource(node);
+            int srcIdx = visibleToSource(cell);
             Q_EMIT featureContextMenu(srcIdx, event->globalPos());
         }
     }
@@ -669,37 +545,37 @@ void TimelineBar::mousePressEvent(QMouseEvent* event)
 
 void TimelineBar::mouseMoveEvent(QMouseEvent* event)
 {
-    if (draggingRollback) {
-        // Find nearest node to cursor X
+    if (draggingMarker) {
+        // Find nearest cell to cursor X
         int count = filterProxy ? filterProxy->rowCount()
                                 : (histModel ? histModel->rowCount() : 0);
         int bestDist = INT_MAX;
-        int bestNode = -1;
+        int bestCell = -1;
         for (int i = 0; i < count; ++i) {
-            QRect r = nodeRect(i);
+            QRect r = cellRect(i);
             int dist = qAbs(r.center().x() - event->pos().x());
             if (dist < bestDist) {
                 bestDist = dist;
-                bestNode = i;
+                bestCell = i;
             }
         }
-        if (bestNode >= 0 && bestNode != dragTargetNode) {
-            dragTargetNode = bestNode;
+        if (bestCell >= 0 && bestCell != dragTargetCell) {
+            dragTargetCell = bestCell;
             update();
         }
         event->accept();
         return;
     }
 
-    int node = nodeAtPos(event->pos());
-    if (node != hoveredNode) {
-        hoveredNode = node;
+    int cell = cellAtPos(event->pos());
+    if (cell != hoveredCell) {
+        hoveredCell = cell;
         update();
     }
 
-    // Change cursor for rollback marker
-    QRect rbRect = rollbackMarkerRect();
-    if (rbRect.isValid() && rbRect.contains(event->pos())) {
+    // Change cursor for End-of-Part marker
+    QRect eopRect = endOfPartRect();
+    if (eopRect.isValid() && eopRect.adjusted(-4, 0, 4, 0).contains(event->pos())) {
         setCursor(Qt::SizeHorCursor);
     }
     else {
@@ -711,15 +587,15 @@ void TimelineBar::mouseMoveEvent(QMouseEvent* event)
 
 void TimelineBar::mouseReleaseEvent(QMouseEvent* event)
 {
-    if (draggingRollback && event->button() == Qt::LeftButton) {
-        draggingRollback = false;
+    if (draggingMarker && event->button() == Qt::LeftButton) {
+        draggingMarker = false;
         setCursor(Qt::ArrowCursor);
 
-        if (dragTargetNode >= 0) {
-            int srcIdx = visibleToSource(dragTargetNode);
+        if (dragTargetCell >= 0) {
+            int srcIdx = visibleToSource(dragTargetCell);
             Q_EMIT rollbackDragged(srcIdx);
         }
-        dragTargetNode = -1;
+        dragTargetCell = -1;
         update();
         event->accept();
         return;
@@ -730,9 +606,9 @@ void TimelineBar::mouseReleaseEvent(QMouseEvent* event)
 void TimelineBar::mouseDoubleClickEvent(QMouseEvent* event)
 {
     if (event->button() == Qt::LeftButton) {
-        int node = nodeAtPos(event->pos());
-        if (node >= 0) {
-            int srcIdx = visibleToSource(node);
+        int cell = cellAtPos(event->pos());
+        if (cell >= 0) {
+            int srcIdx = visibleToSource(cell);
             Q_EMIT featureDoubleClicked(srcIdx);
             event->accept();
             return;
@@ -744,13 +620,13 @@ void TimelineBar::mouseDoubleClickEvent(QMouseEvent* event)
 void TimelineBar::wheelEvent(QWheelEvent* event)
 {
     if (event->modifiers() & Qt::ControlModifier) {
-        // Zoom: adjust node spacing
+        // Zoom: adjust cell spacing
         int delta = event->angleDelta().y();
         if (delta > 0) {
-            nodeSpacing = qMin(nodeSpacing + 4, MaxNodeSpacing);
+            cellSpacing = qMin(cellSpacing + 4, MaxCellSpacing);
         }
         else if (delta < 0) {
-            nodeSpacing = qMax(nodeSpacing - 4, MinNodeSpacing);
+            cellSpacing = qMax(cellSpacing - 4, MinCellSpacing);
         }
         update();
         event->accept();
@@ -761,7 +637,7 @@ void TimelineBar::wheelEvent(QWheelEvent* event)
     int delta = event->angleDelta().y();
     int count = filterProxy ? filterProxy->rowCount()
                             : (histModel ? histModel->rowCount() : 0);
-    int totalWidth = LeftMargin * 2 + count * nodeSpacing;
+    int totalWidth = LeftMargin * 2 + count * cellSpacing;
     int maxScroll = qMax(0, totalWidth - width());
 
     scrollOffset = qBound(0, scrollOffset - delta, maxScroll);
@@ -772,10 +648,9 @@ void TimelineBar::wheelEvent(QWheelEvent* event)
 void TimelineBar::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);
-    // Clamp scroll offset
     int count = filterProxy ? filterProxy->rowCount()
                             : (histModel ? histModel->rowCount() : 0);
-    int totalWidth = LeftMargin * 2 + count * nodeSpacing;
+    int totalWidth = LeftMargin * 2 + count * cellSpacing;
     int maxScroll = qMax(0, totalWidth - width());
     scrollOffset = qMin(scrollOffset, maxScroll);
 }
@@ -784,16 +659,24 @@ bool TimelineBar::event(QEvent* event)
 {
     if (event->type() == QEvent::ToolTip) {
         auto helpEvent = static_cast<QHelpEvent*>(event);
-        int node = nodeAtPos(helpEvent->pos());
-        if (node >= 0) {
+        int cell = cellAtPos(helpEvent->pos());
+        if (cell >= 0) {
             QModelIndex idx = filterProxy
-                ? filterProxy->index(node, 0)
-                : histModel->index(node, 0);
+                ? filterProxy->index(cell, 0)
+                : histModel->index(cell, 0);
             QString tip = idx.data(Qt::ToolTipRole).toString();
             QToolTip::showText(helpEvent->globalPos(), tip, this);
         }
         else {
-            QToolTip::hideText();
+            // Check if over End-of-Part marker
+            QRect eopRect = endOfPartRect();
+            if (eopRect.isValid() && eopRect.adjusted(-4, 0, 4, 0).contains(helpEvent->pos())) {
+                QToolTip::showText(helpEvent->globalPos(),
+                                   tr("End of Part — drag to rollback/roll-forward"), this);
+            }
+            else {
+                QToolTip::hideText();
+            }
         }
         return true;
     }
@@ -857,7 +740,7 @@ bool HistoryFilterProxy::filterAcceptsRow(int sourceRow,
 
 
 // ============================================================================
-// HistoryPanel — Main Fusion 360-style timeline widget
+// HistoryPanel — Inventor-style compact timeline panel
 // ============================================================================
 
 HistoryPanel::HistoryPanel(QWidget* parent)
@@ -868,7 +751,6 @@ HistoryPanel::HistoryPanel(QWidget* parent)
     filterProxy->setSourceModel(model);
 
     setupUi();
-    setupToolbar();
     setupConnections();
 
     // NOLINTBEGIN
@@ -892,179 +774,17 @@ void HistoryPanel::setupUi()
     layout->setContentsMargins(0, 0, 0, 0);
     layout->setSpacing(0);
 
-    // --- Toolbar area ---
-    toolbar = new QToolBar(this);
-    toolbar->setIconSize(QSize(16, 16));
-    toolbar->setMovable(false);
-
-    // Search box
-    searchBox = new QLineEdit(this);
-    searchBox->setPlaceholderText(tr("Search history..."));
-    searchBox->setClearButtonEnabled(true);
-    searchBox->setMaximumWidth(200);
-    toolbar->addWidget(searchBox);
-    toolbar->addSeparator();
-
-    // Filter combo
-    filterCombo = new QComboBox(this);
-    filterCombo->addItem(tr("All Events"), -1);
-    filterCombo->addItem(tr("Operations Only"), static_cast<int>(EntryType::Transaction));
-    filterCombo->addItem(tr("Object Changes"), static_cast<int>(EntryType::ObjectCreated));
-    filterCombo->addItem(tr("Undo/Redo"), static_cast<int>(EntryType::Undo));
-    filterCombo->setMaximumWidth(140);
-    toolbar->addWidget(filterCombo);
-    toolbar->addSeparator();
-
-    // Show undone checkbox
-    showUndoneCheck = new QCheckBox(tr("Show undone"), this);
-    showUndoneCheck->setChecked(true);
-    toolbar->addWidget(showUndoneCheck);
-    toolbar->addSeparator();
-
-    // Toggle detail list visibility
-    toggleListBtn = new QToolButton(this);
-    toggleListBtn->setText(tr("Details"));
-    toggleListBtn->setCheckable(true);
-    toggleListBtn->setChecked(true);
-    toggleListBtn->setToolTip(tr("Show/hide detail list view"));
-    toolbar->addWidget(toggleListBtn);
-    toolbar->addSeparator();
-
-    // Export & Clear buttons
-    exportBtn = new QPushButton(tr("Export"), this);
-    exportBtn->setToolTip(tr("Export modification history to text file"));
-    toolbar->addWidget(exportBtn);
-
-    clearBtn = new QPushButton(tr("Clear"), this);
-    clearBtn->setToolTip(tr("Clear modification history"));
-    toolbar->addWidget(clearBtn);
-
-    // Checkpoint button
-    toolbar->addSeparator();
-    checkpointBtn = new QPushButton(tr("📌 Checkpoint"), this);
-    checkpointBtn->setToolTip(tr("Create a snapshot of the current document state (like a git commit)"));
-    checkpointBtn->setStyleSheet(QStringLiteral(
-        "QPushButton {"
-        "  background-color: #00C853;"
-        "  color: white;"
-        "  border: none;"
-        "  border-radius: 3px;"
-        "  padding: 4px 10px;"
-        "  font-weight: bold;"
-        "}"
-        "QPushButton:hover {"
-        "  background-color: #00E676;"
-        "}"
-        "QPushButton:pressed {"
-        "  background-color: #00A844;"
-        "}"
-    ));
-    toolbar->addWidget(checkpointBtn);
-
-    layout->addWidget(toolbar);
-
-    // --- Horizontal Timeline Bar (Fusion 360 style) ---
+    // Inventor Timeline is just the horizontal bar — no toolbar, no list
     timelineBar = new TimelineBar(this);
     timelineBar->setModel(model);
     timelineBar->setFilterProxy(filterProxy);
     layout->addWidget(timelineBar);
 
-    // --- Separator ---
-    auto separator = new QFrame(this);
-    separator->setFrameShape(QFrame::HLine);
-    separator->setFrameShadow(QFrame::Sunken);
-    layout->addWidget(separator);
-
-    // --- Detail List view ---
-    listView = new QListView(this);
-    listView->setModel(filterProxy);
-    listView->setItemDelegate(new HistoryDelegate(listView));
-    listView->setSelectionMode(QAbstractItemView::SingleSelection);
-    listView->setContextMenuPolicy(Qt::CustomContextMenu);
-    listView->setMouseTracking(true);
-    listView->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
-    listView->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-
-    listView->setStyleSheet(QStringLiteral(
-        "QListView {"
-        "  border: none;"
-        "  background: palette(base);"
-        "}"
-        "QListView::item:hover {"
-        "  background: palette(midlight);"
-        "}"
-        "QListView::item:selected {"
-        "  background: palette(highlight);"
-        "}"
-    ));
-
-    layout->addWidget(listView, 1);
-
-    // --- Status bar ---
-    statusLabel = new QLabel(this);
-    statusLabel->setContentsMargins(8, 4, 8, 4);
-    statusLabel->setStyleSheet(QStringLiteral(
-        "QLabel {"
-        "  color: palette(mid);"
-        "  font-size: 10px;"
-        "  border-top: 1px solid palette(mid);"
-        "  background: palette(window);"
-        "}"
-    ));
-    statusLabel->setText(tr("No document — Fusion 360-style Design History Timeline"));
-    layout->addWidget(statusLabel);
-
     setLayout(layout);
-}
-
-void HistoryPanel::setupToolbar()
-{
-    // Already done in setupUi
 }
 
 void HistoryPanel::setupConnections()
 {
-    // Search
-    connect(searchBox, &QLineEdit::textChanged,
-            this, &HistoryPanel::onSearchChanged);
-
-    // Filter combo
-    connect(filterCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &HistoryPanel::onFilterChanged);
-
-    // Show undone
-    connect(showUndoneCheck, &QCheckBox::toggled, this, [this](bool checked) {
-        filterProxy->setShowUndone(checked);
-        updateStatus();
-    });
-
-    // Toggle detail list
-    connect(toggleListBtn, &QToolButton::toggled, this, [this](bool checked) {
-        listView->setVisible(checked);
-        listViewVisible = checked;
-    });
-
-    // Export
-    connect(exportBtn, &QPushButton::clicked, this, &HistoryPanel::onExportClicked);
-
-    // Clear
-    connect(clearBtn, &QPushButton::clicked, this, &HistoryPanel::onClearClicked);
-
-    // Checkpoint
-    connect(checkpointBtn, &QPushButton::clicked, this, &HistoryPanel::onCheckpointClicked);
-
-    // List view double-click
-    connect(listView, &QListView::doubleClicked,
-            this, &HistoryPanel::onEntryDoubleClicked);
-
-    // List view single-click — highlight object in 3D view
-    connect(listView, &QListView::clicked,
-            this, &HistoryPanel::onEntryClicked);
-
-    // List view context menu
-    connect(listView, &QListView::customContextMenuRequested,
-            this, &HistoryPanel::onEntryContextMenu);
-
     // Timeline bar signals
     connect(timelineBar, &TimelineBar::featureClicked,
             this, &HistoryPanel::onTimelineClicked);
@@ -1074,47 +794,13 @@ void HistoryPanel::setupConnections()
             this, &HistoryPanel::onTimelineContextMenu);
     connect(timelineBar, &TimelineBar::rollbackDragged,
             this, &HistoryPanel::onTimelineRollbackDragged);
-
-    // Entry added — auto-scroll to bottom
-    connect(model, &HistoryModel::entryAdded,
-            this, &HistoryPanel::onEntryAdded);
-
-    // Model changes — update status
-    connect(model, &QAbstractItemModel::rowsInserted, this, [this]() {
-        updateStatus();
-    });
-    connect(model, &QAbstractItemModel::modelReset, this, [this]() {
-        updateStatus();
-    });
 }
 
 void HistoryPanel::setDocument(const App::Document* doc, const Gui::Document* guiDoc)
 {
     model->setDocument(doc, guiDoc);
-    updateStatus();
 }
 
-void HistoryPanel::updateStatus()
-{
-    int total = model->rowCount();
-    int shown = filterProxy->rowCount();
-    QString docName;
-    if (model->document()) {
-        docName = QString::fromUtf8(model->document()->Label.getValue());
-    }
-
-    if (docName.isEmpty()) {
-        statusLabel->setText(tr("No document — Fusion 360-style Design History Timeline"));
-    }
-    else if (total == shown) {
-        statusLabel->setText(tr("📋 %1 — %2 entries | Scroll: mouse wheel | Zoom: Ctrl+wheel | Edit: double-click")
-                                 .arg(docName).arg(total));
-    }
-    else {
-        statusLabel->setText(tr("📋 %1 — %2 of %3 entries shown")
-                                 .arg(docName).arg(shown).arg(total));
-    }
-}
 
 // ============================================================================
 // Slots
@@ -1132,15 +818,7 @@ void HistoryPanel::onDeleteDocument(const Gui::Document& doc)
 {
     if (doc.getDocument() == model->document()) {
         model->detachDocument();
-        updateStatus();
     }
-}
-
-void HistoryPanel::onEntryClicked(const QModelIndex& proxyIndex)
-{
-    QModelIndex srcIndex = filterProxy->mapToSource(proxyIndex);
-    QString objName = model->data(srcIndex, ObjectNameRole).toString();
-    highlightObjectInView(objName);
 }
 
 void HistoryPanel::onTimelineClicked(int sourceIndex)
@@ -1169,12 +847,10 @@ void HistoryPanel::highlightObjectInView(const QString& objectName)
         return;
     }
 
-    // Clear previous selection and select this object
     const char* docName = appDoc->getName();
     Gui::Selection().clearSelection(docName);
     Gui::Selection().addSelection(docName, obj->getNameInDocument());
 
-    // Zoom the 3D view to fit the selected object
     auto* guiApp = Gui::Application::Instance;
     if (guiApp) {
         auto* mdiView = guiApp->activeView();
@@ -1185,60 +861,6 @@ void HistoryPanel::highlightObjectInView(const QString& objectName)
                 viewer->viewSelection();
             }
         }
-    }
-}
-
-void HistoryPanel::onEntryDoubleClicked(const QModelIndex& proxyIndex)
-{
-    QModelIndex srcIndex = filterProxy->mapToSource(proxyIndex);
-    int srcRow = srcIndex.row();
-
-    // Check if this is a checkpoint — restore it
-    int entryType = model->data(srcIndex, EntryTypeRole).toInt();
-    if (entryType == static_cast<int>(EntryType::Checkpoint)) {
-        int cpId = model->data(srcIndex, CheckpointIdRole).toInt();
-        if (cpId >= 0) {
-            int reply = QMessageBox::question(
-                this,
-                tr("Restore Checkpoint?"),
-                tr("Restore document to checkpoint:\n\n%1\n\n"
-                   "This will replace the current document state.\n"
-                   "Unsaved changes will be lost.")
-                    .arg(model->data(srcIndex, CheckpointNameRole).toString()),
-                QMessageBox::Yes | QMessageBox::No,
-                QMessageBox::No);
-            if (reply == QMessageBox::Yes) {
-                model->restoreCheckpoint(srcRow);
-            }
-            return;
-        }
-    }
-
-    // Try to edit the feature first (Fusion 360 primary action)
-    QString objName = model->data(srcIndex, ObjectNameRole).toString();
-    if (!objName.isEmpty()) {
-        if (model->editFeature(srcRow)) {
-            return;  // Successfully opened edit dialog
-        }
-    }
-
-    // Fallback: rollback
-    int transId = model->data(srcIndex, TransactionIdRole).toInt();
-    if (transId <= 0) {
-        return;
-    }
-
-    int reply = QMessageBox::question(
-        this,
-        tr("Rollback to this point?"),
-        tr("This will undo all operations after this point.\n"
-           "Are you sure you want to rollback to:\n\n%1")
-            .arg(model->data(srcIndex, DescriptionRole).toString()),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        model->rollbackTo(srcRow);
     }
 }
 
@@ -1263,7 +885,7 @@ void HistoryPanel::onTimelineDoubleClicked(int sourceIndex)
         }
     }
 
-    // Try edit feature first (Fusion 360 behavior)
+    // Try edit feature (Inventor: double-click opens edit dialog)
     if (model->editFeature(sourceIndex)) {
         return;
     }
@@ -1284,24 +906,13 @@ void HistoryPanel::onTimelineContextMenu(int sourceIndex, const QPoint& globalPo
 
 void HistoryPanel::onTimelineRollbackDragged(int sourceIndex)
 {
-    // Draggable rollback marker — Fusion 360's key interaction
+    // Draggable End-of-Part marker — Inventor's key timeline interaction
     if (sourceIndex >= 0 && sourceIndex < model->rowCount()) {
         const auto& entry = model->entries()[sourceIndex];
         if (entry.transactionId > 0) {
             model->rollbackTo(sourceIndex);
         }
     }
-}
-
-void HistoryPanel::onEntryContextMenu(const QPoint& pos)
-{
-    QModelIndex proxyIndex = listView->indexAt(pos);
-    if (!proxyIndex.isValid()) {
-        return;
-    }
-
-    QModelIndex srcIndex = filterProxy->mapToSource(proxyIndex);
-    showContextMenu(srcIndex.row(), listView->viewport()->mapToGlobal(pos));
 }
 
 void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
@@ -1322,12 +933,10 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
     bool isCheckpoint = model->data(srcIndex, IsCheckpointRole).toBool();
     int checkpointId = model->data(srcIndex, CheckpointIdRole).toInt();
     if (isCheckpoint && checkpointId >= 0) {
-        auto restoreAction = menu.addAction(tr("🔄 Restore Checkpoint"));
-        restoreAction->setToolTip(tr("Restore document to this checkpoint state"));
+        auto restoreAction = menu.addAction(tr("Restore Checkpoint"));
         connect(restoreAction, &QAction::triggered, this, [this, sourceRow]() {
             int reply = QMessageBox::question(
-                this,
-                tr("Restore Checkpoint?"),
+                this, tr("Restore Checkpoint?"),
                 tr("Restore document to this checkpoint?\n\n"
                    "Current unsaved changes will be lost."),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
@@ -1336,7 +945,7 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
             }
         });
 
-        auto renameAction = menu.addAction(tr("✏️ Rename Checkpoint"));
+        auto renameAction = menu.addAction(tr("Rename Checkpoint..."));
         connect(renameAction, &QAction::triggered, this, [this, sourceRow, description]() {
             bool ok;
             QString newName = QInputDialog::getText(
@@ -1348,12 +957,11 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
             }
         });
 
-        auto deleteAction = menu.addAction(tr("🗑️ Delete Checkpoint"));
+        auto deleteAction = menu.addAction(tr("Delete Checkpoint"));
         connect(deleteAction, &QAction::triggered, this, [this, sourceRow]() {
             int reply = QMessageBox::question(
-                this,
-                tr("Delete Checkpoint?"),
-                tr("This will permanently delete this checkpoint snapshot.\nContinue?"),
+                this, tr("Delete Checkpoint?"),
+                tr("This will permanently delete this checkpoint.\nContinue?"),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (reply == QMessageBox::Yes) {
                 model->deleteCheckpoint(sourceRow);
@@ -1363,32 +971,31 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
         menu.addSeparator();
     }
 
-    // --- Edit Feature (Fusion 360 primary action) ---
+    // --- Edit Feature (Inventor primary action) ---
     if (!objName.isEmpty() && model->document()) {
         auto obj = model->document()->getObject(objName.toLatin1().constData());
         if (obj) {
-            auto editAction = menu.addAction(tr("✏️ Edit Feature"));
-            editAction->setToolTip(tr("Open the feature's parameter dialog"));
+            auto editAction = menu.addAction(tr("Edit Feature"));
             connect(editAction, &QAction::triggered, this, [this, sourceRow]() {
                 model->editFeature(sourceRow);
             });
 
             menu.addSeparator();
 
-            // --- Suppress/Unsuppress (Fusion 360 key feature) ---
+            // --- Suppress/Unsuppress ---
             auto ext = obj->getExtensionByType<App::SuppressibleExtension>(true);
             if (ext) {
                 QString suppressText = isSuppressed
-                    ? tr("✅ Unsuppress Feature")
-                    : tr("⊘ Suppress Feature");
+                    ? tr("Unsuppress Feature")
+                    : tr("Suppress Feature");
                 auto suppressAction = menu.addAction(suppressText);
                 connect(suppressAction, &QAction::triggered, this, [this, sourceRow]() {
                     model->toggleSuppressed(sourceRow);
                 });
             }
 
-            // --- Select in Tree ---
-            auto selectAction = menu.addAction(tr("🔍 Find in Model Tree"));
+            // --- Find in Tree ---
+            auto selectAction = menu.addAction(tr("Find in Model Tree"));
             connect(selectAction, &QAction::triggered, this, [obj]() {
                 Gui::Selection().clearSelection();
                 Gui::Selection().addSelection(obj->getDocument()->getName(),
@@ -1399,8 +1006,8 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
         }
     }
 
-    // --- Copy description ---
-    auto copyAction = menu.addAction(tr("📋 Copy Description"));
+    // --- Copy ---
+    auto copyAction = menu.addAction(tr("Copy Description"));
     connect(copyAction, &QAction::triggered, this, [description]() {
         QApplication::clipboard()->setText(description);
     });
@@ -1408,12 +1015,11 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
     // --- Rollback ---
     if (transId > 0) {
         menu.addSeparator();
-        auto rollbackAction = menu.addAction(tr("⏪ Rollback to this point"));
+        auto rollbackAction = menu.addAction(tr("Rollback to Here"));
         connect(rollbackAction, &QAction::triggered, this, [this, sourceRow]() {
             int reply = QMessageBox::question(
-                this,
-                tr("Rollback to this point?"),
-                tr("This will undo all operations after this point.\nContinue?"),
+                this, tr("Rollback?"),
+                tr("Undo all operations after this point?\nContinue?"),
                 QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
             if (reply == QMessageBox::Yes) {
                 model->rollbackTo(sourceRow);
@@ -1425,14 +1031,13 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
     int groupId = model->data(srcIndex, GroupIdRole).toInt();
     menu.addSeparator();
     if (groupId >= 0) {
-        auto ungroupAction = menu.addAction(tr("📂 Ungroup"));
+        auto ungroupAction = menu.addAction(tr("Ungroup"));
         connect(ungroupAction, &QAction::triggered, this, [this, groupId]() {
             model->removeGroup(groupId);
         });
     }
     else {
-        auto groupAction = menu.addAction(tr("📁 Create Group..."));
-        groupAction->setToolTip(tr("Group this and adjacent entries together"));
+        auto groupAction = menu.addAction(tr("Create Group..."));
         connect(groupAction, &QAction::triggered, this, [this, sourceRow]() {
             bool ok;
             QString name = QInputDialog::getText(
@@ -1440,7 +1045,6 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
                 tr("Enter a name for the feature group:"),
                 QLineEdit::Normal, tr("Feature Group"), &ok);
             if (ok && !name.isEmpty()) {
-                // Group a range of 3 entries centered on this one
                 int start = qMax(0, sourceRow - 1);
                 int end = qMin(model->rowCount() - 1, sourceRow + 1);
                 model->createGroup(name, start, end);
@@ -1448,127 +1052,60 @@ void HistoryPanel::showContextMenu(int sourceRow, const QPoint& globalPos)
         });
     }
 
+    // --- Checkpoint ---
+    menu.addSeparator();
+    auto cpAction = menu.addAction(tr("Create Checkpoint..."));
+    connect(cpAction, &QAction::triggered, this, [this]() {
+        if (!model->document()) {
+            return;
+        }
+        bool ok;
+        QString name = QInputDialog::getText(
+            this, tr("Create Checkpoint"),
+            tr("Checkpoint name:"),
+            QLineEdit::Normal,
+            tr("Checkpoint %1").arg(model->checkpointCount() + 1),
+            &ok);
+        if (ok && !name.isEmpty()) {
+            model->createCheckpoint(name);
+        }
+    });
+
+    // --- Export / Clear ---
+    menu.addSeparator();
+    auto exportAction = menu.addAction(tr("Export History..."));
+    connect(exportAction, &QAction::triggered, this, [this]() {
+        QString text = model->exportToText();
+        if (text.isEmpty()) {
+            return;
+        }
+        QString filePath = QFileDialog::getSaveFileName(
+            this, tr("Export History"),
+            QStringLiteral("freecad_history.txt"),
+            tr("Text files (*.txt);;All files (*.*)"));
+        if (!filePath.isEmpty()) {
+            QFile file(filePath);
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                QTextStream stream(&file);
+                stream << text;
+                file.close();
+            }
+        }
+    });
+
+    auto clearAction = menu.addAction(tr("Clear History"));
+    connect(clearAction, &QAction::triggered, this, [this]() {
+        int reply = QMessageBox::question(
+            this, tr("Clear History?"),
+            tr("Clear the timeline display?\n"
+               "This does NOT affect undo/redo."),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (reply == QMessageBox::Yes) {
+            model->clear();
+        }
+    });
+
     menu.exec(globalPos);
-}
-
-void HistoryPanel::onEntryAdded(int /*index*/)
-{
-    QScrollBar* sb = listView->verticalScrollBar();
-    if (sb) {
-        int maxVal = sb->maximum();
-        if (sb->value() >= maxVal - 50) {
-            listView->scrollToBottom();
-        }
-    }
-}
-
-void HistoryPanel::onFilterChanged()
-{
-    int filterType = filterCombo->currentData().toInt();
-
-    QSet<int> types;
-    if (filterType == -1) {
-        for (int i = 0; i <= static_cast<int>(EntryType::Checkpoint); ++i) {
-            types.insert(i);
-        }
-    }
-    else if (filterType == static_cast<int>(EntryType::Transaction)) {
-        types.insert(static_cast<int>(EntryType::Transaction));
-    }
-    else if (filterType == static_cast<int>(EntryType::ObjectCreated)) {
-        types.insert(static_cast<int>(EntryType::ObjectCreated));
-        types.insert(static_cast<int>(EntryType::ObjectDeleted));
-        types.insert(static_cast<int>(EntryType::ObjectModified));
-    }
-    else if (filterType == static_cast<int>(EntryType::Undo)) {
-        types.insert(static_cast<int>(EntryType::Undo));
-        types.insert(static_cast<int>(EntryType::Redo));
-    }
-
-    filterProxy->setVisibleTypes(types);
-    updateStatus();
-}
-
-void HistoryPanel::onSearchChanged(const QString& text)
-{
-    filterProxy->setFilterText(text);
-    updateStatus();
-}
-
-void HistoryPanel::onExportClicked()
-{
-    QString text = model->exportToText();
-    if (text.isEmpty()) {
-        return;
-    }
-
-    QString filePath = QFileDialog::getSaveFileName(
-        this,
-        tr("Export Modification History"),
-        QStringLiteral("freecad_history.txt"),
-        tr("Text files (*.txt);;All files (*.*)"));
-
-    if (filePath.isEmpty()) {
-        return;
-    }
-
-    QFile file(filePath);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        QTextStream stream(&file);
-        stream << text;
-        file.close();
-        statusLabel->setText(tr("History exported to %1").arg(filePath));
-    }
-    else {
-        QMessageBox::warning(this, tr("Export Failed"),
-                             tr("Could not write to file:\n%1").arg(filePath));
-    }
-}
-
-void HistoryPanel::onClearClicked()
-{
-    int reply = QMessageBox::question(
-        this,
-        tr("Clear History?"),
-        tr("This will clear the modification history display.\n"
-           "It does NOT affect the undo/redo stack.\n\n"
-           "Continue?"),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        model->clear();
-        updateStatus();
-    }
-}
-
-void HistoryPanel::onCheckpointClicked()
-{
-    if (!model->document()) {
-        QMessageBox::information(this, tr("No Document"),
-                                 tr("Open a document first to create checkpoints."));
-        return;
-    }
-
-    bool ok;
-    QString name = QInputDialog::getText(
-        this, tr("Create Checkpoint"),
-        tr("Enter a name for this checkpoint (like a git commit message):"),
-        QLineEdit::Normal,
-        tr("Checkpoint %1").arg(model->checkpointCount() + 1),
-        &ok);
-
-    if (ok && !name.isEmpty()) {
-        int cpId = model->createCheckpoint(name);
-        if (cpId >= 0) {
-            statusLabel->setText(tr("✅ Checkpoint \"%1\" created").arg(name));
-        }
-        else {
-            QMessageBox::warning(this, tr("Checkpoint Failed"),
-                                 tr("Could not create checkpoint.\n"
-                                    "Make sure the document is valid."));
-        }
-    }
 }
 
 

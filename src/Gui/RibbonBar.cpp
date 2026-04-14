@@ -32,8 +32,12 @@
 #include <QAction>
 #include <QMenu>
 #include <QPainterPath>
+#include <QLinearGradient>
+#include <QToolBar>
+#include <QStringList>
 
 #include <App/Application.h>
+#include <Base/Parameter.h>
 
 #include "RibbonBar.h"
 #include "Action.h"
@@ -49,20 +53,23 @@ using namespace Gui;
 RibbonBar* RibbonBar::_instance = nullptr;
 
 // ============================================================================
-// Ribbon style constants
+// Ribbon style constants — Inventor-style dimensions
 // ============================================================================
 
 namespace {
     constexpr int LargeIconSize      = 32;
     constexpr int SmallIconSize      = 16;
-    constexpr int LargeButtonWidth   = 64;
+    constexpr int QATIconSize        = 16;
+    constexpr int LargeButtonWidth   = 60;
     constexpr int LargeButtonHeight  = 66;
-    constexpr int SmallButtonWidth   = 110;
+    constexpr int SmallButtonWidth   = 100;
     constexpr int SmallButtonHeight  = 22;
-    constexpr int PanelMinWidth      = 54;
-    constexpr int RibbonHeight       = 120;
-    constexpr int PanelTitleHeight   = 18;
+    constexpr int PanelMinWidth      = 48;
+    constexpr int RibbonHeight       = 125;
+    constexpr int PanelTitleHeight   = 20;
     constexpr int TabBarHeight       = 24;
+    constexpr int QATBarHeight       = 26;
+    constexpr int PanelContentHeight = RibbonHeight - TabBarHeight - PanelTitleHeight - 6;
 }
 
 
@@ -77,7 +84,12 @@ RibbonButton::RibbonButton(const QString& cmdName, ButtonSize size, QWidget* par
 {
     setAutoRaise(true);
     setFocusPolicy(Qt::NoFocus);
+    setButtonSize(size);
+}
 
+void RibbonButton::setButtonSize(ButtonSize size)
+{
+    btnSize = size;
     if (size == Large) {
         setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         setIconSize(QSize(LargeIconSize, LargeIconSize));
@@ -90,7 +102,6 @@ RibbonButton::RibbonButton(const QString& cmdName, ButtonSize size, QWidget* par
         setFixedHeight(SmallButtonHeight);
         setMinimumWidth(SmallButtonWidth);
     }
-
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
 }
 
@@ -115,7 +126,7 @@ QSize RibbonButton::minimumSizeHint() const
 
 
 // ============================================================================
-// RibbonPanel
+// RibbonPanel — Inventor-style panel with title bar and expand button
 // ============================================================================
 
 RibbonPanel::RibbonPanel(const QString& title, QWidget* parent)
@@ -124,26 +135,47 @@ RibbonPanel::RibbonPanel(const QString& title, QWidget* parent)
 {
     setFrameStyle(QFrame::NoFrame);
     setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    setMinimumWidth(PanelMinWidth);
 
     auto* mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(3, 2, 3, 0);
+    mainLayout->setContentsMargins(2, 2, 2, 0);
     mainLayout->setSpacing(0);
 
-    // Button area
+    // Button area — expands to fill panel height
     buttonArea = new QWidget(this);
     buttonArea->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+    buttonArea->setFixedHeight(PanelContentHeight);
     mainLayout->addWidget(buttonArea, 1);
 
-    // Title label at bottom
-    titleLabel = new QLabel(title, this);
-    titleLabel->setAlignment(Qt::AlignHCenter | Qt::AlignBottom);
-    titleLabel->setFixedHeight(PanelTitleHeight);
+    // Title bar at bottom — label + expand arrow (Inventor-style)
+    titleBar = new QWidget(this);
+    titleBar->setFixedHeight(PanelTitleHeight);
+    auto* titleLayout = new QHBoxLayout(titleBar);
+    titleLayout->setContentsMargins(4, 0, 2, 2);
+    titleLayout->setSpacing(2);
+
+    titleLabel = new QLabel(title, titleBar);
+    titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     QFont titleFont = titleLabel->font();
-    titleFont.setPointSize(titleFont.pointSize() - 1);
+    titleFont.setPointSizeF(titleFont.pointSizeF() - 0.5);
     titleLabel->setFont(titleFont);
-    titleLabel->setStyleSheet(QStringLiteral(
-        "QLabel { color: palette(mid); padding: 0px; margin: 0px; }"));
-    mainLayout->addWidget(titleLabel);
+    titleLayout->addWidget(titleLabel, 1);
+
+    // Panel dialog launcher / expand button (small diagonal arrow like Inventor)
+    expandBtn = new QToolButton(titleBar);
+    expandBtn->setFixedSize(14, 14);
+    expandBtn->setAutoRaise(true);
+    expandBtn->setArrowType(Qt::NoArrow);
+    expandBtn->setText(QStringLiteral("\u2197"));  // ↗ arrow character
+    expandBtn->setToolTip(tr("Expand panel"));
+    expandBtn->setStyleSheet(QStringLiteral(
+        "QToolButton { font-size: 9px; border: none; padding: 0; }"
+        "QToolButton:hover { background: palette(midlight); border-radius: 2px; }"));
+    connect(expandBtn, &QToolButton::clicked, this, &RibbonPanel::expandClicked);
+    titleLayout->addWidget(expandBtn);
+
+    titleBar->setLayout(titleLayout);
+    mainLayout->addWidget(titleBar);
 
     setLayout(mainLayout);
 }
@@ -157,7 +189,7 @@ void RibbonPanel::addButton(RibbonButton* button)
 
 void RibbonPanel::addSeparator()
 {
-    // Visual separator handled implicitly by layout spacing
+    // Handled by layout spacing
 }
 
 void RibbonPanel::paintEvent(QPaintEvent* event)
@@ -167,11 +199,21 @@ void RibbonPanel::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, false);
 
-    // Draw right-side separator line
-    QPen pen(palette().mid().color());
+    QColor sepColor = palette().mid().color();
+    sepColor.setAlpha(120);
+    QPen pen(sepColor);
     pen.setWidth(1);
     painter.setPen(pen);
+
+    // Right-side panel separator
     painter.drawLine(width() - 1, 4, width() - 1, height() - 4);
+
+    // Top line of title bar area
+    int titleY = height() - PanelTitleHeight;
+    QColor lineColor = palette().mid().color();
+    lineColor.setAlpha(60);
+    painter.setPen(QPen(lineColor));
+    painter.drawLine(4, titleY, width() - 4, titleY);
 }
 
 void RibbonPanel::relayoutButtons()
@@ -286,6 +328,180 @@ void RibbonTabPage::addPanel(RibbonPanel* panel)
 
 
 // ============================================================================
+// QuickAccessToolBar — compact toolbar above the ribbon tabs
+// ============================================================================
+
+QuickAccessToolBar::QuickAccessToolBar(QWidget* parent)
+    : QWidget(parent)
+{
+    setFixedHeight(QATBarHeight);
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+    layout = new QHBoxLayout(this);
+    layout->setContentsMargins(8, 2, 8, 2);
+    layout->setSpacing(1);
+    layout->addStretch(1);
+    setLayout(layout);
+
+    setStyleSheet(QStringLiteral(
+        "QuickAccessToolBar {"
+        "  background: palette(window);"
+        "  border-bottom: 1px solid palette(mid);"
+        "}"
+    ));
+
+    loadPreferences();
+}
+
+QStringList QuickAccessToolBar::defaultCommands()
+{
+    return {
+        QStringLiteral("Std_New"),
+        QStringLiteral("Std_Open"),
+        QStringLiteral("Std_Save"),
+        QStringLiteral("Std_Undo"),
+        QStringLiteral("Std_Redo"),
+        QStringLiteral("Std_Print"),
+    };
+}
+
+void QuickAccessToolBar::loadPreferences()
+{
+    auto hGrp = App::GetApplication()
+        .GetUserParameter()
+        .GetGroup("BaseApp")
+        ->GetGroup("Preferences")
+        ->GetGroup("MainWindow");
+
+    std::string cmds = hGrp->GetASCII("QuickAccessCommands", "");
+    commandList.clear();
+
+    if (cmds.empty()) {
+        commandList = defaultCommands();
+    }
+    else {
+        commandList = QString::fromUtf8(cmds.c_str()).split(QStringLiteral(";"),
+                                                             Qt::SkipEmptyParts);
+    }
+}
+
+void QuickAccessToolBar::savePreferences()
+{
+    auto hGrp = App::GetApplication()
+        .GetUserParameter()
+        .GetGroup("BaseApp")
+        ->GetGroup("Preferences")
+        ->GetGroup("MainWindow");
+
+    hGrp->SetASCII("QuickAccessCommands",
+                    commandList.join(QStringLiteral(";")).toUtf8().constData());
+}
+
+QToolButton* QuickAccessToolBar::createSmallButton(const QString& cmdName)
+{
+    CommandManager& mgr = Application::Instance->commandManager();
+    Command* cmd = mgr.getCommandByName(cmdName.toLatin1().constData());
+    if (!cmd) {
+        return nullptr;
+    }
+
+    auto* btn = new QToolButton(this);
+    btn->setAutoRaise(true);
+    btn->setFocusPolicy(Qt::NoFocus);
+    btn->setIconSize(QSize(QATIconSize, QATIconSize));
+    btn->setFixedSize(QATBarHeight - 4, QATBarHeight - 4);
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+
+    const char* pixmapName = cmd->getPixmap();
+    if (pixmapName && pixmapName[0]) {
+        QPixmap pm = BitmapFactory().pixmapFromSvg(
+            pixmapName, QSizeF(QATIconSize, QATIconSize));
+        if (pm.isNull()) {
+            pm = BitmapFactory().pixmap(pixmapName);
+        }
+        if (!pm.isNull()) {
+            btn->setIcon(QIcon(pm));
+        }
+    }
+
+    const char* toolTip = cmd->getToolTipText();
+    if (toolTip && toolTip[0]) {
+        btn->setToolTip(QApplication::translate(cmd->className(), toolTip));
+    }
+
+    QObject::connect(btn, &QToolButton::clicked, [cmdName]() {
+        CommandManager& mgr = Application::Instance->commandManager();
+        mgr.runCommandByName(cmdName.toLatin1().constData());
+    });
+
+    // Dropdown menu support
+    Action* cmdAction = cmd->getAction();
+    if (cmdAction) {
+        QAction* qaction = cmdAction->action();
+        if (qaction && qaction->menu()) {
+            btn->setMenu(qaction->menu());
+            btn->setPopupMode(QToolButton::MenuButtonPopup);
+        }
+    }
+
+    return btn;
+}
+
+void QuickAccessToolBar::setup()
+{
+    // Clear existing buttons
+    for (auto* btn : buttonList) {
+        layout->removeWidget(btn);
+        delete btn;
+    }
+    buttonList.clear();
+
+    // Remove the stretch
+    while (layout->count() > 0) {
+        auto* item = layout->takeAt(0);
+        delete item;
+    }
+
+    for (const QString& cmdName : commandList) {
+        auto* btn = createSmallButton(cmdName);
+        if (btn) {
+            layout->addWidget(btn);
+            buttonList.append(btn);
+        }
+    }
+
+    // Separator then a customize dropdown
+    if (!buttonList.isEmpty()) {
+        auto* sep = new QFrame(this);
+        sep->setFrameShape(QFrame::VLine);
+        sep->setFrameShadow(QFrame::Sunken);
+        sep->setFixedWidth(2);
+        sep->setFixedHeight(QATBarHeight - 8);
+        layout->addWidget(sep);
+    }
+
+    layout->addStretch(1);
+}
+
+void QuickAccessToolBar::addCommand(const QString& cmdName)
+{
+    if (!commandList.contains(cmdName)) {
+        commandList.append(cmdName);
+        savePreferences();
+        setup();
+    }
+}
+
+void QuickAccessToolBar::removeCommand(const QString& cmdName)
+{
+    if (commandList.removeAll(cmdName) > 0) {
+        savePreferences();
+        setup();
+    }
+}
+
+
+// ============================================================================
 // RibbonBar
 // ============================================================================
 
@@ -298,17 +514,21 @@ RibbonBar::RibbonBar(QWidget* parent)
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
+    // Quick Access Toolbar — small icons above ribbon tabs
+    qatBar = new QuickAccessToolBar(this);
+    mainLayout->addWidget(qatBar);
+
+    // Tab widget for ribbon panels
     tabWidget = new QTabWidget(this);
     tabWidget->setTabPosition(QTabWidget::North);
     tabWidget->setDocumentMode(false);
     tabWidget->setUsesScrollButtons(true);
     tabWidget->setElideMode(Qt::ElideNone);
-    tabWidget->setFixedHeight(RibbonHeight);
 
-    mainLayout->addWidget(tabWidget);
+    mainLayout->addWidget(tabWidget, 1);
     setLayout(mainLayout);
 
-    setFixedHeight(RibbonHeight);
+    setFixedHeight(RibbonHeight + QATBarHeight);
     setupStyle();
 }
 
@@ -346,32 +566,51 @@ void RibbonBar::setRibbonEnabled(bool enabled)
 
 void RibbonBar::setupStyle()
 {
+    // Inventor-style ribbon:
+    // - Tabs: compact, bold text, active tab blends into panel area
+    // - Panels: subtle gradient background, thin separator lines
+    // - Active tab: same background as panel area (seamless)
     tabWidget->setStyleSheet(QStringLiteral(
+        "QTabWidget {"
+        "  background: transparent;"
+        "}"
         "QTabWidget::pane {"
         "  border: none;"
         "  border-top: 1px solid palette(mid);"
-        "  background: palette(window);"
+        "  border-bottom: 1px solid palette(mid);"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "    stop:0 palette(window), stop:1 palette(button));"
         "}"
         "QTabWidget::tab-bar {"
-        "  left: 4px;"
+        "  left: 2px;"
+        "}"
+        "QTabBar {"
+        "  background: transparent;"
         "}"
         "QTabBar::tab {"
-        "  padding: 4px 14px;"
-        "  margin-right: 2px;"
+        "  padding: 3px 14px;"
+        "  margin-right: 1px;"
         "  background: palette(button);"
         "  border: 1px solid palette(mid);"
         "  border-bottom: none;"
-        "  border-top-left-radius: 4px;"
-        "  border-top-right-radius: 4px;"
+        "  border-top-left-radius: 3px;"
+        "  border-top-right-radius: 3px;"
         "  font-weight: bold;"
-        "  min-width: 60px;"
+        "  font-size: 11px;"
+        "  min-width: 50px;"
+        "  color: palette(text);"
         "}"
         "QTabBar::tab:selected {"
-        "  background: palette(window);"
+        "  background: qlineargradient(x1:0, y1:0, x2:0, y2:1,"
+        "    stop:0 palette(light), stop:1 palette(window));"
         "  border-bottom: 1px solid palette(window);"
+        "  margin-bottom: -1px;"
         "}"
         "QTabBar::tab:hover:!selected {"
         "  background: palette(midlight);"
+        "}"
+        "QTabBar::tab:first {"
+        "  margin-left: 2px;"
         "}"
     ));
 }
@@ -384,77 +623,18 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
 
     clear();
 
-    // Categorization map: group related toolbars into ribbon tabs
-    // Key = tab name, Value = list of toolbar items for that tab
-    struct TabDef {
-        QString name;
-        QList<ToolBarItem*> toolbars;
-    };
+    // Populate Quick Access Toolbar
+    qatBar->setup();
 
     QList<ToolBarItem*> items = toolBarItems->getItems();
 
-    // Category mapping: map toolbar names to logical ribbon tabs
-    // This creates an Inventor-like grouping
-    QMap<QString, QStringList> categoryMap;
-
-    // Pass 1: Categorize toolbars into tabs
-    // Standard toolbars go into "Home" tab
-    // Workbench-specific toolbars get their own tabs or go into themed tabs
+    // Group toolbars into ribbon tabs by category
     QMap<QString, QList<ToolBarItem*>> tabMap;
     QStringList tabOrder;
 
     for (ToolBarItem* it : items) {
         QString tbName = QString::fromUtf8(it->command().c_str());
-
-        // Classify into ribbon tabs
-        QString tabName;
-        if (tbName == QStringLiteral("File")
-            || tbName == QStringLiteral("Edit")
-            || tbName == QStringLiteral("Clipboard")
-            || tbName == QStringLiteral("Macro")) {
-            tabName = tr("Home");
-        }
-        else if (tbName == QStringLiteral("View")
-                 || tbName == QStringLiteral("Navigation")
-                 || tbName == QStringLiteral("Individual views")) {
-            tabName = tr("View");
-        }
-        else if (tbName.contains(QStringLiteral("Sketch"))
-                 || tbName.contains(QStringLiteral("sketch"))) {
-            tabName = tr("Sketch");
-        }
-        else if (tbName.contains(QStringLiteral("Part Design"))
-                 || tbName.contains(QStringLiteral("PartDesign"))) {
-            tabName = tr("Design");
-        }
-        else if (tbName.contains(QStringLiteral("Part"))
-                 && !tbName.contains(QStringLiteral("Design"))) {
-            tabName = tr("Part");
-        }
-        else if (tbName.contains(QStringLiteral("Assembly"))) {
-            tabName = tr("Assembly");
-        }
-        else if (tbName.contains(QStringLiteral("Mesh"))
-                 || tbName.contains(QStringLiteral("FEM"))
-                 || tbName.contains(QStringLiteral("Fem"))) {
-            tabName = tr("Analysis");
-        }
-        else if (tbName.contains(QStringLiteral("Drawing"))
-                 || tbName.contains(QStringLiteral("TechDraw"))) {
-            tabName = tr("Drawing");
-        }
-        else if (tbName.contains(QStringLiteral("CAM"))
-                 || tbName.contains(QStringLiteral("Path"))) {
-            tabName = tr("Manufacturing");
-        }
-        else if (tbName == QStringLiteral("Structure")
-                 || tbName == QStringLiteral("Help")) {
-            tabName = tr("Home");
-        }
-        else {
-            // Unknown toolbars go into a "Tools" tab
-            tabName = tr("Tools");
-        }
+        QString tabName = categorizeToolbar(tbName);
 
         if (!tabMap.contains(tabName)) {
             tabOrder.append(tabName);
@@ -462,7 +642,7 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         tabMap[tabName].append(it);
     }
 
-    // Pass 2: Create ribbon tabs and panels
+    // Create ribbon tabs and panels
     for (const QString& tabName : tabOrder) {
         auto* tabPage = new RibbonTabPage(tabWidget);
         tabWidget->addTab(tabPage, tabName);
@@ -481,6 +661,56 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
     }
 }
 
+QString RibbonBar::categorizeToolbar(const QString& tbName) const
+{
+    // Inventor-style tab grouping
+    if (tbName == QStringLiteral("File")
+        || tbName == QStringLiteral("Edit")
+        || tbName == QStringLiteral("Clipboard")
+        || tbName == QStringLiteral("Macro")
+        || tbName == QStringLiteral("Structure")
+        || tbName == QStringLiteral("Help")) {
+        return tr("Home");
+    }
+    if (tbName == QStringLiteral("View")
+        || tbName == QStringLiteral("Navigation")
+        || tbName == QStringLiteral("Individual views")) {
+        return tr("View");
+    }
+    if (tbName.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
+        return tr("Sketch");
+    }
+    if (tbName.contains(QStringLiteral("Part Design"), Qt::CaseInsensitive)
+        || tbName.contains(QStringLiteral("PartDesign"), Qt::CaseInsensitive)) {
+        return tr("Design");
+    }
+    if (tbName.contains(QStringLiteral("Part"), Qt::CaseInsensitive)
+        && !tbName.contains(QStringLiteral("Design"), Qt::CaseInsensitive)) {
+        return tr("Part");
+    }
+    if (tbName.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive)) {
+        return tr("Assembly");
+    }
+    if (tbName.contains(QStringLiteral("Mesh"), Qt::CaseInsensitive)
+        || tbName.contains(QStringLiteral("FEM"), Qt::CaseInsensitive)) {
+        return tr("Analysis");
+    }
+    if (tbName.contains(QStringLiteral("Drawing"), Qt::CaseInsensitive)
+        || tbName.contains(QStringLiteral("TechDraw"), Qt::CaseInsensitive)) {
+        return tr("Drawing");
+    }
+    if (tbName.contains(QStringLiteral("CAM"), Qt::CaseInsensitive)
+        || tbName.contains(QStringLiteral("Path"), Qt::CaseInsensitive)) {
+        return tr("Manufacturing");
+    }
+    if (tbName.contains(QStringLiteral("FlowStudio"), Qt::CaseInsensitive)
+        || tbName.contains(QStringLiteral("CFD"), Qt::CaseInsensitive)) {
+        return tr("Simulation");
+    }
+
+    return tr("Tools");
+}
+
 void RibbonBar::clear()
 {
     tabWidget->clear();
@@ -489,7 +719,6 @@ void RibbonBar::clear()
 
 RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarItem)
 {
-    // Translate the toolbar name for display
     QByteArray tbNameBytes = name.toUtf8();
     QString displayName = QApplication::translate("Workbench", tbNameBytes.constData());
 
@@ -497,11 +726,12 @@ RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarIte
 
     QList<ToolBarItem*> commands = toolbarItem->getItems();
 
-    // Heuristic: first few commands in a toolbar are "primary" → large buttons
-    // Remaining commands are "secondary" → small buttons in stacked columns
-    // Threshold: first 4 non-separator commands get large buttons
+    // Inventor-style heuristic:
+    // - Commands with menus/dropdowns → Large
+    // - First 3 non-separator commands → Large (primary actions)
+    // - Everything else → Small (stacked in rows of 3)
     int primaryCount = 0;
-    constexpr int primaryLimit = 6;
+    constexpr int primaryLimit = 3;
 
     for (ToolBarItem* cmdItem : commands) {
         QString cmdName = QString::fromLatin1(cmdItem->command().c_str());
@@ -511,29 +741,21 @@ RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarIte
             continue;
         }
 
-        RibbonButton::ButtonSize size = (primaryCount < primaryLimit)
+        RibbonButton* btn = createButton(cmdName);
+        if (!btn) {
+            continue;
+        }
+
+        // Determine sizing
+        bool hasMenu = (btn->menu() || btn->popupMode() != QToolButton::DelayedPopup);
+        bool isPrimary = (primaryCount < primaryLimit);
+        RibbonButton::ButtonSize size = (hasMenu || isPrimary)
             ? RibbonButton::Large
             : RibbonButton::Small;
 
-        RibbonButton* btn = createButton(cmdName);
-        if (btn) {
-            // If this is complex (dropdown), keep it large regardless
-            if (btn->menu() || btn->popupMode() != QToolButton::DelayedPopup) {
-                size = RibbonButton::Large;
-            }
-
-            // Rebuild button with correct size if needed
-            if (size == RibbonButton::Small
-                && btn->toolButtonStyle() != Qt::ToolButtonTextBesideIcon) {
-                btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
-                btn->setIconSize(QSize(SmallIconSize, SmallIconSize));
-                btn->setFixedHeight(SmallButtonHeight);
-                btn->setMinimumWidth(SmallButtonWidth);
-            }
-
-            panel->addButton(btn);
-            ++primaryCount;
-        }
+        btn->setButtonSize(size);
+        panel->addButton(btn);
+        ++primaryCount;
     }
 
     return panel;

@@ -30,6 +30,7 @@
 #include <QMap>
 #include <QString>
 #include <QIcon>
+#include <QStringList>
 
 #include <FCGlobal.h>
 
@@ -37,6 +38,7 @@ class QHBoxLayout;
 class QVBoxLayout;
 class QLabel;
 class QFrame;
+class QToolBar;
 
 namespace Gui {
 
@@ -44,12 +46,10 @@ class ToolBarItem;
 class CommandBase;
 
 
-/**
- * @brief A single large command button — Inventor-style.
- *
- * Shows a 32×32 icon above a two-line label (command name).
- * Optionally shows only icon + one-line label for compact mode.
- */
+// ============================================================================
+// RibbonButton — Large (icon-above-text) or Small (icon-beside-text)
+// ============================================================================
+
 class GuiExport RibbonButton : public QToolButton
 {
     Q_OBJECT
@@ -62,6 +62,7 @@ public:
 
     void setCommandName(const QString& name) { commandName = name; }
     const QString& getCommandName() const { return commandName; }
+    void setButtonSize(ButtonSize size);
 
     QSize sizeHint() const override;
     QSize minimumSizeHint() const override;
@@ -72,17 +73,10 @@ private:
 };
 
 
-/**
- * @brief A named group of buttons inside a ribbon tab — Inventor "panel" style.
- *
- * Layout:
- *  ┌─────────────────────────────────┐
- *  │ [icon+txt] [icon+txt] [icon+txt]│
- *  │ [icon+txt] [icon+txt]           │
- *  ├─────────────────────────────────┤
- *  │        Panel Title              │
- *  └─────────────────────────────────┘
- */
+// ============================================================================
+// RibbonPanel — Labeled group of buttons with title bar + optional expand
+// ============================================================================
+
 class GuiExport RibbonPanel : public QFrame
 {
     Q_OBJECT
@@ -96,6 +90,9 @@ public:
     const QString& panelTitle() const { return title; }
     int buttonCount() const { return buttons.size(); }
 
+Q_SIGNALS:
+    void expandClicked();
+
 protected:
     void paintEvent(QPaintEvent* event) override;
 
@@ -104,22 +101,20 @@ private:
 
     QString title;
     QWidget* buttonArea{nullptr};
+    QWidget* titleBar{nullptr};
     QLabel* titleLabel{nullptr};
+    QToolButton* expandBtn{nullptr};
     QList<RibbonButton*> buttons;
 
-    static constexpr int MaxRows = 3;       ///< Max rows before adding a column
+    static constexpr int MaxRows = 3;
     static constexpr int ButtonSpacing = 2;
 };
 
 
-/**
- * @brief A ribbon tab page containing multiple panels.
- *
- * Layout:
- *  ┌──────────┬──────────┬──────────┬──────────┐
- *  │ Panel 1  │ Panel 2  │ Panel 3  │ Panel 4  │
- *  └──────────┴──────────┴──────────┴──────────┘
- */
+// ============================================================================
+// RibbonTabPage — Horizontal row of panels inside a scroll area
+// ============================================================================
+
 class GuiExport RibbonTabPage : public QWidget
 {
     Q_OBJECT
@@ -139,18 +134,49 @@ private:
 };
 
 
-/**
- * @brief Autodesk Inventor-style ribbon bar — replaces traditional toolbars.
- *
- * Uses QTabWidget where each tab maps to a toolbar group from the workbench.
- * Commands are shown as large icon buttons with descriptive text, organized
- * into labeled panels for easy discovery.
- *
- * Integration:
- *  - Called from ToolBarManager::setup() to populate
- *  - Reads command icons and text from CommandManager
- *  - Preference "UseRibbonBar" toggles between ribbon and classic toolbars
- */
+// ============================================================================
+// QuickAccessToolBar — Small toolbar above the ribbon tabs
+// ============================================================================
+
+class GuiExport QuickAccessToolBar : public QWidget
+{
+    Q_OBJECT
+
+public:
+    explicit QuickAccessToolBar(QWidget* parent = nullptr);
+
+    void addCommand(const QString& cmdName);
+    void removeCommand(const QString& cmdName);
+    void setup();
+
+    QStringList commands() const { return commandList; }
+
+    static QStringList defaultCommands();
+
+private:
+    QHBoxLayout* layout{nullptr};
+    QStringList commandList;
+    QList<QToolButton*> buttonList;
+
+    QToolButton* createSmallButton(const QString& cmdName);
+    void loadPreferences();
+    void savePreferences();
+};
+
+
+// ============================================================================
+// RibbonBar — Main Inventor-style ribbon replacing classic toolbars
+//
+//  ┌─────────────────────────────────────────────────────────┐
+//  │ [QAT: Save|Undo|Redo|...]                              │  ← QuickAccessToolBar
+//  ├──[Home]──[View]──[Design]──[Part]──[Sketch]────────────┤  ← Tab bar
+//  │ ┌──────┐ ┌──────────┐ ┌────────┐ ┌──────────────────┐  │
+//  │ │ Clip │ │  Model   │ │ Modify │ │   Primitives     │  │  ← Panels
+//  │ │ board│ │          │ │        │ │                   │  │
+//  │ └──────┘ └──────────┘ └────────┘ └──────────────────┘  │
+//  └─────────────────────────────────────────────────────────┘
+// ============================================================================
+
 class GuiExport RibbonBar : public QWidget
 {
     Q_OBJECT
@@ -159,20 +185,14 @@ public:
     explicit RibbonBar(QWidget* parent = nullptr);
     ~RibbonBar() override;
 
-    /// Populate the ribbon from ToolBarItem data (called from workbench activation)
     void setup(ToolBarItem* toolBarItems);
-
-    /// Clear all tabs and panels
     void clear();
 
-    /// Check if ribbon mode is enabled in preferences
     static bool isRibbonEnabled();
-
-    /// Enable or disable ribbon mode
     static void setRibbonEnabled(bool enabled);
-
-    /// Get the singleton instance (created by MainWindow)
     static RibbonBar* instance();
+
+    QuickAccessToolBar* quickAccessToolBar() const { return qatBar; }
 
 Q_SIGNALS:
     void ribbonVisibilityChanged(bool visible);
@@ -181,7 +201,9 @@ private:
     void setupStyle();
     RibbonPanel* createPanel(const QString& name, ToolBarItem* toolbarItem);
     RibbonButton* createButton(const QString& cmdName);
+    QString categorizeToolbar(const QString& tbName) const;
 
+    QuickAccessToolBar* qatBar{nullptr};
     QTabWidget* tabWidget{nullptr};
     QMap<QString, RibbonTabPage*> tabPages;
 

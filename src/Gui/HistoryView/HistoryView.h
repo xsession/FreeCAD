@@ -24,14 +24,7 @@
 #pragma once
 
 #include <QWidget>
-#include <QListView>
-#include <QStyledItemDelegate>
-#include <QPushButton>
 #include <QLabel>
-#include <QCheckBox>
-#include <QComboBox>
-#include <QLineEdit>
-#include <QToolBar>
 #include <QSortFilterProxyModel>
 #include <QScrollBar>
 #include <QToolButton>
@@ -49,46 +42,26 @@ namespace HistoryView {
 
 
 /**
- * @brief Custom delegate that renders Fusion 360-style timeline entries.
+ * @brief Horizontal timeline widget — Autodesk Inventor-style.
  *
- * Each entry shows:
- *  - A colored left-edge indicator (based on feature family)
- *  - A feature-type-specific icon
- *  - The description text
- *  - A timestamp in the right margin
- *  - Undone entries are rendered with strikethrough and reduced opacity
- *  - Suppressed entries show a red X overlay
- *  - The current rollback position gets a special gold marker
- *  - Feature family color-coded badges
- */
-class HistoryDelegate : public QStyledItemDelegate
-{
-    Q_OBJECT
-
-public:
-    explicit HistoryDelegate(QObject* parent = nullptr);
-
-    void paint(QPainter* painter,
-               const QStyleOptionViewItem& option,
-               const QModelIndex& index) const override;
-
-    QSize sizeHint(const QStyleOptionViewItem& option,
-                   const QModelIndex& index) const override;
-};
-
-
-/**
- * @brief Horizontal timeline widget — Fusion 360-style.
+ * Renders feature nodes as icon cells on a horizontal rail/track,
+ * matching the compact Inventor Timeline at the bottom of the screen.
  *
- * Renders feature nodes as icons on a horizontal connecting line.
- * Supports:
- *  - Feature-type-specific icons with family color coding
- *  - Draggable rollback marker
- *  - Hover tooltips
- *  - Double-click to edit feature
- *  - Right-click context menu
- *  - Mouse wheel horizontal scrolling
- *  - Ctrl+wheel zoom (node spacing)
+ * Visual design:
+ *  - Warm gray gradient background (toolbar-like surface)
+ *  - Rectangular feature cells with family-colored borders
+ *  - Icons centered in cells, labels below
+ *  - Horizontal connecting rail between cells
+ *  - Draggable "End of Part" marker (gold vertical bar)
+ *  - Group brackets above related features
+ *
+ * Interaction:
+ *  - Click to select and highlight object in 3D
+ *  - Double-click to edit feature parameters
+ *  - Right-click for context menu
+ *  - Mouse wheel to scroll horizontally
+ *  - Ctrl+wheel to zoom (cell spacing)
+ *  - Drag the End-of-Part marker to rollback/roll-forward
  */
 class TimelineBar : public QWidget
 {
@@ -120,10 +93,9 @@ protected:
     bool event(QEvent* event) override;  // for tooltip
 
 private:
-    int nodeAtPos(const QPoint& pos) const;
-    QRect nodeRect(int visibleIndex) const;
-    QRect rollbackMarkerRect() const;
-    void updateGeometry();
+    int cellAtPos(const QPoint& pos) const;
+    QRect cellRect(int visibleIndex) const;
+    QRect endOfPartRect() const;
     void scrollToEnd();
     int visibleToSource(int visibleIdx) const;
     int sourceToVisible(int sourceIdx) const;
@@ -133,24 +105,25 @@ private:
     QSortFilterProxyModel* filterProxy{nullptr};
 
     // Layout
-    int nodeSize{32};           ///< Icon size
-    int nodeSpacing{52};        ///< Distance between node centers
+    int cellSize{34};           ///< Cell width/height
+    int cellSpacing{50};        ///< Distance between cell centers
     int scrollOffset{0};        ///< Horizontal scroll offset
-    int hoveredNode{-1};        ///< Currently hovered node (visible index)
-    int selectedNode{-1};       ///< Currently selected node (visible index)
+    int hoveredCell{-1};        ///< Currently hovered cell (visible index)
+    int selectedCell{-1};       ///< Currently selected cell (visible index)
 
-    // Dragging rollback marker
-    bool draggingRollback{false};
-    int dragTargetNode{-1};     ///< Node the marker would snap to
+    // Dragging End-of-Part marker
+    bool draggingMarker{false};
+    int dragTargetCell{-1};     ///< Cell the marker would snap to
 
-    // Constants
-    static constexpr int TimelineHeight = 64;
-    static constexpr int LineY = 40;         ///< Y position of connecting line
-    static constexpr int NodeY = 8;          ///< Y position of node icons
-    static constexpr int MarkerTriangleSize = 10;
-    static constexpr int LeftMargin = 16;
-    static constexpr int MinNodeSpacing = 36;
-    static constexpr int MaxNodeSpacing = 96;
+    // Inventor Timeline constants
+    static constexpr int BarHeight = 64;
+    static constexpr int RailY = 24;          ///< Y position of horizontal rail
+    static constexpr int CellY = 7;           ///< Y position of cell tops
+    static constexpr int LabelY = 46;         ///< Y position of feature labels
+    static constexpr int MarkerWidth = 6;     ///< End-of-Part marker width
+    static constexpr int LeftMargin = 24;
+    static constexpr int MinCellSpacing = 42;
+    static constexpr int MaxCellSpacing = 88;
 };
 
 
@@ -179,21 +152,13 @@ private:
 
 
 /**
- * @brief The main History Timeline widget — Fusion 360 "Design History" panel.
- *
- * Contains both the horizontal TimelineBar and a detail list view,
- * with toolbar controls for filtering, search, and export.
+ * @brief Inventor-style Timeline panel — compact horizontal feature strip.
  *
  * Layout:
- *  ┌─────────────────────────────────────────────┐
- *  │ [Toolbar: search | filter | options]         │
- *  ├─────────────────────────────────────────────┤
- *  │ ◄ [icon][icon][icon]▲[icon][icon] ►        │ ← TimelineBar
- *  ├─────────────────────────────────────────────┤
- *  │ Detailed list view (vertical)                │
- *  ├─────────────────────────────────────────────┤
- *  │ Status bar                                   │
- *  └─────────────────────────────────────────────┘
+ *  ┌──────────────────────────────────────────────────────────────────┐
+ *  │ [◀] ──[Sk1]──[Ext1]──[Fil1]──│──[Sk2]──[Ext2]── [▶]           │
+ *  │        Sketch  Extrude Fillet  EoP                              │
+ *  └──────────────────────────────────────────────────────────────────┘
  */
 class HistoryPanel : public QWidget
 {
@@ -211,47 +176,23 @@ public:
 private Q_SLOTS:
     void onActiveDocument(const Gui::Document& doc);
     void onDeleteDocument(const Gui::Document& doc);
-    void onEntryClicked(const QModelIndex& index);
-    void onEntryDoubleClicked(const QModelIndex& index);
     void onTimelineClicked(int sourceIndex);
     void onTimelineDoubleClicked(int sourceIndex);
     void onTimelineContextMenu(int sourceIndex, const QPoint& globalPos);
     void onTimelineRollbackDragged(int sourceIndex);
-    void onEntryContextMenu(const QPoint& pos);
-    void onEntryAdded(int index);
-    void onFilterChanged();
-    void onSearchChanged(const QString& text);
-    void onExportClicked();
-    void onClearClicked();
-    void onCheckpointClicked();
-    void updateStatus();
 
 private:
     void setupUi();
-    void setupToolbar();
     void setupConnections();
     void showContextMenu(int sourceRow, const QPoint& globalPos);
     void highlightObjectInView(const QString& objectName);
 
     // Widgets
-    QToolBar*     toolbar{nullptr};
-    TimelineBar*  timelineBar{nullptr};
-    QListView*    listView{nullptr};
-    QLabel*       statusLabel{nullptr};
-    QLineEdit*    searchBox{nullptr};
-    QComboBox*    filterCombo{nullptr};
-    QPushButton*  exportBtn{nullptr};
-    QPushButton*  clearBtn{nullptr};
-    QPushButton*  checkpointBtn{nullptr};
-    QCheckBox*    showUndoneCheck{nullptr};
-    QToolButton*  toggleListBtn{nullptr};
+    TimelineBar*        timelineBar{nullptr};
 
     // Model
     HistoryModel*       model{nullptr};
     HistoryFilterProxy* filterProxy{nullptr};
-
-    // State
-    bool listViewVisible{true};
 
     // Signal connections
     fastsignals::scoped_connection conActive;
@@ -260,7 +201,7 @@ private:
 
 
 /**
- * @brief Dock window wrapper for the History Timeline panel.
+ * @brief Dock window wrapper for the Inventor-style Timeline.
  */
 class DockWindow : public Gui::DockWindow
 {

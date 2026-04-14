@@ -845,7 +845,7 @@ bool MainWindow::updateDAGView(bool show)
 
 bool MainWindow::updateHistoryView(bool show)
 {
-    // Modification History Timeline (Fusion 360-style)
+    // Modification History Timeline (Inventor-style)
     if (d->hiddenDockWindows.find("Std_HistoryView") == std::string::npos) {
         ParameterGrp::handle group = App::GetApplication()
                                          .GetUserParameter()
