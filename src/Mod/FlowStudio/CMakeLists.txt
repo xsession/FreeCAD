@@ -8,11 +8,71 @@ SET(FlowStudioBase_SRCS
 SET(FlowStudioPackage_SRCS
     flow_studio/__init__.py
     flow_studio/commands.py
+    flow_studio/enterprise_commands.py
     flow_studio/ObjectsFlowStudio.py
     flow_studio/physics_domains.py
     flow_studio/solver_deps.py
     flow_studio/solver_installer.py
     flow_studio/workflow_guide.py
+)
+
+SET(FlowStudioEnterprise_SRCS
+    flow_studio/enterprise/__init__.py
+    flow_studio/enterprise/bootstrap.py
+)
+
+SET(FlowStudioEnterpriseAdapters_SRCS
+    flow_studio/enterprise/adapters/__init__.py
+    flow_studio/enterprise/adapters/base.py
+    flow_studio/enterprise/adapters/elmer.py
+    flow_studio/enterprise/adapters/fluidx3d.py
+    flow_studio/enterprise/adapters/openfoam.py
+)
+
+SET(FlowStudioEnterpriseCore_SRCS
+    flow_studio/enterprise/core/__init__.py
+    flow_studio/enterprise/core/adapter_policy.py
+    flow_studio/enterprise/core/contracts.py
+    flow_studio/enterprise/core/domain.py
+    flow_studio/enterprise/core/serialization.py
+)
+
+SET(FlowStudioEnterpriseIntegration_SRCS
+    flow_studio/enterprise/integration/__init__.py
+    flow_studio/enterprise/integration/freecad_bridge.py
+)
+
+SET(FlowStudioEnterpriseApp_SRCS
+    flow_studio/enterprise/app/__init__.py
+    flow_studio/enterprise/app/legacy_actions.py
+)
+
+SET(FlowStudioEnterpriseUi_SRCS
+    flow_studio/enterprise/ui/__init__.py
+    flow_studio/enterprise/ui/jobs_panel.py
+)
+
+SET(FlowStudioEnterpriseObservability_SRCS
+    flow_studio/enterprise/observability/__init__.py
+    flow_studio/enterprise/observability/logging.py
+)
+
+SET(FlowStudioEnterpriseServices_SRCS
+    flow_studio/enterprise/services/__init__.py
+    flow_studio/enterprise/services/execution_facade.py
+    flow_studio/enterprise/services/jobs.py
+    flow_studio/enterprise/services/process_executor.py
+    flow_studio/enterprise/services/remote_api.py
+    flow_studio/enterprise/services/run_store.py
+)
+
+SET(FlowStudioEnterpriseTesting_SRCS
+    flow_studio/enterprise/testing/__init__.py
+    flow_studio/enterprise/testing/harness.py
+)
+
+SET(FlowStudioDocs_SRCS
+    docs/ARCHITECTURE.md
 )
 
 SET(FlowStudioFeminout_SRCS
@@ -117,9 +177,15 @@ SET(FlowStudioTests_SRCS
     flow_studio/tests/run_e2e_tests.py
     flow_studio/tests/test_cascading_delete.py
     flow_studio/tests/test_dependencies.py
+    flow_studio/tests/test_enterprise_actions.py
+    flow_studio/tests/test_enterprise_bridge.py
     flow_studio/tests/test_e2e_cfd_workflow.py
     flow_studio/tests/test_e2e_real_solver.py
     flow_studio/tests/test_e2e_step_import.py
+    flow_studio/tests/test_enterprise_contracts.py
+    flow_studio/tests/test_enterprise_execution_facade.py
+    flow_studio/tests/test_enterprise_policy.py
+    flow_studio/tests/test_enterprise_remote.py
     flow_studio/tests/test_elmer_sif_detailed.py
     flow_studio/tests/test_mesh_and_materials.py
     flow_studio/tests/test_multiphysics.py
@@ -180,6 +246,15 @@ SET(FlowStudioIcons_SRCS
 SET(all_files
     ${FlowStudioBase_SRCS}
     ${FlowStudioPackage_SRCS}
+    ${FlowStudioEnterprise_SRCS}
+    ${FlowStudioEnterpriseAdapters_SRCS}
+    ${FlowStudioEnterpriseCore_SRCS}
+    ${FlowStudioEnterpriseIntegration_SRCS}
+    ${FlowStudioEnterpriseApp_SRCS}
+    ${FlowStudioEnterpriseUi_SRCS}
+    ${FlowStudioEnterpriseObservability_SRCS}
+    ${FlowStudioEnterpriseServices_SRCS}
+    ${FlowStudioEnterpriseTesting_SRCS}
     ${FlowStudioFeminout_SRCS}
     ${FlowStudioObjects_SRCS}
     ${FlowStudioSolvers_SRCS}
@@ -187,6 +262,7 @@ SET(all_files
     ${FlowStudioUtils_SRCS}
     ${FlowStudioViewproviders_SRCS}
     ${FlowStudioTests_SRCS}
+    ${FlowStudioDocs_SRCS}
     ${FlowStudioIcons_SRCS}
 )
 
@@ -198,6 +274,15 @@ fc_copy_sources(FlowStudio "${CMAKE_BINARY_DIR}/Mod/FlowStudio" ${all_files})
 
 INSTALL(FILES ${FlowStudioBase_SRCS} DESTINATION Mod/FlowStudio)
 INSTALL(FILES ${FlowStudioPackage_SRCS} DESTINATION Mod/FlowStudio/flow_studio)
+INSTALL(FILES ${FlowStudioEnterprise_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise)
+INSTALL(FILES ${FlowStudioEnterpriseAdapters_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/adapters)
+INSTALL(FILES ${FlowStudioEnterpriseCore_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/core)
+INSTALL(FILES ${FlowStudioEnterpriseIntegration_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/integration)
+INSTALL(FILES ${FlowStudioEnterpriseApp_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/app)
+INSTALL(FILES ${FlowStudioEnterpriseUi_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/ui)
+INSTALL(FILES ${FlowStudioEnterpriseObservability_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/observability)
+INSTALL(FILES ${FlowStudioEnterpriseServices_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/services)
+INSTALL(FILES ${FlowStudioEnterpriseTesting_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/testing)
 INSTALL(FILES ${FlowStudioFeminout_SRCS} DESTINATION Mod/FlowStudio/flow_studio/feminout)
 INSTALL(FILES ${FlowStudioObjects_SRCS} DESTINATION Mod/FlowStudio/flow_studio/objects)
 INSTALL(FILES ${FlowStudioSolvers_SRCS} DESTINATION Mod/FlowStudio/flow_studio/solvers)
@@ -205,4 +290,5 @@ INSTALL(FILES ${FlowStudioTaskpanels_SRCS} DESTINATION Mod/FlowStudio/flow_studi
 INSTALL(FILES ${FlowStudioUtils_SRCS} DESTINATION Mod/FlowStudio/flow_studio/utils)
 INSTALL(FILES ${FlowStudioViewproviders_SRCS} DESTINATION Mod/FlowStudio/flow_studio/viewproviders)
 INSTALL(FILES ${FlowStudioTests_SRCS} DESTINATION Mod/FlowStudio/flow_studio/tests)
+INSTALL(FILES ${FlowStudioDocs_SRCS} DESTINATION Mod/FlowStudio/docs)
 INSTALL(FILES ${FlowStudioIcons_SRCS} DESTINATION Mod/FlowStudio/Resources/icons)
