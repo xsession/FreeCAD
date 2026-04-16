@@ -14,9 +14,12 @@ boundary conditions, and solver backends.
 """
 
 import os
+from datetime import datetime
 import FreeCAD
 import FreeCADGui
 
+from flow_studio.enterprise import initialize_workbench
+from flow_studio.enterprise.app.legacy_actions import prepare_runtime_submission
 from flow_studio.workflow_guide import (
     get_active_analysis,
     has_analysis,
@@ -38,6 +41,41 @@ ICONS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 
 def _icon(name):
     return os.path.join(ICONS_DIR, name)
+
+
+def _project_id():
+    doc = FreeCAD.ActiveDocument
+    if doc is None:
+        return "flowstudio-project"
+    return getattr(doc, "Name", "flowstudio-project")
+
+
+def _default_output_dir(analysis):
+    case_dir = getattr(analysis, "CaseDir", "")
+    if case_dir:
+        return case_dir
+    doc = FreeCAD.ActiveDocument
+    if doc is not None and hasattr(doc, "TransientDir"):
+        return os.path.join(doc.TransientDir, "FlowStudio", getattr(analysis, "Name", "Analysis"))
+    return os.path.join(os.path.expanduser("~"), "FlowStudio")
+
+
+def _timestamp_slug():
+    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+
+def _show_warning_dialog(title, message):
+    if FreeCAD.GuiUp:
+        from PySide import QtWidgets
+
+        QtWidgets.QMessageBox.warning(None, title, message)
+
+
+def _show_info_dialog(title, message):
+    if FreeCAD.GuiUp:
+        from PySide import QtWidgets
+
+        QtWidgets.QMessageBox.information(None, title, message)
 
 
 def _get_active_analysis():
@@ -623,8 +661,12 @@ class _CmdRunSolver:
                     return
 
         backend = solver_obj.SolverBackend
+
+        if self._try_enterprise_run(analysis):
+            return
+
         FreeCAD.Console.PrintMessage(
-            f"FlowStudio: Running solver backend '{backend}'...\n"
+            f"FlowStudio: Running legacy solver backend '{backend}'...\n"
         )
 
         from flow_studio.solvers.registry import get_runner
@@ -650,6 +692,65 @@ class _CmdRunSolver:
             analysis.NeedsMeshRerun = False
         except AttributeError:
             pass
+
+    def _try_enterprise_run(self, analysis):
+        """Submit supported backends through the enterprise runtime."""
+
+        runtime = initialize_workbench()
+        working_directory = _default_output_dir(analysis)
+        run_id = f"{analysis.Name}-{_timestamp_slug()}"
+
+        try:
+            adapter_id, _, request, manifest_hash = prepare_runtime_submission(
+                runtime=runtime,
+                analysis_object=analysis,
+                project_id=_project_id(),
+                run_id=run_id,
+                working_directory=working_directory,
+                requested_by="flowstudio-run-command",
+                reason="run-solver-command",
+            )
+        except Exception as exc:
+            FreeCAD.Console.PrintWarning(
+                f"FlowStudio: Enterprise submission preparation failed; falling back to legacy runner: {exc}\n"
+            )
+            return False
+
+        if adapter_id not in runtime.job_service.adapter_ids():
+            FreeCAD.Console.PrintMessage(
+                f"FlowStudio: Backend for adapter '{adapter_id}' is not yet handled by the enterprise runtime; using legacy runner.\n"
+            )
+            return False
+
+        try:
+            record = runtime.legacy_execution.submit(request)
+        except Exception as exc:
+            FreeCAD.Console.PrintWarning(
+                f"FlowStudio: Enterprise submission failed; falling back to legacy runner: {exc}\n"
+            )
+            return False
+
+        try:
+            if not getattr(analysis, "CaseDir", ""):
+                analysis.CaseDir = working_directory
+            analysis.NeedsCaseRewrite = False
+            analysis.NeedsMeshRewrite = False
+            analysis.NeedsMeshRerun = False
+        except AttributeError:
+            pass
+
+        message = (
+            f"Enterprise run submitted.\n\n"
+            f"Run ID: {record.run_id}\n"
+            f"State: {record.state.value}\n"
+            f"Adapter: {record.adapter_id}\n"
+            f"Execution Mode: {record.execution_mode or 'unknown'}\n"
+            f"Manifest: {manifest_hash}\n"
+            f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
+        )
+        FreeCAD.Console.PrintMessage(f"FlowStudio: {message}\n")
+        _show_info_dialog(translate("FlowStudio", "Enterprise Run Submitted"), message)
+        return True
 
 
 # ======================================================================
@@ -845,6 +946,27 @@ class _CmdBCSurfaceCharge:
         FreeCAD.ActiveDocument.recompute()
 
 
+class _CmdBCElectricFlux:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectricFlux.svg"),
+            "MenuText": translate("FlowStudio", "Electric Flux"),
+            "ToolTip": translate("FlowStudio",
+                                 "Apply electric flux density (D) on boundary\n"
+                                 "Requires: Analysis + Physics Model"),
+        }
+
+    def IsActive(self):
+        return has_analysis() and has_physics_model()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Electric Flux BC")
+        from flow_studio.ObjectsFlowStudio import makeBCElectricFlux
+        _add_to_analysis(makeBCElectricFlux())
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+
+
 # ======================================================================
 #  ELECTROMAGNETIC commands
 # ======================================================================
@@ -927,6 +1049,48 @@ class _CmdBCCurrentDensity:
         FreeCAD.ActiveDocument.openTransaction("Add Current Density BC")
         from flow_studio.ObjectsFlowStudio import makeBCCurrentDensity
         _add_to_analysis(makeBCCurrentDensity())
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+
+
+class _CmdBCMagneticFluxDensity:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioMagneticFluxDensity.svg"),
+            "MenuText": translate("FlowStudio", "Magnetic Flux Density"),
+            "ToolTip": translate("FlowStudio",
+                                 "Prescribe magnetic flux density (B) on boundary\n"
+                                 "Requires: Analysis + Physics Model"),
+        }
+
+    def IsActive(self):
+        return has_analysis() and has_physics_model()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Magnetic Flux Density BC")
+        from flow_studio.ObjectsFlowStudio import makeBCMagneticFluxDensity
+        _add_to_analysis(makeBCMagneticFluxDensity())
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+
+
+class _CmdBCFarFieldEM:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioFarFieldEM.svg"),
+            "MenuText": translate("FlowStudio", "Far-Field EM"),
+            "ToolTip": translate("FlowStudio",
+                                 "Apply far-field / open-boundary condition for EM\n"
+                                 "Requires: Analysis + Physics Model"),
+        }
+
+    def IsActive(self):
+        return has_analysis() and has_physics_model()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Far-Field EM BC")
+        from flow_studio.ObjectsFlowStudio import makeBCFarFieldEM
+        _add_to_analysis(makeBCFarFieldEM())
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1586,12 +1750,15 @@ FreeCADGui.addCommand("FlowStudio_ElectrostaticMaterial", _CmdElectrostaticMater
 FreeCADGui.addCommand("FlowStudio_ElectrostaticPhysics", _CmdElectrostaticPhysics())
 FreeCADGui.addCommand("FlowStudio_BC_ElectricPotential", _CmdBCElectricPotential())
 FreeCADGui.addCommand("FlowStudio_BC_SurfaceCharge", _CmdBCSurfaceCharge())
+FreeCADGui.addCommand("FlowStudio_BC_ElectricFlux", _CmdBCElectricFlux())
 
 # --- Electromagnetic ---
 FreeCADGui.addCommand("FlowStudio_ElectromagneticMaterial", _CmdElectromagneticMaterial())
 FreeCADGui.addCommand("FlowStudio_ElectromagneticPhysics", _CmdElectromagneticPhysics())
 FreeCADGui.addCommand("FlowStudio_BC_MagneticPotential", _CmdBCMagneticPotential())
 FreeCADGui.addCommand("FlowStudio_BC_CurrentDensity", _CmdBCCurrentDensity())
+FreeCADGui.addCommand("FlowStudio_BC_MagneticFluxDensity", _CmdBCMagneticFluxDensity())
+FreeCADGui.addCommand("FlowStudio_BC_FarFieldEM", _CmdBCFarFieldEM())
 
 # --- Thermal ---
 FreeCADGui.addCommand("FlowStudio_ThermalMaterial", _CmdThermalMaterial())

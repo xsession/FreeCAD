@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="ff" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#80CBC4"/>
+      <stop offset="100%" stop-color="#00695C"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="8" fill="url(#ff)"/>
+  <!-- Radiating arcs (far-field) -->
+  <path d="M32 32 m-8 0 a8,8 0 0,1 16,0"  fill="none" stroke="#E0F2F1" stroke-width="2.5"/>
+  <path d="M32 32 m-16 0 a16,16 0 0,1 32,0" fill="none" stroke="#E0F2F1" stroke-width="2"/>
+  <path d="M32 32 m-24 0 a24,24 0 0,1 48,0" fill="none" stroke="#E0F2F1" stroke-width="1.5" opacity="0.7"/>
+  <!-- Source dot -->
+  <circle cx="32" cy="32" r="3.5" fill="#E0F2F1"/>
+  <!-- Infinity / open-boundary indicator -->
+  <text x="32" y="58" font-family="Arial,sans-serif" font-weight="bold" font-size="13" fill="#E0F2F1" text-anchor="middle">&#x221E;</text>
+</svg>

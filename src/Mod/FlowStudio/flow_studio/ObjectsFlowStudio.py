@@ -348,6 +348,18 @@ def makeBCSurfaceCharge(doc=None, name="SurfaceCharge"):
     return obj
 
 
+def makeBCElectricFlux(doc=None, name="ElectricFlux"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_electrostatic import BCElectricFlux
+    BCElectricFlux(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.base_vp import BaseFlowVP
+        BaseFlowVP(obj.ViewObject)
+    return obj
+
+
 # --- Electromagnetic ---
 
 def makeElectromagneticMaterial(doc=None, name="ElectromagneticMaterial"):
@@ -392,6 +404,30 @@ def makeBCCurrentDensity(doc=None, name="CurrentDensity"):
     obj = doc.addObject("App::FeaturePython", name)
     from flow_studio.objects.bc_electromagnetic import BCCurrentDensity
     BCCurrentDensity(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.base_vp import BaseFlowVP
+        BaseFlowVP(obj.ViewObject)
+    return obj
+
+
+def makeBCMagneticFluxDensity(doc=None, name="MagneticFluxDensity"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_electromagnetic import BCMagneticFluxDensity
+    BCMagneticFluxDensity(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.base_vp import BaseFlowVP
+        BaseFlowVP(obj.ViewObject)
+    return obj
+
+
+def makeBCFarFieldEM(doc=None, name="FarFieldEM"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_electromagnetic import BCFarFieldEM
+    BCFarFieldEM(obj)
     if FreeCAD.GuiUp:
         from flow_studio.viewproviders.base_vp import BaseFlowVP
         BaseFlowVP(obj.ViewObject)

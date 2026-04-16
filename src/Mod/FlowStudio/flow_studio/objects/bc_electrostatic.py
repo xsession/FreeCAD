@@ -54,3 +54,19 @@ class BCElectricSymmetry(BaseBoundaryCondition):
     def __init__(self, obj):
         super().__init__(obj)
         obj.BCLabel = "Electric Symmetry"
+
+
+class BCElectricFlux(BaseBoundaryCondition):
+    """Prescribed electric flux (normal displacement field) boundary."""
+
+    Type = "FlowStudio::BCElectricFlux"
+
+    def __init__(self, obj):
+        super().__init__(obj)
+        obj.BCLabel = "Electric Flux"
+
+        obj.addProperty(
+            "App::PropertyFloat", "FluxDensity", "Electrostatic",
+            "Electric flux density normal component [C/m^2]"
+        )
+        obj.FluxDensity = 0.0

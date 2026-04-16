@@ -94,3 +94,19 @@ class BCMagneticSymmetry(BaseBoundaryCondition):
     def __init__(self, obj):
         super().__init__(obj)
         obj.BCLabel = "Magnetic Symmetry"
+
+
+class BCFarFieldEM(BaseBoundaryCondition):
+    """Far-field/open electromagnetic boundary condition."""
+
+    Type = "FlowStudio::BCFarFieldEM"
+
+    def __init__(self, obj):
+        super().__init__(obj)
+        obj.BCLabel = "EM Far Field"
+
+        obj.addProperty(
+            "App::PropertyBool", "UseZeroPotential", "Electromagnetic",
+            "Approximate far field by enforcing zero magnetic potential"
+        )
+        obj.UseZeroPotential = True
