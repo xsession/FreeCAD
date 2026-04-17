@@ -78,6 +78,7 @@ public:
     ~BackstageView() override;
 
     static BackstageView* instance();
+    static BackstageView* existingInstance();
 
     /// Add a page. The first page added becomes the default selection.
     void addPage(const QString& name, BackstagePage* page);

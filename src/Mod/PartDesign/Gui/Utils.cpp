@@ -32,6 +32,7 @@
 #include <App/Datums.h>
 #include <App/Part.h>
 #include <Gui/Application.h>
+#include <Gui/BackstageView.h>
 #include <Gui/CommandT.h>
 #include <Gui/MainWindow.h>
 #include <Gui/MDIView.h>
@@ -87,8 +88,15 @@ bool setEdit(App::DocumentObject* obj, PartDesign::Body* body)
             return false;
         }
     }
+
+    // If the ribbon File backstage is open, close it before entering sketch edit.
+    // The backstage overlay can visually "bounce back" over the sketch task panel.
+    if (auto* backstage = Gui::BackstageView::existingInstance(); backstage && backstage->isVisible()) {
+        backstage->hide();
+    }
+
     // Ensure a 3D view is active, not the Start page or any non-3D MDI window.
-    // Without this, setEdit silently fails when the Start page has focus.
+    // Without this, setEdit silently fails when a non-3D UI surface has focus.
     Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), false);
 
     auto* activeView = Gui::Application::Instance->activeView();

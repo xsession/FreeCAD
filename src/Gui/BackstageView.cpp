@@ -141,6 +141,11 @@ BackstageView* BackstageView::instance()
     return _instance;
 }
 
+BackstageView* BackstageView::existingInstance()
+{
+    return _instance;
+}
+
 void BackstageView::buildLayout()
 {
     auto* mainLayout = new QHBoxLayout(this);
