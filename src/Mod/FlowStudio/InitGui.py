@@ -125,6 +125,9 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         """Called once when the workbench is first loaded."""
         import flow_studio.commands  # noqa: F401
 
+        main_window_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
+        ribbon_enabled = bool(main_window_prefs.GetBool("UseRibbonBar", False))
+
         enterprise_enabled = is_enterprise_enabled()
         if enterprise_enabled:
             import flow_studio.enterprise_commands  # noqa: F401
@@ -135,12 +138,71 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 "FlowStudio: Enterprise feature set disabled by FLOWSTUDIO_ENTERPRISE_ENABLED.\n"
             )
 
-        self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
-        self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)
-        self.appendToolbar("FlowStudio Solve", self.MESH_SOLVE_COMMANDS)
-        self.appendToolbar("FlowStudio Physics", self.PHYSICS_COMMANDS)
-        if enterprise_enabled:
-            self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
+        if ribbon_enabled:
+            self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
+            self.appendToolbar(
+                "FlowStudio Setup Core",
+                [
+                    "FlowStudio_PhysicsModel",
+                    "FlowStudio_FluidMaterial",
+                    "FlowStudio_InitialConditions",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio BC Core",
+                [
+                    "FlowStudio_BC_Inlet",
+                    "FlowStudio_BC_Outlet",
+                    "FlowStudio_BC_Wall",
+                    "FlowStudio_BC_OpenBoundary",
+                    "FlowStudio_BC_Symmetry",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio Meshing",
+                [
+                    "FlowStudio_MeshGmsh",
+                    "FlowStudio_MeshRegion",
+                    "FlowStudio_BoundaryLayer",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio Solve",
+                [
+                    "FlowStudio_SolverSettings",
+                    "FlowStudio_RunSolver",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio Electrostatic",
+                [
+                    "FlowStudio_ElectrostaticMaterial",
+                    "FlowStudio_ElectrostaticPhysics",
+                    "FlowStudio_BC_ElectricPotential",
+                    "FlowStudio_BC_SurfaceCharge",
+                    "FlowStudio_BC_ElectricFlux",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio Electromagnetic",
+                [
+                    "FlowStudio_ElectromagneticMaterial",
+                    "FlowStudio_ElectromagneticPhysics",
+                    "FlowStudio_BC_MagneticPotential",
+                    "FlowStudio_BC_CurrentDensity",
+                    "FlowStudio_BC_MagneticFluxDensity",
+                    "FlowStudio_BC_FarFieldEM",
+                ],
+            )
+            if enterprise_enabled:
+                self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
+        else:
+            self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
+            self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)
+            self.appendToolbar("FlowStudio Solve", self.MESH_SOLVE_COMMANDS)
+            self.appendToolbar("FlowStudio Physics", self.PHYSICS_COMMANDS)
+            if enterprise_enabled:
+                self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
 
         self.appendMenu("FlowStudio", self.ANALYSIS_COMMANDS)
         self.appendMenu(["FlowStudio", "CFD Setup"], self.CFD_SETUP_COMMANDS)

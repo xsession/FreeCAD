@@ -114,7 +114,8 @@ private:
     QList<QWidget*> customWidgets;
 
     static constexpr int MaxRows = 3;
-    static constexpr int ButtonSpacing = 2;
+    static constexpr int ButtonSpacing = 6;
+    static constexpr int SmallColumnSpacing = 4;
 };
 
 

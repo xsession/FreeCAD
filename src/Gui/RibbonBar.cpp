@@ -68,15 +68,15 @@ RibbonBar* RibbonBar::_instance = nullptr;
 // ============================================================================
 
 namespace {
-    constexpr int LargeIconSize      = 32;
+    constexpr int LargeIconSize      = 28;
     constexpr int SmallIconSize      = 16;
     constexpr int QATIconSize        = 16;
-    constexpr int LargeButtonWidth   = 60;
-    constexpr int LargeButtonHeight  = 66;
-    constexpr int SmallButtonWidth   = 100;
-    constexpr int SmallButtonHeight  = 22;
-    constexpr int PanelMinWidth      = 48;
-    constexpr int RibbonHeight       = 125;
+    constexpr int LargeButtonWidth   = 74;
+    constexpr int LargeButtonHeight  = 70;
+    constexpr int SmallButtonWidth   = 116;
+    constexpr int SmallButtonHeight  = 24;
+    constexpr int PanelMinWidth      = 64;
+    constexpr int RibbonHeight       = 132;
     constexpr int PanelTitleHeight   = 20;
     constexpr int TabBarHeight       = 24;
     constexpr int QATBarHeight       = 26;
@@ -292,7 +292,7 @@ void RibbonPanel::relayoutButtons()
             if (!currentSmallColumn || smallInColumn >= MaxRows) {
                 currentSmallColumn = new QVBoxLayout();
                 currentSmallColumn->setContentsMargins(0, 0, 0, 0);
-                currentSmallColumn->setSpacing(1);
+                currentSmallColumn->setSpacing(SmallColumnSpacing);
                 hLayout->addLayout(currentSmallColumn);
                 smallInColumn = 0;
             }
@@ -338,18 +338,20 @@ RibbonTabPage::RibbonTabPage(QWidget* parent)
     mainLayout->setSpacing(0);
 
     scrollArea = new QScrollArea(this);
-    scrollArea->setWidgetResizable(true);
+    scrollArea->setWidgetResizable(false);
     scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     scrollArea->setFrameStyle(QFrame::NoFrame);
     scrollArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     scrollContent = new QWidget(scrollArea);
+    scrollContent->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     panelLayout = new QHBoxLayout(scrollContent);
     panelLayout->setContentsMargins(4, 0, 4, 0);
-    panelLayout->setSpacing(2);
+    panelLayout->setSpacing(6);
     panelLayout->addStretch(1);
     scrollContent->setLayout(panelLayout);
+    scrollContent->adjustSize();
 
     scrollArea->setWidget(scrollContent);
     mainLayout->addWidget(scrollArea);
@@ -362,6 +364,7 @@ void RibbonTabPage::addPanel(RibbonPanel* panel)
     int idx = panelLayout->count() - 1;  // before stretch
     panelLayout->insertWidget(idx, panel);
     panelList.append(panel);
+    scrollContent->adjustSize();
 }
 
 void RibbonTabPage::clearPanels()
@@ -371,6 +374,7 @@ void RibbonTabPage::clearPanels()
         delete panel;
     }
     panelList.clear();
+    scrollContent->adjustSize();
 }
 
 
