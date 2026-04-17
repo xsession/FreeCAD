@@ -75,13 +75,38 @@ TEST_F(DocumentRecompute, singleObjectRecompute)
 
 TEST_F(DocumentRecompute, canAbortRecomputeParameterExists)
 {
-    // Verify the CanAbortRecompute preference can be read
+    // Verify the CanAbortRecompute preference can be read/written roundtrip.
     auto hGrp = App::GetApplication().GetParameterGroupByPath(
         "User parameter:BaseApp/Preferences/Document");
-    bool canAbort = hGrp->GetBool("CanAbortRecompute", true);
-    // Default should be true (as changed by this patch)
-    EXPECT_TRUE(canAbort)
-        << "CanAbortRecompute should default to true";
+
+    const bool original = hGrp->GetBool("CanAbortRecompute", true);
+
+    hGrp->SetBool("CanAbortRecompute", true);
+    EXPECT_TRUE(hGrp->GetBool("CanAbortRecompute", false));
+
+    hGrp->SetBool("CanAbortRecompute", false);
+    EXPECT_FALSE(hGrp->GetBool("CanAbortRecompute", true));
+
+    hGrp->SetBool("CanAbortRecompute", original);
+}
+
+TEST_F(DocumentRecompute, canAbortRecomputePersistsAcrossParameterHandles)
+{
+    auto hGrp = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Document");
+    const bool original = hGrp->GetBool("CanAbortRecompute", true);
+
+    hGrp->SetBool("CanAbortRecompute", true);
+    auto freshHandleTrue = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Document");
+    EXPECT_TRUE(freshHandleTrue->GetBool("CanAbortRecompute", false));
+
+    hGrp->SetBool("CanAbortRecompute", false);
+    auto freshHandleFalse = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Document");
+    EXPECT_FALSE(freshHandleFalse->GetBool("CanAbortRecompute", true));
+
+    hGrp->SetBool("CanAbortRecompute", original);
 }
 
 TEST_F(DocumentRecompute, recomputeWithMultipleObjects)
