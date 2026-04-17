@@ -71,11 +71,11 @@ namespace {
     constexpr int LargeIconSize      = 28;
     constexpr int SmallIconSize      = 16;
     constexpr int QATIconSize        = 16;
-    constexpr int LargeButtonWidth   = 74;
+    constexpr int LargeButtonWidth   = 92;
     constexpr int LargeButtonHeight  = 70;
     constexpr int SmallButtonWidth   = 116;
     constexpr int SmallButtonHeight  = 24;
-    constexpr int PanelMinWidth      = 64;
+    constexpr int PanelMinWidth      = 78;
     constexpr int RibbonHeight       = 132;
     constexpr int PanelTitleHeight   = 20;
     constexpr int TabBarHeight       = 24;
@@ -120,7 +120,12 @@ QSize RibbonButton::sizeHint() const
 {
     if (btnSize == Large) {
         QFontMetrics fm(font());
-        int textWidth = fm.horizontalAdvance(text()) + 12;
+        int textWidth = 0;
+        const QStringList lines = text().split(QChar::fromLatin1('\n'));
+        for (const QString& line : lines) {
+            textWidth = qMax(textWidth, fm.horizontalAdvance(line));
+        }
+        textWidth += 16;
         int w = qMax(LargeButtonWidth, textWidth);
         return QSize(w, LargeButtonHeight);
     }

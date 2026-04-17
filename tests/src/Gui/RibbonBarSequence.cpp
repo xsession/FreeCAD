@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QFontMetrics>
 
 #include "Gui/RibbonBar.h"
 #include <src/App/InitApplication.h>
@@ -113,6 +114,20 @@ private Q_SLOTS:
         QCOMPARE(page->panels().size(), 0);
         const int contentWidthAfter = scrollArea->widget()->sizeHint().width();
         QVERIFY(contentWidthAfter < contentWidthBefore);
+    }
+
+    void test_LargeButtonMultilineLabelGetsEnoughWidth()  // NOLINT
+    {
+        Gui::RibbonButton button(QStringLiteral("cmd"), Gui::RibbonButton::Large);
+        button.setText(QStringLiteral("LongLabel\nSecondLine"));
+
+        QFontMetrics fm(button.font());
+        const int expectedMin = qMax(
+            fm.horizontalAdvance(QStringLiteral("LongLabel")),
+            fm.horizontalAdvance(QStringLiteral("SecondLine"))
+        ) + 16;
+
+        QVERIFY(button.sizeHint().width() >= expectedMin);
     }
 };
 
