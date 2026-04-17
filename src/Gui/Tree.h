@@ -23,6 +23,8 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
 #include <unordered_map>
 #include <QTimer>
 #include <QElapsedTimer>
@@ -48,6 +50,7 @@ class DocumentObjectItem;
 class DocumentObjectData;
 using DocumentObjectDataPtr = std::shared_ptr<DocumentObjectData>;
 class TreeWidgetItemDelegate;
+class RollbackBar;
 
 class DocumentItem;
 class Command;
@@ -190,6 +193,8 @@ protected:
     bool event(QEvent* e) override;
     void keyPressEvent(QKeyEvent* event) override;
     void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
 
     void showEvent(QShowEvent* ev) override;
@@ -198,6 +203,10 @@ protected:
 
 private:
     void _updateStatus(bool delay = true);
+    App::DocumentObject* detectRollbackBody(DocumentObjectItem* selectedItem) const;
+    std::vector<App::DocumentObject*> selectedContextObjects(App::Document** document = nullptr) const;
+    bool toggleSuppressedSelection(bool suppressed);
+    bool groupSelectedObjects();
 
     // Helpers for the two-stage "Select All" feature
     void selectGroupItems(const QTreeWidgetItem* group, bool recursive);
@@ -292,6 +301,7 @@ private:
     QTimer* selectTimer;
     QTimer* preselectTimer;
     QElapsedTimer preselectTime;
+    std::unique_ptr<RollbackBar> rollbackBar;
 
     // this timer is used to prevent double click event on visibility icon
     QTimer visibilityIconDoubleClickTimer;

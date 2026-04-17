@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
+name: FlowStudio Adapter Matrix CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/flowstudio_adapter_matrix_ci.yml"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/adapter_matrix.py"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/__init__.py"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/jobs_panel.py"
+      - "src/Mod/FlowStudio/flow_studio/tests/test_enterprise_adapter_matrix.py"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/flowstudio_adapter_matrix_ci.yml"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/adapter_matrix.py"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/__init__.py"
+      - "src/Mod/FlowStudio/flow_studio/enterprise/ui/jobs_panel.py"
+      - "src/Mod/FlowStudio/flow_studio/tests/test_enterprise_adapter_matrix.py"
+
+permissions:
+  contents: read
+
+jobs:
+  adapter-matrix-headless-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTEST_DISABLE_PLUGIN_AUTOLOAD: "1"
+      PYTHONNOUSERSITE: "1"
+      PYTHONPATH: ${{ github.workspace }}/src/Mod/FlowStudio
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pytest
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest
+
+      - name: Run FlowStudio adapter matrix regression test
+        run: |
+          python -m pytest src/Mod/FlowStudio/flow_studio/tests/test_enterprise_adapter_matrix.py -q

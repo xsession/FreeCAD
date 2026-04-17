@@ -1281,6 +1281,31 @@ bool Application::hasLinksTo(const DocumentObject *obj) const {
     return !getLinksTo(obj,0,1).empty();
 }
 
+// ── PDM provider (D13) ─────────────────────────────────────────────────────
+
+void Application::setPdmProviderPy(PyObject* provider)
+{
+    Py_XDECREF(_pdmProviderPy);
+    if (provider && provider != Py_None) {
+        Py_INCREF(provider);
+        _pdmProviderPy = provider;
+    }
+    else {
+        _pdmProviderPy = nullptr;
+    }
+}
+
+PyObject* Application::getPdmProviderPy() const
+{
+    if (_pdmProviderPy) {
+        Py_INCREF(_pdmProviderPy);
+        return _pdmProviderPy;
+    }
+    Py_RETURN_NONE;
+}
+
+// ── End PDM provider ───────────────────────────────────────────────────────
+
 ParameterManager & Application::GetSystemParameter()
 {
     return *_pcSysParamMngr;

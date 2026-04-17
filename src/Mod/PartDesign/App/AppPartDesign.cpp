@@ -28,6 +28,7 @@
 #include <Base/PyObjectBase.h>
 
 #include "Body.h"
+#include "ConfigurationManager.h"
 #include "DatumCS.h"
 #include "DatumLine.h"
 #include "DatumPlane.h"
@@ -58,6 +59,7 @@
 #include "FeatureThickness.h"
 #include "FeatureTransformed.h"
 #include "ShapeBinder.h"
+#include "SheetMetalFeature.h"
 
 
 namespace PartDesign
@@ -159,6 +161,12 @@ PyMOD_INIT_FUNC(_PartDesign)
     PartDesign::AdditiveWedge               ::init();
     PartDesign::SubtractiveWedge            ::init();
     PartDesign::FeatureBase                 ::init();
+
+    PartDesign::ConfigurationManager        ::init();
+    SheetMetal::SheetMetalFeature           ::init();
+    SheetMetal::BaseFlange                  ::init();
+    SheetMetal::EdgeFlange                  ::init();
+    SheetMetal::Unfold                      ::init();
 
     PartDesign::Measure ::initialize();
     // clang-format on

@@ -844,6 +844,15 @@ public:
     /// Gets the base progress indicator instance.
     Base::ProgressIndicator& getProgressIndicator() { return _progressIndicator; }
 
+    /// @name PDM provider integration (D13)
+    /// @{
+    /// Register a Python-level :class:`App.PdmProviderBase` instance as the
+    /// active PDM provider.  Pass ``nullptr`` / ``Py_None`` to clear.
+    void setPdmProviderPy(PyObject* provider);
+    /// Return the current Python PDM provider, or ``Py_None`` if unset.
+    PyObject* getPdmProviderPy() const;
+    /// @}
+
     friend class App::Document;
 
 protected:
@@ -1012,6 +1021,9 @@ private:
     int _globalTransactionID { 0 };
     bool _globalTransactionTmpName {false};
     std::string _globalTransactionName;
+
+    // Python PDM provider (D13)
+    PyObject* _pdmProviderPy{nullptr};
 
     Base::ProgressIndicator _progressIndicator;
 

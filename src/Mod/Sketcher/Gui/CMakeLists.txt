@@ -153,6 +153,10 @@ SET(SketcherGui_SRCS
     SketchRectangularArrayDialog.cpp
     SketcherRegularPolygonDialog.h
     SketcherRegularPolygonDialog.cpp
+    SketchAutoConstraintEngine.cpp
+    SketchAutoConstraintEngine.h
+    SmartDimension.cpp
+    SmartDimension.h
     SnapManager.cpp
     SnapManager.h
     StyleParameters.h

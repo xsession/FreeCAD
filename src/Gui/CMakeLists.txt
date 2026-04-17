@@ -539,6 +539,8 @@ SET(Command_CPP_SRCS
     ShortcutManager.cpp
     CommandCompleter.cpp
     CommandActionPy.cpp
+    CommandSearch.cpp
+    CommandDispatcher.cpp
 )
 SET(Command_SRCS
     ${Command_CPP_SRCS}
@@ -549,6 +551,8 @@ SET(Command_SRCS
     ShortcutManager.h
     CommandCompleter.h
     CommandActionPy.h
+    CommandSearch.h
+    CommandDispatcher.h
 )
 SOURCE_GROUP("Command" FILES ${Command_SRCS})
 
@@ -1251,6 +1255,10 @@ SET(Widget_CPP_SRCS
     ElideCheckBox.cpp
     FontScaledSVG.cpp
     SplitButton.cpp
+    ThemeTokens.cpp
+    SelectionFilterBar.cpp
+    RollbackBar.cpp
+    BackstageView.cpp
 )
 SET(Widget_HPP_SRCS
     ComboLinks.h
@@ -1277,6 +1285,10 @@ SET(Widget_HPP_SRCS
     ElideCheckBox.h
     FontScaledSVG.h
     SplitButton.h
+    ThemeTokens.h
+    SelectionFilterBar.h
+    RollbackBar.h
+    BackstageView.h
 )
 SET(Widget_SRCS
     ${Widget_CPP_SRCS}
@@ -1334,6 +1346,8 @@ SET(Workbench_CPP_SRCS
     MenuManager.cpp
     PythonWorkbenchPyImp.cpp
     RibbonBar.cpp
+    RibbonGallery.cpp
+    RibbonKeyTip.cpp
     ToolBarAreaWidget.cpp
     ToolBarManager.cpp
     ToolBoxManager.cpp
@@ -1351,6 +1365,8 @@ SET(Workbench_SRCS
     OverlayWidgets.h
     MenuManager.h
     RibbonBar.h
+    RibbonGallery.h
+    RibbonKeyTip.h
     ToolBarAreaWidget.h
     ToolBarManager.h
     ToolBoxManager.h
@@ -1406,6 +1422,7 @@ SET(FreeCADGui_CPP_SRCS
     Macro.cpp
     MergeDocuments.cpp
     ModuleIO.cpp
+    SelectionCountBadge.cpp
     Namespace.h
     resource.cpp
     Control.cpp
@@ -1451,6 +1468,7 @@ SET(FreeCADGui_SRCS
     MergeDocuments.h
     MetaTypes.h
     ModuleIO.h
+    SelectionCountBadge.h
     Notifications.h
     PreCompiled.h
     QtAll.h

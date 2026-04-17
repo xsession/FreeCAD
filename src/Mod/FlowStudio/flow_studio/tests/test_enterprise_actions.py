@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from flow_studio.enterprise.app.legacy_actions import (
     build_manifest_for_analysis,
+    export_fcstd_sidecar,
     export_analysis_manifest,
     prepare_runtime_submission,
     submit_analysis_to_runtime,
@@ -146,3 +147,22 @@ def test_submit_analysis_to_runtime_supports_remote_execution_profile(tmp_path: 
     assert record.target_ref == "loopback.default"
     assert record.remote_run_id == "run-remote-actions"
     assert manifest_hash.startswith("sha256:")
+
+
+def test_export_fcstd_sidecar_writes_canonical_payload(tmp_path: Path):
+    analysis = _analysis_fixture()
+    fcstd_path = tmp_path / "Demo.FCStd"
+    fcstd_path.write_text("dummy", encoding="utf-8")
+
+    sidecar_path = export_fcstd_sidecar(
+        analysis_object=analysis,
+        project_id="project-sidecar",
+        fcstd_path=str(fcstd_path),
+    )
+
+    sidecar = Path(sidecar_path)
+    assert sidecar.is_file()
+    contents = sidecar.read_text(encoding="utf-8")
+    assert '"artifact_type": "flowstudio.fcstd.sidecar"' in contents
+    assert '"project_id": "project-sidecar"' in contents
+    assert '"manifest_hash": "sha256:' in contents

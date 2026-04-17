@@ -15,6 +15,12 @@ import os
 import FreeCAD
 import FreeCADGui
 
+from flow_studio.enterprise import (
+    initialize_workbench,
+    is_enterprise_enabled,
+    on_workbench_activated,
+)
+
 FreeCAD.Console.PrintLog("FlowStudio: InitGui.py loading...\n")
 
 # __file__ is NOT defined when this script is exec'd by FreeCAD's init system.
@@ -118,28 +124,36 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
     def Initialize(self):
         """Called once when the workbench is first loaded."""
         import flow_studio.commands  # noqa: F401
-        import flow_studio.enterprise_commands  # noqa: F401
-        from flow_studio.enterprise import initialize_workbench
 
-        initialize_workbench()
+        enterprise_enabled = is_enterprise_enabled()
+        if enterprise_enabled:
+            import flow_studio.enterprise_commands  # noqa: F401
+
+            initialize_workbench()
+        else:
+            FreeCAD.Console.PrintLog(
+                "FlowStudio: Enterprise feature set disabled by FLOWSTUDIO_ENTERPRISE_ENABLED.\n"
+            )
+
         self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
         self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)
         self.appendToolbar("FlowStudio Solve", self.MESH_SOLVE_COMMANDS)
-        self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
         self.appendToolbar("FlowStudio Physics", self.PHYSICS_COMMANDS)
+        if enterprise_enabled:
+            self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
 
         self.appendMenu("FlowStudio", self.ANALYSIS_COMMANDS)
         self.appendMenu(["FlowStudio", "CFD Setup"], self.CFD_SETUP_COMMANDS)
         self.appendMenu(["FlowStudio", "Physics Setup"], self.PHYSICS_COMMANDS)
         self.appendMenu(["FlowStudio", "Solve"], self.MESH_SOLVE_COMMANDS)
         self.appendMenu(["FlowStudio", "Post-Processing"], self.POST_COMMANDS)
-        self.appendMenu(["FlowStudio", "Enterprise"], self.ENTERPRISE_COMMANDS)
+        if enterprise_enabled:
+            self.appendMenu(["FlowStudio", "Enterprise"], self.ENTERPRISE_COMMANDS)
 
     def Activated(self):
         """Called every time the workbench becomes active."""
-        from flow_studio.enterprise import on_workbench_activated
-
-        on_workbench_activated()
+        if is_enterprise_enabled():
+            on_workbench_activated()
 
     def Deactivated(self):
         """Called when switching away from this workbench."""

@@ -107,10 +107,13 @@
 #include "ReportView.h"
 #include "SelectionView.h"
 #include "SplashScreen.h"
+#include "SelectionCountBadge.h"
 #include "StatusBarLabel.h"
 #include "ToolBarManager.h"
 #include "ToolBoxManager.h"
 #include "RibbonBar.h"
+#include "CommandSearch.h"
+#include "SelectionFilterBar.h"
 #include "Tree.h"
 #include "WaitCursor.h"
 #include "WorkbenchManager.h"
@@ -443,6 +446,19 @@ MainWindow::MainWindow(QWidget* parent, Qt::WindowFlags f)
     QProgressBar* progressBar = Gui::SequencerBar::instance()->getProgressBar(statusBar());
     statusBar()->addPermanentWidget(progressBar, 0);
     statusBar()->addPermanentWidget(d->sizeLabel, 0);
+
+    // Selection filter bar — vertex / edge / face / solid toggles
+    auto* selFilterBar = new SelectionFilterBar(statusBar());
+    selFilterBar->setObjectName(QStringLiteral("selectionFilterBar"));
+    //: A context menu action used to show or hide the selection type filter in the status bar
+    selFilterBar->setWindowTitle(tr("Selection Filter"));
+    statusBar()->addPermanentWidget(selFilterBar, 0);
+
+    auto* selectionCountBadge = new SelectionCountBadge(statusBar());
+    statusBar()->addPermanentWidget(selectionCountBadge, 0);
+
+    // Command search palette (Ctrl+Shift+P)
+    CommandSearch::registerShortcut();
 
     // Toggle bottom panels button. Must be added after progressBar and sizeLabel so it appears as
     // the rightmost permanent widget.

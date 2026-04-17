@@ -1,0 +1,1 @@
+"""Electrical Harness GUI package."""

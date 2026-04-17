@@ -1,0 +1,133 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# ***************************************************************************
+# *   FreeCAD Modernization CI — Static analysis + unit tests              *
+# *   for Phase 0-6 deliverables.                                          *
+# ***************************************************************************
+
+name: Modernization CI
+
+on:
+  pull_request:
+    paths:
+      - 'src/App/SignalQueue.*'
+      - 'src/App/DocumentMigration.*'
+      - 'src/App/RecomputeEngine.*'
+      - 'src/App/AuditTrail.*'
+      - 'src/App/PdmProvider.*'
+      - 'src/App/ObjectLockManager.*'
+      - 'src/App/FeatureFlags.*'
+      - 'src/Gui/ThemeTokens.*'
+      - 'src/Gui/CommandSearch.*'
+      - 'src/Gui/SelectionFilterBar.*'
+      - 'src/Mod/Assembly/App/DofOverlay.*'
+      - 'src/Mod/Sketcher/Gui/SketchAutoConstraintEngine.*'
+      - 'src/Mod/PartDesign/App/ConfigurationManager.*'
+      - 'src/Mod/PartDesign/App/FeatureReorderValidator.*'
+      - 'src/Mod/PartDesign/App/SheetMetalFeature.*'
+      - 'src/Mod/TechDraw/App/AutoBom.*'
+      - 'src/Mod/Part/App/StepAP242Exporter.*'
+      - 'src/Mod/RestAPI/**'
+      - 'src/Base/Profiler.h'
+      - 'include/**'
+      - 'tests/src/App/FeatureFlags.cpp'
+      - 'tests/src/App/ObjectLockManager.cpp'
+  push:
+    branches: [main, modernization/**]
+
+concurrency:
+  group: modernization-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────
+  #  Build + Unit Tests (Windows)
+  # ────────────────────────────────────────────────────────────────────────
+  build-and-test:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/ccache
+      CCACHE_MAXSIZE: 1G
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Pixi
+        uses: prefix-dev/setup-pixi@v0.8.8
+        with:
+          pixi-version: latest
+          cache: true
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-modernization-${{ runner.os }}-${{ github.sha }}
+          restore-keys: ccache-modernization-${{ runner.os }}-
+
+      - name: Configure
+        run: pixi run cmake --preset conda-windows-debug
+
+      - name: Build
+        run: pixi run cmake --build build/debug --parallel
+
+      - name: Run App Unit Tests
+        run: |
+          cd build/debug
+          ctest --test-dir . -R "App_tests_run" --output-on-failure --timeout 120
+
+      - name: Run All Unit Tests
+        run: |
+          cd build/debug
+          ctest --output-on-failure --timeout 300
+
+  # ────────────────────────────────────────────────────────────────────────
+  #  Python Lint & Type Check
+  # ────────────────────────────────────────────────────────────────────────
+  python-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install linters
+        run: pip install flake8 mypy
+
+      - name: Lint REST API module
+        run: |
+          flake8 src/Mod/RestAPI/ --max-line-length=100 --ignore=E501,W503
+
+      - name: Lint Plugin Sandbox
+        run: |
+          flake8 src/Mod/RestAPI/PluginSandbox.py --max-line-length=100 --ignore=E501,W503
+
+  # ────────────────────────────────────────────────────────────────────────
+  #  Public API Header Validation
+  # ────────────────────────────────────────────────────────────────────────
+  api-headers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify public API headers exist
+        run: |
+          for header in \
+            include/FreeCAD/App/Document.h \
+            include/FreeCAD/App/Feature.h \
+            include/FreeCAD/Gui/ViewProvider.h \
+            include/FreeCAD/Gui/Command.h \
+            include/FreeCAD/Gui/Workbench.h \
+            include/FreeCAD/Plugin/PluginAPI.h; do
+            if [ ! -f "$header" ]; then
+              echo "MISSING: $header"
+              exit 1
+            fi
+            echo "OK: $header"
+          done

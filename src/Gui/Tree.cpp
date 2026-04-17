@@ -21,6 +21,7 @@
  ***************************************************************************/
 
 
+#include <algorithm>
 #include <QAction>
 #include <QActionGroup>
 #include <QApplication>
@@ -53,6 +54,8 @@
 #include <App/AutoTransaction.h>
 #include <App/GeoFeatureGroupExtension.h>
 #include <App/Link.h>
+#include <App/PropertyLinks.h>
+#include <App/SuppressibleExtension.h>
 
 #include "Tree.h"
 #include "BitmapFactory.h"
@@ -62,6 +65,7 @@
 #include "Macro.h"
 #include "MainWindow.h"
 #include "MenuManager.h"
+#include "RollbackBar.h"
 #include "TreeParams.h"
 #include "View3DInventor.h"
 #include "ViewProviderDocumentObject.h"
@@ -107,6 +111,78 @@ static bool isOnlyNameColumnDisplayed()
 static bool isSelectionCheckBoxesEnabled()
 {
     return TreeParams::getCheckBoxesSelection();
+}
+
+static bool isRollbackBodyCandidate(App::DocumentObject* obj)
+{
+    if (!obj) {
+        return false;
+    }
+
+    auto* tipProp = dynamic_cast<App::PropertyLink*>(obj->getPropertyByName("Tip"));
+    auto* groupProp = dynamic_cast<App::PropertyLinkList*>(obj->getPropertyByName("Group"));
+    return tipProp && groupProp;
+}
+
+static bool isAssemblyCandidate(App::DocumentObject* obj)
+{
+    if (!obj) {
+        return false;
+    }
+
+    const auto typeName = std::string(obj->getTypeId().getName());
+    return typeName == "Assembly::AssemblyObject" || typeName == "Assembly::AssemblyLink";
+}
+
+static int indexInBodyGroup(const App::DocumentObject* body, const App::DocumentObject* obj)
+{
+    if (!body || !obj) {
+        return -1;
+    }
+
+    auto* groupProp = dynamic_cast<App::PropertyLinkList*>(body->getPropertyByName("Group"));
+    if (!groupProp) {
+        return -1;
+    }
+
+    const auto& group = groupProp->getValues();
+    for (int i = 0; i < static_cast<int>(group.size()); ++i) {
+        if (group[i] == obj) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+static QAction* appendCommandAction(QMenu* menu, const char* commandName)
+{
+    if (!menu || !commandName || !commandName[0]) {
+        return nullptr;
+    }
+
+    auto* command = Application::Instance->commandManager().getCommandByName(commandName);
+    if (!command) {
+        return nullptr;
+    }
+
+    command->addTo(menu);
+    auto actions = menu->actions();
+    return actions.isEmpty() ? nullptr : actions.constLast();
+}
+
+static App::SuppressibleExtension* getVisibleSuppressibleExtension(App::DocumentObject* obj)
+{
+    if (!obj) {
+        return nullptr;
+    }
+
+    auto* ext = obj->getExtensionByType<App::SuppressibleExtension>(true);
+    if (!ext || ext->Suppressed.testStatus(App::Property::Hidden)) {
+        return nullptr;
+    }
+
+    return ext;
 }
 
 void TreeParams::onItemBackgroundChanged()
@@ -707,6 +783,10 @@ TreeWidget::TreeWidget(const char* name, QWidget* parent)
     this->setSelectionMode(QAbstractItemView::ExtendedSelection);
 
     this->setMouseTracking(true);  // needed for itemEntered() to work
+    rollbackBar = std::make_unique<RollbackBar>(this);
+    connect(rollbackBar.get(), &RollbackBar::tipChanged, this, [this](App::DocumentObject*) {
+        viewport()->update();
+    });
 
 
     this->preselectTimer = new QTimer(this);
@@ -1176,6 +1256,46 @@ void TreeWidget::_updateStatus(bool delay)
     statusTimer->start(timeout);
 }
 
+App::DocumentObject* TreeWidget::detectRollbackBody(DocumentObjectItem* selectedItem) const
+{
+    if (!selectedItem || !selectedItem->object()) {
+        return nullptr;
+    }
+
+    App::DocumentObject* obj = selectedItem->object()->getObject();
+    if (!obj) {
+        return nullptr;
+    }
+    if (isRollbackBodyCandidate(obj)) {
+        return obj;
+    }
+
+    for (auto* parentItem = selectedItem->getParentItem(); parentItem;
+         parentItem = parentItem->getParentItem()) {
+        App::DocumentObject* parentObj = parentItem->object()->getObject();
+        if (isRollbackBodyCandidate(parentObj)) {
+            return parentObj;
+        }
+    }
+
+    for (auto* parentObj : obj->getInList()) {
+        if (!isRollbackBodyCandidate(parentObj)) {
+            continue;
+        }
+
+        auto* groupProp = dynamic_cast<App::PropertyLinkList*>(parentObj->getPropertyByName("Group"));
+        if (!groupProp) {
+            continue;
+        }
+        auto members = groupProp->getValues();
+        if (std::find(members.begin(), members.end(), obj) != members.end()) {
+            return parentObj;
+        }
+    }
+
+    return nullptr;
+}
+
 void TreeWidget::contextMenuEvent(QContextMenuEvent* e)
 {
     // ask workbenches and view provider, ...
@@ -1243,12 +1363,14 @@ void TreeWidget::contextMenuEvent(QContextMenuEvent* e)
     }
     else if (this->contextItem && this->contextItem->type() == ObjectType) {
         auto objitem = static_cast<DocumentObjectItem*>(this->contextItem);
+        App::DocumentObject* obj = objitem->object()->getObject();
+        auto* body = detectRollbackBody(objitem);
 
         // check that the selection is not across several documents
         bool acrossDocuments = false;
         auto SelectedObjectsList = Selection().getCompleteSelection();
         // get the object's document as reference
-        App::Document* doc = objitem->object()->getObject()->getDocument();
+        App::Document* doc = obj->getDocument();
         for (auto it = SelectedObjectsList.begin(); it != SelectedObjectsList.end(); ++it) {
             if ((*it).pDoc != doc) {
                 acrossDocuments = true;
@@ -1281,8 +1403,41 @@ void TreeWidget::contextMenuEvent(QContextMenuEvent* e)
         }
 
         auto selItems = this->selectedItems();
+        App::Document* selectedDoc = nullptr;
+        auto selectedObjects = selectedContextObjects(&selectedDoc);
         // if only one item is selected, setup the edit menu
         if (selItems.size() == 1) {
+            if (isRollbackBodyCandidate(obj)) {
+                QMenu bodyMenu(tr("Body Actions"), &contextMenu);
+                appendCommandAction(&bodyMenu, "PartDesign_NewSketch");
+                appendCommandAction(&bodyMenu, "PartDesign_MoveTip");
+                if (!bodyMenu.isEmpty()) {
+                    contextMenu.insertMenu(contextMenu.actions().constFirst(), &bodyMenu);
+                    contextMenu.insertSeparator(contextMenu.actions().constFirst());
+                }
+            }
+            else if (body && obj) {
+                QMenu featureMenu(tr("Feature Actions"), &contextMenu);
+
+                appendCommandAction(&featureMenu, "Std_Delete");
+                appendCommandAction(&featureMenu, "PartDesign_MoveFeatureInTree");
+
+                if (!featureMenu.isEmpty()) {
+                    contextMenu.insertMenu(contextMenu.actions().constFirst(), &featureMenu);
+                    contextMenu.insertSeparator(contextMenu.actions().constFirst());
+                }
+            }
+            else if (isAssemblyCandidate(obj)) {
+                QMenu assemblyMenu(tr("Assembly Actions"), &contextMenu);
+                appendCommandAction(&assemblyMenu, "Assembly_InsertLink");
+                appendCommandAction(&assemblyMenu, "Assembly_CreateJointFixed");
+                appendCommandAction(&assemblyMenu, "Assembly_CreateView");
+                if (!assemblyMenu.isEmpty()) {
+                    contextMenu.insertMenu(contextMenu.actions().constFirst(), &assemblyMenu);
+                    contextMenu.insertSeparator(contextMenu.actions().constFirst());
+                }
+            }
+
             objitem->object()->setupContextMenu(&editMenu, this, SLOT(onStartEditing()));
             QList<QAction*> editAct = editMenu.actions();
             if (!editAct.isEmpty()) {
@@ -1296,6 +1451,48 @@ void TreeWidget::contextMenuEvent(QContextMenuEvent* e)
                     contextMenu.insertAction(topact, this->finishEditingAction);
                 }
                 contextMenu.insertSeparator(topact);
+            }
+        }
+        else if (selectedObjects.size() > 1 && selectedDoc) {
+            bool hasSuppressible = false;
+            bool anyUnsuppressed = false;
+            bool anySuppressed = false;
+
+            for (auto* selectedObject : selectedObjects) {
+                auto* ext = getVisibleSuppressibleExtension(selectedObject);
+                if (ext) {
+                    hasSuppressible = true;
+                    anySuppressed = anySuppressed || ext->Suppressed.getValue();
+                    anyUnsuppressed = anyUnsuppressed || !ext->Suppressed.getValue();
+                }
+            }
+
+            QMenu multiMenu(tr("Multi-Selection"), &contextMenu);
+
+            if (hasSuppressible) {
+                auto* suppressAllAction = multiMenu.addAction(tr("Suppress All"));
+                suppressAllAction->setEnabled(anyUnsuppressed);
+                connect(suppressAllAction, &QAction::triggered, this, [this]() {
+                    toggleSuppressedSelection(true);
+                });
+
+                auto* unsuppressAllAction = multiMenu.addAction(tr("Unsuppress All"));
+                unsuppressAllAction->setEnabled(anySuppressed);
+                connect(unsuppressAllAction, &QAction::triggered, this, [this]() {
+                    toggleSuppressedSelection(false);
+                });
+            }
+
+            appendCommandAction(&multiMenu, "Std_Delete");
+
+            auto* groupIntoAction = multiMenu.addAction(tr("Group Into"));
+            connect(groupIntoAction, &QAction::triggered, this, [this]() {
+                groupSelectedObjects();
+            });
+
+            if (!multiMenu.isEmpty()) {
+                contextMenu.insertMenu(contextMenu.actions().constFirst(), &multiMenu);
+                contextMenu.insertSeparator(contextMenu.actions().constFirst());
             }
         }
     }
@@ -1393,6 +1590,115 @@ void TreeWidget::contextMenuEvent(QContextMenuEvent* e)
 void TreeWidget::hideEvent(QHideEvent* ev)
 {
     QTreeWidget::hideEvent(ev);
+}
+
+std::vector<App::DocumentObject*> TreeWidget::selectedContextObjects(App::Document** document) const
+{
+    std::vector<App::DocumentObject*> objects;
+    App::Document* sharedDocument = nullptr;
+
+    for (auto* selectedItem : selectedItems()) {
+        if (!selectedItem || selectedItem->type() != ObjectType) {
+            continue;
+        }
+
+        auto* objectItem = static_cast<DocumentObjectItem*>(selectedItem);
+        auto* object = objectItem->object() ? objectItem->object()->getObject() : nullptr;
+        if (!object) {
+            continue;
+        }
+
+        auto* objectDocument = object->getDocument();
+        if (!objectDocument) {
+            continue;
+        }
+
+        if (!sharedDocument) {
+            sharedDocument = objectDocument;
+        }
+        else if (sharedDocument != objectDocument) {
+            if (document) {
+                *document = nullptr;
+            }
+            return {};
+        }
+
+        if (std::find(objects.begin(), objects.end(), object) == objects.end()) {
+            objects.push_back(object);
+        }
+    }
+
+    if (document) {
+        *document = sharedDocument;
+    }
+    return objects;
+}
+
+bool TreeWidget::toggleSuppressedSelection(bool suppressed)
+{
+    App::Document* document = nullptr;
+    auto objects = selectedContextObjects(&document);
+    if (objects.empty() || !document) {
+        return false;
+    }
+
+    bool changed = false;
+    App::AutoTransaction transaction(
+        document,
+        suppressed ? "Suppress selected objects" : "Unsuppress selected objects"
+    );
+
+    for (auto* object : objects) {
+        auto* ext = getVisibleSuppressibleExtension(object);
+        if (!ext || ext->Suppressed.getValue() == suppressed) {
+            continue;
+        }
+
+        ext->Suppressed.setValue(suppressed);
+        changed = true;
+    }
+
+    if (changed) {
+        document->recompute();
+        viewport()->update();
+        _updateStatus(false);
+    }
+
+    return changed;
+}
+
+bool TreeWidget::groupSelectedObjects()
+{
+    App::Document* document = nullptr;
+    auto objects = selectedContextObjects(&document);
+    if (objects.size() < 2 || !document) {
+        return false;
+    }
+
+    App::AutoTransaction transaction(document, "Group selected objects");
+    const auto groupName = document->getUniqueObjectName("Group");
+    auto* newGroup = freecad_cast<App::DocumentObjectGroup*>(
+        document->addObject("App::DocumentObjectGroup", groupName.c_str())
+    );
+    if (!newGroup) {
+        return false;
+    }
+
+    newGroup->Label.setValue(document->makeUniqueLabel("Group"));
+
+    if (auto* guiDocument = Application::Instance->getDocument(document)) {
+        guiDocument->addRootObjectsToGroup(objects, newGroup);
+    }
+    else {
+        for (auto* object : objects) {
+            newGroup->addObject(object);
+        }
+    }
+
+    document->recompute();
+    viewport()->update();
+    _updateStatus(false);
+    return true;
 }
 
 void TreeWidget::showEvent(QShowEvent* ev)
@@ -1979,8 +2285,17 @@ void TreeWidget::keyPressEvent(QKeyEvent* event)
 
 void TreeWidget::mousePressEvent(QMouseEvent* event)
 {
+    QTreeWidgetItem* item = itemAt(event->pos());
+    if (rollbackBar && item && item->type() == TreeWidget::ObjectType) {
+        auto* objItem = static_cast<DocumentObjectItem*>(item);
+        App::DocumentObject* rowObj = objItem->object()->getObject();
+        if (rollbackBar->handleMousePress(event, rowObj, visualItemRect(item))) {
+            event->accept();
+            return;
+        }
+    }
+
     if (isVisibilityIconEnabled()) {
-        QTreeWidgetItem* item = itemAt(event->pos());
         if (item && item->type() == TreeWidget::ObjectType && event->button() == Qt::LeftButton) {
             auto objitem = static_cast<DocumentObjectItem*>(item);
 
@@ -2037,6 +2352,33 @@ void TreeWidget::mousePressEvent(QMouseEvent* event)
     }
 
     QTreeWidget::mousePressEvent(event);
+}
+
+void TreeWidget::mouseMoveEvent(QMouseEvent* event)
+{
+    QTreeWidgetItem* item = itemAt(event->pos());
+    App::DocumentObject* rowObj = nullptr;
+    if (item && item->type() == TreeWidget::ObjectType) {
+        auto* objItem = static_cast<DocumentObjectItem*>(item);
+        rowObj = objItem->object()->getObject();
+    }
+
+    if (rollbackBar && rollbackBar->handleMouseMove(event, rowObj)) {
+        event->accept();
+        return;
+    }
+
+    QTreeWidget::mouseMoveEvent(event);
+}
+
+void TreeWidget::mouseReleaseEvent(QMouseEvent* event)
+{
+    if (rollbackBar && rollbackBar->handleMouseRelease(event)) {
+        event->accept();
+        return;
+    }
+
+    QTreeWidget::mouseReleaseEvent(event);
 }
 
 void TreeWidget::mouseDoubleClickEvent(QMouseEvent* event)
@@ -3247,6 +3589,18 @@ void TreeWidget::drawRow(
 ) const
 {
     QTreeWidget::drawRow(painter, options, index);
+
+    if (!rollbackBar) {
+        return;
+    }
+
+    QTreeWidgetItem* item = itemFromIndex(index);
+    if (!item || item->type() != TreeWidget::ObjectType) {
+        return;
+    }
+
+    auto* objItem = static_cast<DocumentObjectItem*>(item);
+    rollbackBar->paintBar(painter, options.rect, objItem->object()->getObject());
 }
 
 void TreeWidget::slotNewDocument(const Gui::Document& Doc, bool isMainDoc)
@@ -3976,6 +4330,15 @@ void TreeWidget::onItemSelectionChanged()
                 ++it;
             }
         }
+    }
+
+    if (rollbackBar) {
+        App::DocumentObject* body = nullptr;
+        if (selItems.size() == 1 && selItems.front()->type() == ObjectType) {
+            body = detectRollbackBody(static_cast<DocumentObjectItem*>(selItems.front()));
+        }
+        rollbackBar->setBody(body);
+        viewport()->update();
     }
 
     if (selItems.size() <= 1) {

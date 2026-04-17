@@ -95,6 +95,13 @@ if !errorlevel! neq 0 (
 :compiler_ok
 for /f "tokens=*" %%v in ('cl.exe 2^>^&1 ^| findstr /C:"Version"') do echo [BUILD] Compiler: %%v
 
+REM ---- Prepare pixi prefix paths without replacing MSVC LIB/INCLUDE ----
+set "PIXI_ENV=%SCRIPT_DIR%.pixi\envs\default"
+set "CONDA_PREFIX=%PIXI_ENV%"
+set "PATH=%PIXI_ENV%;%PIXI_ENV%\Library\bin;%PIXI_ENV%\Scripts;%PATH%"
+set "LIB=%PIXI_ENV%\Library\lib;%LIB%"
+set "INCLUDE=%PIXI_ENV%\Library\include;%INCLUDE%"
+
 REM ---- Parse command ----
 set "CMD=%~1"
 if "%CMD%"=="" goto :full_build
@@ -115,7 +122,13 @@ REM ---- Commands ----
 :configure
 echo [BUILD] Configuring with CMake...
 cd "%SCRIPT_DIR%"
-pixi run configure
+set "CFLAGS="
+set "CXXFLAGS="
+set "DEBUG_CFLAGS="
+set "DEBUG_CXXFLAGS="
+set "LDFLAGS="
+set "LIBS="
+cmake --preset conda-windows-debug -DCMAKE_GENERATOR_PLATFORM= -DCMAKE_GENERATOR_TOOLSET=
 if %errorlevel% neq 0 (
     echo [ERROR] CMake configuration failed.
     echo         Check that all dependencies are available via pixi.
@@ -133,7 +146,7 @@ set "MAX_ICE_RETRIES=3"
 set "CCACHE_EXE=%SCRIPT_DIR%.pixi\envs\default\Library\bin\ccache.exe"
 
 :build_attempt
-powershell -NoProfile -Command "pixi run build 2>&1 | Tee-Object -FilePath '!BUILD_LOG!'; exit $LASTEXITCODE"
+powershell -NoProfile -Command "cmake --build '%SCRIPT_DIR%build\debug' --parallel %NPROC% 2>&1 | Tee-Object -FilePath '!BUILD_LOG!'; exit $LASTEXITCODE"
 set "BUILD_ERR=!errorlevel!"
 if !BUILD_ERR! equ 0 goto :build_done
 
@@ -176,7 +189,7 @@ goto :eof
 :test
 echo [BUILD] Running tests...
 cd "%SCRIPT_DIR%"
-pixi run test
+ctest --test-dir "%SCRIPT_DIR%build\debug"
 if %errorlevel% neq 0 (
     echo [WARNING] Some tests failed. Check output above.
     exit /b 1
@@ -203,7 +216,13 @@ goto :eof
 :release
 echo [BUILD] Full release build...
 cd "%SCRIPT_DIR%"
-pixi run configure
+set "CFLAGS="
+set "CXXFLAGS="
+set "DEBUG_CFLAGS="
+set "DEBUG_CXXFLAGS="
+set "LDFLAGS="
+set "LIBS="
+cmake --preset conda-windows-release -DCMAKE_GENERATOR_PLATFORM= -DCMAKE_GENERATOR_TOOLSET=
 if %errorlevel% neq 0 (
     echo [ERROR] Configure failed.
     exit /b 1

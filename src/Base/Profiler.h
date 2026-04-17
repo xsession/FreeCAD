@@ -132,3 +132,79 @@
 # define TracyFiberEnterHint(x, y)
 # define TracyFiberLeave
 #endif
+
+// ── FreeCAD convenience profiling macros ────────────────────────────────
+//
+// These macros provide a stable FreeCAD-specific profiling API.
+// When Tracy is enabled, they delegate to Tracy's ZoneScoped macros.
+// When FREECAD_ENABLE_PROFILING is defined (without Tracy), they use a
+// lightweight chronometer that logs to Base::Console for > 0.1ms scopes.
+// In release builds with neither flag, they compile to nothing.
+//
+// Usage:
+//   void expensiveOperation() {
+//       FREECAD_PROFILE_SCOPE("ExpensiveOp");
+//       // ... code ...
+//   }
+
+#ifdef TRACY_ENABLE
+
+#define FREECAD_PROFILE_SCOPE(name)     ZoneScopedN(name)
+#define FREECAD_PROFILE_FUNCTION()      ZoneScoped
+#define FREECAD_PROFILE_FRAME(name)     FrameMarkNamed(name)
+#define FREECAD_PROFILE_VALUE(name, v)  TracyPlot(name, static_cast<double>(v))
+
+#elif defined(FREECAD_ENABLE_PROFILING)
+
+#include <Base/Console.h>
+#include <chrono>
+
+namespace Base
+{
+
+/// RAII scope timer — logs elapsed time to Console on destruction.
+class ProfileScope
+{
+public:
+    explicit ProfileScope(const char* scopeName)
+        : scopeName(scopeName)
+        , start(std::chrono::steady_clock::now())
+    {}
+
+    ~ProfileScope()
+    {
+        auto end = std::chrono::steady_clock::now();
+        auto us  = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+        if (us > 100) {  // Only log if > 0.1ms to reduce noise
+            Base::Console().Log("[Profile] %s: %lld us\n",
+                                scopeName, static_cast<long long>(us));
+        }
+    }
+
+    ProfileScope(const ProfileScope&) = delete;
+    ProfileScope& operator=(const ProfileScope&) = delete;
+
+private:
+    const char* scopeName;
+    std::chrono::steady_clock::time_point start;
+};
+
+}  // namespace Base
+
+#define FREECAD_PROF_CONCAT2(a, b) a##b
+#define FREECAD_PROF_CONCAT(a, b)  FREECAD_PROF_CONCAT2(a, b)
+
+#define FREECAD_PROFILE_SCOPE(name) \
+    ::Base::ProfileScope FREECAD_PROF_CONCAT(_fc_prof_, __LINE__)(name)
+#define FREECAD_PROFILE_FUNCTION()      FREECAD_PROFILE_SCOPE(__FUNCTION__)
+#define FREECAD_PROFILE_FRAME(name)     ((void)0)
+#define FREECAD_PROFILE_VALUE(name, v)  ((void)0)
+
+#else  // Release — no-op
+
+#define FREECAD_PROFILE_SCOPE(name)     ((void)0)
+#define FREECAD_PROFILE_FUNCTION()      ((void)0)
+#define FREECAD_PROFILE_FRAME(name)     ((void)0)
+#define FREECAD_PROFILE_VALUE(name, v)  ((void)0)
+
+#endif

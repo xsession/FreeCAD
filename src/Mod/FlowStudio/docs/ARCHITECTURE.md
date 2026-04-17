@@ -438,6 +438,15 @@ CI design:
 
 - PR pipeline: lint, unit, contract, schema, and light workflow tests.
 - Nightly pipeline: golden solver runs, geometry regressions, remote execution tests, and performance comparisons.
+- Dedicated headless regression command for adapter-matrix UI logic:
+
+```powershell
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONNOUSERSITE=1 \
+python -m pytest src/Mod/FlowStudio/flow_studio/tests/test_enterprise_adapter_matrix.py -q
+```
+
+- Developer one-click equivalent in VS Code tasks: `FlowStudio: Test Adapter Matrix (Headless)`.
+- Dedicated GitHub Actions workflow: `FlowStudio Adapter Matrix CI` in `.github/workflows/flowstudio_adapter_matrix_ci.yml`.
 
 ---
 
@@ -699,3 +708,46 @@ class SolverRunner(Protocol):
 ### Final recommendation
 
 Adopt the hybrid workbench-first architecture described here, with OpenFOAM and Elmer as the mandatory industrial backbone, Gmsh as the initial mesh path, a canonical study schema as the center of gravity, and a remote job gateway designed from day one. Use FreeCAD document objects for live engineering interaction, but make deterministic exported study bundles the contract for execution and reproducibility. Keep FluidX3D isolated as optional and replacement-ready.
+
+---
+
+## P. Code Generation Phase
+
+The following starter scaffolding is implemented in the repository and maps directly to the requested architecture elements:
+
+- FreeCAD workbench bootstrap:
+  - `flow_studio/enterprise/bootstrap.py`
+  - `flow_studio/enterprise/__init__.py`
+- Core domain model interfaces and canonical entities:
+  - `flow_studio/enterprise/core/domain.py`
+  - `flow_studio/enterprise/core/contracts.py`
+  - `flow_studio/enterprise/core/serialization.py`
+  - `flow_studio/enterprise/core/sidecar.py`
+- Solver adapter base classes and concrete skeletons:
+  - `flow_studio/enterprise/adapters/base.py`
+  - `flow_studio/enterprise/adapters/openfoam.py`
+  - `flow_studio/enterprise/adapters/elmer.py`
+  - `flow_studio/enterprise/adapters/fluidx3d.py` (optional/isolated licensing boundary)
+- Remote job service skeleton and execution services:
+  - `flow_studio/enterprise/services/jobs.py`
+  - `flow_studio/enterprise/services/remote_api.py`
+  - `flow_studio/enterprise/services/process_executor.py`
+  - `flow_studio/enterprise/services/execution_facade.py`
+  - `flow_studio/enterprise/services/run_store.py`
+- Structured logging setup:
+  - `flow_studio/enterprise/observability/logging.py`
+- Test harness and focused tests:
+  - `flow_studio/enterprise/testing/harness.py`
+  - `flow_studio/tests/test_enterprise_contracts.py`
+  - `flow_studio/tests/test_enterprise_actions.py`
+  - `flow_studio/tests/test_enterprise_bridge.py`
+  - `flow_studio/tests/test_enterprise_remote.py`
+  - `flow_studio/tests/test_enterprise_bootstrap.py`
+  - `flow_studio/tests/test_enterprise_adapter_matrix.py`
+
+Implementation guardrails preserved:
+
+- No monolithic coupling between UI, adapters, and persistence.
+- Solver-neutral core contracts with adapter extension payloads.
+- FluidX3D remains optional/non-core-safe and isolated.
+- Headless automation path is available via Python + pytest command line and CI workflow.

@@ -59,6 +59,8 @@ SET(Assembly_SRCS
     ViewGroup.h
     SimulationGroup.cpp
     SimulationGroup.h
+    AssemblySolver.cpp
+    AssemblySolver.h
     ${Module_SRCS}
     ${Python_SRCS}
 )

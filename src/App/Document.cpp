@@ -78,6 +78,9 @@
 #include "License.h"
 #include "Link.h"
 #include "MergeDocuments.h"
+#include "RecomputeEngine.h"
+#include "SignalQueue.h"
+#include "DocumentMigration.h"
 #include "StringHasher.h"
 #include "Transactions.h"
 
@@ -1162,6 +1165,13 @@ void Document::Restore(Base::XMLReader& reader)
     // read the Document Properties, when reading in Uid the transient directory gets renamed
     // automatically
     PropertyContainer::Restore(reader);
+
+    // Run schema migration steps if the file is from an older schema version.
+    // This happens after properties are loaded but before objects are restored,
+    // allowing migrations to rename properties or adjust metadata.
+    if (reader.DocumentSchema < CurrentSchemaVersion) {
+        DocumentMigration::migrate(*this, reader.DocumentSchema);
+    }
 
     // We must restore the correct 'FileName' property again because the stored
     // value could be invalid.
@@ -2847,80 +2857,139 @@ int Document::recompute(const std::vector<DocumentObject*>& objs,
 
     tracker.checkpoint("pre-recompute & topo sort");
 
-    try {
-        std::set<DocumentObject*> filter;
-        size_t idx = 0;
-        // maximum two passes to allow some form of dependency inversion
-        for (int passes = 0; passes < 2 && idx < topoSortedObjects.size(); ++passes) {
-            std::unique_ptr<Base::SequencerLauncher> seq;
-            if (canAbort) {
-                seq = std::make_unique<Base::SequencerLauncher>("Recompute...",
-                                                                topoSortedObjects.size());
-            }
-            FC_LOG("Recompute pass " << passes);
-            for (; idx < topoSortedObjects.size(); ++idx) {
-                auto obj = topoSortedObjects[idx];
-                if (!obj->isAttachedToDocument() || filter.find(obj) != filter.end()) {
-                    continue;
-                }
-                // ask the object if it should be recomputed
-                bool doRecompute = false;
-                if (obj->mustRecompute()) {
-                    doRecompute = true;
-                    ++objectCount;
+    if (RecomputeEngine::isEnabled()) {
+        // ── Parallel DAG recompute path ──────────────────────────────
+        // Build dependency levels and execute each level in parallel.
+        // Python features within each level are serialised via the GIL.
+        try {
+            SignalQueue::instance().setEnabled(true);
+
+            auto levels = RecomputeEngine::buildLevels(topoSortedObjects);
+
+            FC_LOG("RecomputeEngine: " << levels.size() << " levels, "
+                   << topoSortedObjects.size() << " objects");
+
+            std::set<DocumentObject*> filter;
+            bool* errPtr = hasError;
+
+            RecomputeEngine engine;
+            objectCount = engine.execute(
+                levels,
+                filter,
+                // execFunc — execute a single feature
+                [this, errPtr](DocumentObject* obj) -> int {
                     int res = _recomputeFeature(obj);
-                    if (res != 0) {
-                        if (hasError) {
-                            *hasError = true;
+                    if (res != 0 && errPtr) {
+                        *errPtr = true;
+                    }
+                    return res;
+                },
+                // postExec — signal + purge + enforce dependents
+                [this](DocumentObject* obj, bool didRecompute) {
+                    if (obj->isTouched() || didRecompute) {
+                        SignalQueue::instance().enqueue([this, obj]() {
+                            signalRecomputedObject(*obj);
+                        });
+                        obj->purgeTouched();
+                        if (didRecompute) {
+                            for (auto inObjIt : obj->getInList()) {
+                                inObjIt->enforceRecompute();
+                            }
                         }
-                        if (res < 0) {
-                            passes = 2;
-                            break;
-                        }
-                        // if something happened filter all object in its
-                        // inListRecursive from the queue then proceed
-                        obj->getInListEx(filter, true);
-                        filter.insert(obj);
+                    }
+                },
+                canAbort);
+
+            SignalQueue::instance().setEnabled(false);
+        }
+        catch (Base::Exception& e) {
+            SignalQueue::instance().setEnabled(false);
+            e.reportException();
+        }
+        catch (...) {
+            SignalQueue::instance().setEnabled(false);
+            throw;
+        }
+    }
+    else {
+        // ── Serial recompute path (original) ─────────────────────────
+        try {
+            std::set<DocumentObject*> filter;
+            size_t idx = 0;
+            // maximum two passes to allow some form of dependency inversion
+            for (int passes = 0; passes < 2 && idx < topoSortedObjects.size(); ++passes) {
+                std::unique_ptr<Base::SequencerLauncher> seq;
+                if (canAbort) {
+                    seq = std::make_unique<Base::SequencerLauncher>("Recompute...",
+                                                                    topoSortedObjects.size());
+                }
+                FC_LOG("Recompute pass " << passes);
+                for (; idx < topoSortedObjects.size(); ++idx) {
+                    auto obj = topoSortedObjects[idx];
+                    if (!obj->isAttachedToDocument() || filter.find(obj) != filter.end()) {
                         continue;
                     }
-                }
-                if (obj->isTouched() || doRecompute) {
-                    signalRecomputedObject(*obj);
-                    obj->purgeTouched();
-                    // set all dependent objects touched to force recompute
-                    // but only if this object actually recomputed successfully
-                    if (doRecompute) {
-                        for (auto inObjIt : obj->getInList()) {
-                            inObjIt->enforceRecompute();
+                    // ask the object if it should be recomputed
+                    bool doRecompute = false;
+                    if (obj->mustRecompute()) {
+                        doRecompute = true;
+                        ++objectCount;
+                        int res = _recomputeFeature(obj);
+                        if (res != 0) {
+                            if (hasError) {
+                                *hasError = true;
+                            }
+                            if (res < 0) {
+                                passes = 2;
+                                break;
+                            }
+                            // if something happened filter all object in its
+                            // inListRecursive from the queue then proceed
+                            obj->getInListEx(filter, true);
+                            filter.insert(obj);
+                            continue;
                         }
                     }
-                }
-                if (seq) {
-                    seq->next(true);
-                }
-            }
-            // check if all objects are recomputed but still thouched
-            for (size_t i = 0; i < topoSortedObjects.size(); ++i) {
-                auto obj = topoSortedObjects[i];
-                obj->setStatus(ObjectStatus::Recompute2, false);
-                if (!filter.contains(obj) && obj->isTouched()) {
-                    if (passes > 0) {
-                        FC_ERR(obj->getFullName() << " still touched after recompute");
-                    }
-                    else {
-                        FC_LOG(obj->getFullName() << " still touched after recompute");
-                        if (idx >= topoSortedObjects.size()) {
-                            // let's start the next pass on the first touched object
-                            idx = i;
+                    if (obj->isTouched() || doRecompute) {
+                        SignalQueue::instance().enqueue([this, obj]() {
+                            signalRecomputedObject(*obj);
+                        });
+                        obj->purgeTouched();
+                        // set all dependent objects touched to force recompute
+                        // but only if this object actually recomputed successfully
+                        if (doRecompute) {
+                            for (auto inObjIt : obj->getInList()) {
+                                inObjIt->enforceRecompute();
+                            }
                         }
-                        obj->setStatus(ObjectStatus::Recompute2, true);
+                    }
+                    if (seq) {
+                        seq->next(true);
+                    }
+                }
+                // check if all objects are recomputed but still thouched
+                for (size_t i = 0; i < topoSortedObjects.size(); ++i) {
+                    auto obj = topoSortedObjects[i];
+                    obj->setStatus(ObjectStatus::Recompute2, false);
+                    if (!filter.contains(obj) && obj->isTouched()) {
+                        if (passes > 0) {
+                            FC_ERR(obj->getFullName() << " still touched after recompute");
+                        }
+                        else {
+                            FC_LOG(obj->getFullName() << " still touched after recompute");
+                            if (idx >= topoSortedObjects.size()) {
+                                // let's start the next pass on the first touched object
+                                idx = i;
+                            }
+                            obj->setStatus(ObjectStatus::Recompute2, true);
+                        }
                     }
                 }
             }
         }
-    }
-    catch (Base::Exception& e) {
-        e.reportException();
+        catch (Base::Exception& e) {
+            e.reportException();
+        }
     }
 
     tracker.checkpoint("Recompute");
@@ -2932,6 +3001,11 @@ int Document::recompute(const std::vector<DocumentObject*>& objs,
         obj->setStatus(ObjectStatus::PendingRecompute, false);
         obj->setStatus(ObjectStatus::Recompute2, false);
     }
+
+    // Flush any queued per-object signals before the document-level signal.
+    // When SignalQueue is disabled (default serial mode), this is a no-op
+    // because signals were already fired immediately.
+    SignalQueue::instance().flush();
 
     signalRecomputed(*this, topoSortedObjects);
 

@@ -14,11 +14,13 @@ add_executable(App_tests_run
         ExpressionParser.cpp
         ElementMap.cpp
         ElementNamingUtils.cpp
+        FeatureFlags.cpp
         IndexedName.cpp
         License.cpp
         MappedElement.cpp
         MappedName.cpp
         Metadata.cpp
+        ObjectLockManager.cpp
         ProjectFile.cpp
         Property.h
         Property.cpp

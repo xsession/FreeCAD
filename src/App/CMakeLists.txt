@@ -196,6 +196,14 @@ SET(Document_CPP_SRCS
     Link.cpp
     LinkBaseExtensionPyImp.cpp
     VarSet.cpp
+    SignalQueue.cpp
+    DocumentMigration.cpp
+    RecomputeEngine.cpp
+    AuditTrail.cpp
+    PdmProvider.cpp
+    ObjectLockManager.cpp
+    FeatureFlags.cpp
+    PluginLifecycle.cpp
     License.h
 )
 
@@ -242,6 +250,14 @@ SET(Document_HPP_SRCS
     TextDocument.h
     VarSet.h
     Link.h
+    SignalQueue.h
+    DocumentMigration.h
+    RecomputeEngine.h
+    AuditTrail.h
+    PdmProvider.h
+    ObjectLockManager.h
+    FeatureFlags.h
+    PluginLifecycle.h
 )
 SET(Document_SRCS
     ${Document_CPP_SRCS}
@@ -394,3 +410,8 @@ else(WIN32)
         LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     )
 endif(WIN32)
+
+# Install Python helper modules that live alongside the C++ App library
+INSTALL(FILES PdmProviderPy.py
+    DESTINATION Mod/App
+)

@@ -173,6 +173,7 @@ if ( NOT FREECAD_USE_EXTERNAL_GTEST )
     add_subdirectory(lib)
 endif()
 add_subdirectory(src)
+add_subdirectory(benchmarks)
 
 include(GoogleTest)
 set(CMAKE_GTEST_DISCOVER_TESTS_DISCOVERY_MODE PRE_TEST)

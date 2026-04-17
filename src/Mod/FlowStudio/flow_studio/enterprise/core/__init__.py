@@ -14,6 +14,14 @@ from .adapter_policy import (
     validate_plugin_metadata,
 )
 from .contracts import MeshGenerator, MonitorStream, PostProcessor, ReportGenerator, SolverAdapter
+from .contracts import (
+    BoundaryConditionModel,
+    GeometryProvider,
+    MaterialLibrary,
+    PhysicsModelCompiler,
+    StudyDefinitionCompiler,
+    TopologyDomainDetector,
+)
 from .domain import (
     AdapterMetadata,
     CapabilitySet,
@@ -35,6 +43,7 @@ from .domain import (
     ValidationIssue,
 )
 from .serialization import to_json, to_primitive, to_sha256
+from .sidecar import build_sidecar_payload, resolve_sidecar_path, write_sidecar_payload
 
 __all__ = [
     "AdapterCompatibility",
@@ -42,14 +51,17 @@ __all__ = [
     "CapabilitySet",
     "COMPATIBILITY_MATRIX",
     "ExecutionProfile",
+    "GeometryProvider",
     "JobEvent",
     "JobEventType",
     "JobHandle",
     "JobState",
+    "MaterialLibrary",
     "MaterialAssignment",
     "MeshGenerator",
     "MeshRecipe",
     "MonitorStream",
+    "PhysicsModelCompiler",
     "PhysicsDefinition",
     "PostProcessor",
     "PreparedCase",
@@ -60,7 +72,10 @@ __all__ = [
     "RunRecord",
     "RunRequest",
     "SolverAdapter",
+    "StudyDefinitionCompiler",
     "StudyDefinition",
+    "TopologyDomainDetector",
+    "BoundaryConditionModel",
     "PLUGIN_API_POLICY",
     "PLUGIN_API_STABILITY",
     "PLUGIN_API_VERSION",
@@ -69,4 +84,7 @@ __all__ = [
     "to_json",
     "to_primitive",
     "to_sha256",
+    "build_sidecar_payload",
+    "resolve_sidecar_path",
+    "write_sidecar_payload",
 ]

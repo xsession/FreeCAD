@@ -30,6 +30,14 @@ if(BUILD_FLOW_STUDIO)
     add_subdirectory(FlowStudio)
 endif(BUILD_FLOW_STUDIO)
 
+if(BUILD_ELECTRICAL_HARNESS)
+    add_subdirectory(ElectricalHarness)
+endif(BUILD_ELECTRICAL_HARNESS)
+
+if(BUILD_SHEETMETAL)
+    add_subdirectory(SheetMetal)
+endif(BUILD_SHEETMETAL)
+
 if(BUILD_HELP)
   add_subdirectory(Help)
 endif(BUILD_HELP)

@@ -7,20 +7,40 @@
 
 from __future__ import annotations
 
+import csv
 import json
 
 import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtGui
 
+from flow_studio.enterprise.ui.adapter_matrix import (
+    ADAPTER_MATRIX_CSV_FIELDNAMES,
+    collect_families,
+    filter_rows,
+    matrix_to_json,
+    to_csv_row,
+)
+
 
 class EnterpriseJobsPanel:
     """Task panel that displays persisted enterprise runs."""
 
     _COLUMNS = ("Run ID", "State", "Target", "Adapter", "Study", "Directory")
+    _ADAPTER_COLUMNS = (
+        "Adapter",
+        "Family",
+        "Version",
+        "Commercial",
+        "GPU",
+        "Remote",
+        "Parallel",
+        "Transient",
+    )
 
     def __init__(self, runtime):
         self.runtime = runtime
+        self._adapter_rows = []
         self.form = self._build_form()
         self.refresh()
 
@@ -45,6 +65,49 @@ class EnterpriseJobsPanel:
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemSelectionChanged.connect(self._update_details)
         layout.addWidget(self.table)
+
+        adapter_label = QtGui.QLabel("<b>Adapter Capability Matrix</b>")
+        layout.addWidget(adapter_label)
+
+        adapter_filter_row = QtGui.QHBoxLayout()
+        self.adapter_search = QtGui.QLineEdit()
+        self.adapter_search.setPlaceholderText("Search adapter, family, capability...")
+        self.adapter_search.textChanged.connect(self._apply_adapter_filters)
+        adapter_filter_row.addWidget(self.adapter_search)
+
+        self.adapter_family_filter = QtGui.QComboBox()
+        self.adapter_family_filter.addItem("All families", "")
+        self.adapter_family_filter.currentIndexChanged.connect(self._apply_adapter_filters)
+        adapter_filter_row.addWidget(self.adapter_family_filter)
+
+        self.adapter_capability_filter = QtGui.QComboBox()
+        self.adapter_capability_filter.addItem("All capabilities", "")
+        self.adapter_capability_filter.addItem("Supports GPU", "supports_gpu")
+        self.adapter_capability_filter.addItem("Supports Remote", "supports_remote")
+        self.adapter_capability_filter.addItem("Supports Parallel", "supports_parallel")
+        self.adapter_capability_filter.addItem("Commercial-safe core", "commercial_core_safe")
+        self.adapter_capability_filter.currentIndexChanged.connect(self._apply_adapter_filters)
+        adapter_filter_row.addWidget(self.adapter_capability_filter)
+
+        self.copy_adapter_json_button = QtGui.QPushButton("Copy Matrix JSON")
+        self.copy_adapter_json_button.clicked.connect(self._copy_adapter_matrix_json)
+        adapter_filter_row.addWidget(self.copy_adapter_json_button)
+
+        self.export_adapter_csv_button = QtGui.QPushButton("Export Matrix CSV")
+        self.export_adapter_csv_button.clicked.connect(self._export_adapter_matrix_csv)
+        adapter_filter_row.addWidget(self.export_adapter_csv_button)
+        layout.addLayout(adapter_filter_row)
+
+        self.adapter_table = QtGui.QTableWidget(0, len(self._ADAPTER_COLUMNS))
+        self.adapter_table.setHorizontalHeaderLabels(self._ADAPTER_COLUMNS)
+        self.adapter_table.setSelectionBehavior(QtGui.QAbstractItemView.SelectRows)
+        self.adapter_table.setSelectionMode(QtGui.QAbstractItemView.SingleSelection)
+        self.adapter_table.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
+        self.adapter_table.setAlternatingRowColors(True)
+        self.adapter_table.horizontalHeader().setStretchLastSection(True)
+        self.adapter_table.itemSelectionChanged.connect(self._update_adapter_details)
+        self.adapter_table.setMaximumHeight(180)
+        layout.addWidget(self.adapter_table)
 
         button_row = QtGui.QHBoxLayout()
         self.refresh_button = QtGui.QPushButton("Refresh")
@@ -96,6 +159,59 @@ class EnterpriseJobsPanel:
         else:
             self.details.setPlainText("No persisted enterprise runs were found yet.")
 
+        adapter_rows = self.runtime.job_service.adapter_capability_matrix()
+        self._adapter_rows = list(adapter_rows)
+        self._refresh_adapter_family_filter()
+        self._apply_adapter_filters()
+
+    def _refresh_adapter_family_filter(self):
+        current_family = self.adapter_family_filter.currentData() or ""
+        families = collect_families(self._adapter_rows)
+        self.adapter_family_filter.blockSignals(True)
+        self.adapter_family_filter.clear()
+        self.adapter_family_filter.addItem("All families", "")
+        for family in families:
+            self.adapter_family_filter.addItem(family, family)
+        index = self.adapter_family_filter.findData(current_family)
+        self.adapter_family_filter.setCurrentIndex(index if index >= 0 else 0)
+        self.adapter_family_filter.blockSignals(False)
+
+    def _filtered_adapter_rows(self):
+        text_filter = self.adapter_search.text()
+        family_filter = str(self.adapter_family_filter.currentData() or "")
+        capability_filter = str(self.adapter_capability_filter.currentData() or "")
+
+        return filter_rows(
+            self._adapter_rows,
+            text_filter=text_filter,
+            family_filter=family_filter,
+            capability_filter=capability_filter,
+        )
+
+    def _apply_adapter_filters(self):
+        adapter_rows = self._filtered_adapter_rows()
+        self.adapter_table.setRowCount(len(adapter_rows))
+        for row, adapter in enumerate(adapter_rows):
+            values = (
+                adapter.get("display_name", adapter.get("adapter_id", "")),
+                adapter.get("family", ""),
+                adapter.get("version", ""),
+                "Yes" if adapter.get("commercial_core_safe", False) else "No",
+                "Yes" if adapter.get("supports_gpu", False) else "No",
+                "Yes" if adapter.get("supports_remote", False) else "No",
+                "Yes" if adapter.get("supports_parallel", False) else "No",
+                "Yes" if adapter.get("supports_transient", False) else "No",
+            )
+            for column, value in enumerate(values):
+                item = QtGui.QTableWidgetItem(str(value))
+                if column == 0:
+                    item.setData(QtCore.Qt.UserRole, adapter)
+                self.adapter_table.setItem(row, column, item)
+        if adapter_rows:
+            self.adapter_table.selectRow(0)
+        else:
+            self.details.setPlainText("No adapters match the current filter.")
+
     def _selected_run_id(self):
         indexes = self.table.selectionModel().selectedRows()
         if not indexes:
@@ -108,7 +224,6 @@ class EnterpriseJobsPanel:
     def _update_details(self):
         run_id = self._selected_run_id()
         if not run_id:
-            self.details.setPlainText("No run selected.")
             return
 
         record = self.runtime.job_service.persisted_run_record(run_id) or {}
@@ -122,6 +237,66 @@ class EnterpriseJobsPanel:
             "execution_log": self.runtime.job_service.persisted_execution_log(run_id),
         }
         self.details.setPlainText(json.dumps(payload, indent=2, sort_keys=True))
+
+    def _update_adapter_details(self):
+        indexes = self.adapter_table.selectionModel().selectedRows()
+        if not indexes:
+            return
+        item = self.adapter_table.item(indexes[0].row(), 0)
+        if item is None:
+            return
+        adapter = item.data(QtCore.Qt.UserRole) or {}
+        payload = {
+            "adapter": {
+                "adapter_id": adapter.get("adapter_id", ""),
+                "display_name": adapter.get("display_name", ""),
+                "family": adapter.get("family", ""),
+                "version": adapter.get("version", ""),
+                "commercial_core_safe": adapter.get("commercial_core_safe", False),
+                "experimental": adapter.get("experimental", False),
+                "supported_solver_versions": adapter.get("supported_solver_versions", ()),
+            },
+            "capabilities": {
+                "supports_remote": adapter.get("supports_remote", False),
+                "supports_parallel": adapter.get("supports_parallel", False),
+                "supports_gpu": adapter.get("supports_gpu", False),
+                "supports_transient": adapter.get("supports_transient", False),
+                "supported_physics": adapter.get("supported_physics", ()),
+                "feature_flags": adapter.get("feature_flags", {}),
+            },
+            "notes": adapter.get("notes", ""),
+        }
+        self.details.setPlainText(json.dumps(payload, indent=2, sort_keys=True))
+
+    def _copy_adapter_matrix_json(self):
+        payload = self._filtered_adapter_rows()
+        QtGui.QApplication.clipboard().setText(matrix_to_json(payload))
+        FreeCAD.Console.PrintMessage(
+            f"FlowStudio: Copied adapter capability matrix ({len(payload)} rows) as JSON.\n"
+        )
+
+    def _export_adapter_matrix_csv(self):
+        rows = self._filtered_adapter_rows()
+        default_path = "flowstudio_adapter_matrix.csv"
+        selected_path = default_path
+        if FreeCAD.GuiUp:
+            selected_path = QtGui.QFileDialog.getSaveFileName(
+                None,
+                "Export Adapter Capability Matrix",
+                default_path,
+                "CSV Files (*.csv)",
+            )[0]
+        if not selected_path:
+            return
+
+        with open(selected_path, "w", encoding="utf-8", newline="") as handle:
+            writer = csv.DictWriter(handle, fieldnames=ADAPTER_MATRIX_CSV_FIELDNAMES)
+            writer.writeheader()
+            for adapter in rows:
+                writer.writerow(to_csv_row(adapter))
+        FreeCAD.Console.PrintMessage(
+            f"FlowStudio: Exported adapter capability matrix CSV to {selected_path}\n"
+        )
 
     def _copy_selected_path(self):
         run_id = self._selected_run_id()

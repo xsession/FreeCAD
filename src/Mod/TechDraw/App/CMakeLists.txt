@@ -88,6 +88,8 @@ SET(Draw_SRCS
     DimensionAutoCorrect.h
     DrawViewBalloon.cpp
     DrawViewBalloon.h
+    AutoBom.cpp
+    AutoBom.h
     DrawViewSection.cpp
     DrawViewSection.h
     DrawHatch.cpp

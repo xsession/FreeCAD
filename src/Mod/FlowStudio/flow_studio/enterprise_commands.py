@@ -15,6 +15,7 @@ import FreeCADGui
 
 from flow_studio.enterprise import initialize_workbench
 from flow_studio.enterprise.app.legacy_actions import (
+    export_fcstd_sidecar,
     export_analysis_manifest,
     submit_analysis_to_runtime,
 )
@@ -108,10 +109,22 @@ class _CmdExportEnterpriseManifest:
             project_id=_project_id(),
             output_path=output_path,
         )
+        doc = FreeCAD.ActiveDocument
+        doc_path = getattr(doc, "FileName", "") if doc is not None else ""
+        sidecar_path = export_fcstd_sidecar(
+            analysis_object=analysis,
+            project_id=_project_id(),
+            fcstd_path=doc_path or None,
+            fallback_directory=os.path.dirname(path),
+        )
         FreeCAD.Console.PrintMessage(f"FlowStudio: Enterprise manifest exported to {path}\n")
+        FreeCAD.Console.PrintMessage(f"FlowStudio: Enterprise sidecar exported to {sidecar_path}\n")
         _show_info(
             translate("FlowStudio", "Enterprise Manifest Exported"),
-            translate("FlowStudio", f"Manifest saved to:\n{path}"),
+            translate(
+                "FlowStudio",
+                f"Manifest saved to:\n{path}\n\nFCStd sidecar saved to:\n{sidecar_path}",
+            ),
         )
 
 

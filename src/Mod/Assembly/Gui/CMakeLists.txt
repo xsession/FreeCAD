@@ -43,6 +43,8 @@ SET(AssemblyGui_SRCS_Module
     PreCompiled.h
     Commands.cpp
     Commands.h
+    DofOverlay.cpp
+    DofOverlay.h
     TaskAssemblyMessages.cpp
     TaskAssemblyMessages.h
     ViewProviderAssembly.cpp

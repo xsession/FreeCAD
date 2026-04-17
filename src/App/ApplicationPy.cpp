@@ -268,6 +268,18 @@ PyMethodDef ApplicationPy::Methods[] = {
      "There is an active sequencer during document restore and recomputation. User may\n"
      "abort the operation by pressing the ESC key. Once detected, this function will\n"
      "trigger a Base.FreeCADAbort exception."},
+    {"setActivePdmProvider",
+     (PyCFunction)ApplicationPy::sSetActivePdmProvider,
+     METH_VARARGS,
+     "setActivePdmProvider(provider) -- register a Python PdmProviderBase instance.\n\n"
+     "Pass None to deregister.  The provider is called by FreeCAD for PDM lifecycle\n"
+     "operations (check-out, check-in, lock, revision history, etc.).\n"
+     "See App.PdmProviderPy.PdmProviderBase for the required interface."},
+    {"getActivePdmProvider",
+     (PyCFunction)ApplicationPy::sGetActivePdmProvider,
+     METH_VARARGS,
+     "getActivePdmProvider() -> PdmProviderBase or None\n\n"
+     "Return the currently registered PDM provider, or None if unset."},
     {nullptr, nullptr, 0, nullptr} /* Sentinel */
 };
 // NOLINTEND
@@ -1265,4 +1277,33 @@ PyObject* ApplicationPy::sCheckAbort(PyObject* /*self*/, PyObject* args)
     }
     PY_CATCH
 }
+
+// ── PDM provider (D13) ─────────────────────────────────────────────────────
+
+PyObject* ApplicationPy::sSetActivePdmProvider(PyObject* /*self*/, PyObject* args)
+{
+    PyObject* provider = nullptr;
+    if (!PyArg_ParseTuple(args, "O", &provider)) {
+        return nullptr;
+    }
+    PY_TRY
+    {
+        GetApplication().setPdmProviderPy(provider);
+        Py_Return;
+    }
+    PY_CATCH
+}
+
+PyObject* ApplicationPy::sGetActivePdmProvider(PyObject* /*self*/, PyObject* args)
+{
+    if (!PyArg_ParseTuple(args, "")) {
+        return nullptr;
+    }
+    PY_TRY
+    {
+        return GetApplication().getPdmProviderPy();
+    }
+    PY_CATCH
+}
+
 // NOLINTEND(cppcoreguidelines-pro-type-*)

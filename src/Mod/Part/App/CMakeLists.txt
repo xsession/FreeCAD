@@ -604,6 +604,10 @@ SET(Part_SRCS
     FaceMakerBuildFace.h
     WireJoiner.cpp
     WireJoiner.h
+    OcctService.cpp
+    OcctService.h
+    StepAP242Exporter.cpp
+    StepAP242Exporter.h
 )
 
 if(FREECAD_USE_PCH)

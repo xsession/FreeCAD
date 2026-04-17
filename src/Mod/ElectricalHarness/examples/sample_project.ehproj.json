@@ -1,0 +1,61 @@
+{
+  "format_version": "0.1.0",
+  "project": {
+    "project_id": "DEMO-HARNESS-001",
+    "name": "Demo Harness",
+    "unit_system": "SI",
+    "metadata": {
+      "customer": "Internal Demo",
+      "variant": "Base"
+    },
+    "revision": null
+  },
+  "connectors": [
+    {
+      "connector_instance_id": "J1",
+      "connector_definition_id": "CONN-2PIN",
+      "reference": "J1",
+      "device_instance_id": null,
+      "placement_path": "Assembly/Panel/J1"
+    },
+    {
+      "connector_instance_id": "J2",
+      "connector_definition_id": "CONN-2PIN",
+      "reference": "J2",
+      "device_instance_id": null,
+      "placement_path": "Assembly/Power/J2"
+    }
+  ],
+  "pins": [
+    {
+      "pin_id": "J1-1",
+      "connector_instance_id": "J1",
+      "cavity_name": "1"
+    },
+    {
+      "pin_id": "J2-1",
+      "connector_instance_id": "J2",
+      "cavity_name": "1"
+    }
+  ],
+  "nets": [
+    {
+      "net_id": "NET-VBAT",
+      "name": "VBAT",
+      "signal_type": "power"
+    }
+  ],
+  "wires": [
+    {
+      "wire_id": "W1",
+      "net_id": "NET-VBAT",
+      "from_pin_id": "J1-1",
+      "to_pin_id": "J2-1",
+      "gauge": "22AWG",
+      "color": "RD"
+    }
+  ],
+  "splices": [],
+  "bundle_segments": [],
+  "locked_route_segments": []
+}

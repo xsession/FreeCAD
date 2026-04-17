@@ -10,6 +10,11 @@ from __future__ import annotations
 import os
 from typing import Any
 
+from flow_studio.enterprise.core.sidecar import (
+    build_sidecar_payload,
+    resolve_sidecar_path,
+    write_sidecar_payload,
+)
 from flow_studio.enterprise.core.serialization import to_json, to_sha256
 from flow_studio.enterprise.integration.freecad_bridge import build_project_manifest
 from flow_studio.enterprise.services.execution_facade import LegacyExecutionRequest
@@ -32,6 +37,30 @@ def export_analysis_manifest(analysis_object: object, project_id: str, output_pa
         handle.write(to_json(manifest))
         handle.write("\n")
     return output_path
+
+
+def export_fcstd_sidecar(
+    *,
+    analysis_object: object,
+    project_id: str,
+    fcstd_path: str | None,
+    fallback_directory: str | None = None,
+    output_path: str | None = None,
+) -> str:
+    """Export canonical sidecar JSON linked to an FCStd document path."""
+
+    manifest = build_manifest_for_analysis(analysis_object, project_id=project_id)
+    payload = build_sidecar_payload(
+        manifest=manifest,
+        project_id=project_id,
+        fcstd_path=fcstd_path,
+    )
+    sidecar_path = output_path or resolve_sidecar_path(
+        project_id=project_id,
+        fcstd_path=fcstd_path,
+        fallback_directory=fallback_directory,
+    )
+    return write_sidecar_payload(payload, sidecar_path)
 
 
 def prepare_runtime_submission(

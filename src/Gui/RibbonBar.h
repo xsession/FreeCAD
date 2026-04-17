@@ -31,6 +31,8 @@
 #include <QString>
 #include <QIcon>
 #include <QStringList>
+#include <QLineEdit>
+#include <fastsignals/signal.h>
 
 #include <FCGlobal.h>
 
@@ -39,11 +41,14 @@ class QVBoxLayout;
 class QLabel;
 class QFrame;
 class QToolBar;
+class QVariantAnimation;
 
 namespace Gui {
 
 class ToolBarItem;
 class CommandBase;
+class ViewProviderDocumentObject;
+class RibbonKeyTip;
 
 
 // ============================================================================
@@ -85,6 +90,7 @@ public:
     explicit RibbonPanel(const QString& title, QWidget* parent = nullptr);
 
     void addButton(RibbonButton* button);
+    void addCustomWidget(QWidget* widget);
     void addSeparator();
 
     const QString& panelTitle() const { return title; }
@@ -105,6 +111,7 @@ private:
     QLabel* titleLabel{nullptr};
     QToolButton* expandBtn{nullptr};
     QList<RibbonButton*> buttons;
+    QList<QWidget*> customWidgets;
 
     static constexpr int MaxRows = 3;
     static constexpr int ButtonSpacing = 2;
@@ -123,6 +130,7 @@ public:
     explicit RibbonTabPage(QWidget* parent = nullptr);
 
     void addPanel(RibbonPanel* panel);
+    void clearPanels();
 
     const QList<RibbonPanel*>& panels() const { return panelList; }
 
@@ -192,20 +200,85 @@ public:
     static void setRibbonEnabled(bool enabled);
     static RibbonBar* instance();
 
+    bool isMinimized() const { return ribbonMinimized; }
+    void setMinimized(bool minimized);
+    void toggleMinimized() { setMinimized(!ribbonMinimized); }
+
     QuickAccessToolBar* quickAccessToolBar() const { return qatBar; }
+    QLineEdit* commandSearchField() const { return searchField; }
+
+    // ── Contextual Tab API ────────────────────────────────────────────
+    // Contextual tabs appear/disappear based on the active editing context
+    // (e.g., sketch editing, assembly mode).  They are visually distinguished
+    // by a colored header strip.
+
+    /// Show a contextual tab.  If it already exists, it is made visible
+    /// and optionally activated.  The accentColor tints the tab header.
+    /// Returns the tab page for adding panels.
+    RibbonTabPage* showContextualTab(const QString& name,
+                                     const QColor& accentColor = {},
+                                     bool activate = true);
+
+    /// Hide (but don't destroy) a contextual tab.
+    void hideContextualTab(const QString& name);
+
+    /// Remove a contextual tab entirely.
+    void removeContextualTab(const QString& name);
+
+    /// Check if a contextual tab is currently visible.
+    bool isContextualTabVisible(const QString& name) const;
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 Q_SIGNALS:
     void ribbonVisibilityChanged(bool visible);
+    void contextualTabShown(const QString& name);
+    void contextualTabHidden(const QString& name);
 
 private:
     void setupStyle();
     RibbonPanel* createPanel(const QString& name, ToolBarItem* toolbarItem);
+    RibbonPanel* createContextPanel(const QString& title, const QStringList& commandNames);
     RibbonButton* createButton(const QString& cmdName);
     QString categorizeToolbar(const QString& tbName) const;
+    void refreshContextualTabs();
+    void populateSketchContextualTab(RibbonTabPage* page);
+    void populateAssemblyContextualTab(RibbonTabPage* page);
+    void openBackstage();
+    void applyMinimizedState(bool animated = true);
+    void finalizeMinimizedLayout(bool showPanelArea);
+    void updateMinimizeAffordance();
+    void showMinimizedPreview();
+    void collapseMinimizedPreview();
+    bool shouldShowSketchContext(const QString& activeWorkbench,
+                                 const ViewProviderDocumentObject* editViewProvider) const;
+    bool shouldShowAssemblyContext(const QString& activeWorkbench,
+                                   const ViewProviderDocumentObject* editViewProvider) const;
 
     QuickAccessToolBar* qatBar{nullptr};
+    QToolButton* minimizeButton{nullptr};
+    QLabel* ribbonStateBadge{nullptr};
+    RibbonKeyTip* keyTipOverlay{nullptr};
+    QLineEdit* searchField{nullptr};
     QTabWidget* tabWidget{nullptr};
     QMap<QString, RibbonTabPage*> tabPages;
+    int fileTabIndex{-1};
+    int lastContentTabIndex{-1};
+
+    /// Contextual tabs: name -> (page, accentColor, tabIndex when visible)
+    struct ContextualTabInfo {
+        RibbonTabPage* page{nullptr};
+        QColor accentColor;
+        int tabIndex{-1};     ///< -1 when hidden
+    };
+    QMap<QString, ContextualTabInfo> contextualTabs;
+    bool ribbonMinimized{false};
+    bool previewExpandedWhileMinimized{false};
+    bool pendingShowPanelArea{true};
+    QVariantAnimation* ribbonHeightAnimation{nullptr};
+    fastsignals::scoped_connection inEditConnection;
+    fastsignals::scoped_connection resetEditConnection;
 
     static RibbonBar* _instance;
 };

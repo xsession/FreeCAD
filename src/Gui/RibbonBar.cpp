@@ -30,11 +30,15 @@
 #include <QScrollArea>
 #include <QStyle>
 #include <QAction>
+#include <QVariantAnimation>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainterPath>
 #include <QLinearGradient>
+#include <QKeyEvent>
 #include <QToolBar>
 #include <QStringList>
+#include <QTabBar>
 
 #include <App/Application.h>
 #include <Base/Parameter.h>
@@ -45,7 +49,14 @@
 #include "Application.h"
 #include "Command.h"
 #include "BitmapFactory.h"
+#include "BackstageView.h"
+#include "CommandSearch.h"
+#include "Document.h"
 #include "MainWindow.h"
+#include "RibbonGallery.h"
+#include "RibbonKeyTip.h"
+#include "ViewProviderDocumentObject.h"
+#include "WorkbenchManager.h"
 
 
 using namespace Gui;
@@ -187,6 +198,17 @@ void RibbonPanel::addButton(RibbonButton* button)
     relayoutButtons();
 }
 
+void RibbonPanel::addCustomWidget(QWidget* widget)
+{
+    if (!widget) {
+        return;
+    }
+
+    widget->setParent(buttonArea);
+    customWidgets.append(widget);
+    relayoutButtons();
+}
+
 void RibbonPanel::addSeparator()
 {
     // Handled by layout spacing
@@ -227,7 +249,7 @@ void RibbonPanel::relayoutButtons()
         delete buttonArea->layout();
     }
 
-    if (buttons.isEmpty()) {
+    if (buttons.isEmpty() && customWidgets.isEmpty()) {
         return;
     }
 
@@ -279,6 +301,22 @@ void RibbonPanel::relayoutButtons()
         }
     }
 
+    // Custom widgets (e.g. RibbonGallery) are appended as their own columns.
+    for (auto* widget : customWidgets) {
+        if (!widget) {
+            continue;
+        }
+
+        if (currentSmallColumn) {
+            currentSmallColumn->addStretch();
+            currentSmallColumn = nullptr;
+            smallInColumn = 0;
+        }
+
+        widget->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+        hLayout->addWidget(widget);
+    }
+
     if (currentSmallColumn && smallInColumn < MaxRows) {
         currentSmallColumn->addStretch();
     }
@@ -324,6 +362,15 @@ void RibbonTabPage::addPanel(RibbonPanel* panel)
     int idx = panelLayout->count() - 1;  // before stretch
     panelLayout->insertWidget(idx, panel);
     panelList.append(panel);
+}
+
+void RibbonTabPage::clearPanels()
+{
+    for (auto* panel : std::as_const(panelList)) {
+        panelLayout->removeWidget(panel);
+        delete panel;
+    }
+    panelList.clear();
 }
 
 
@@ -514,9 +561,50 @@ RibbonBar::RibbonBar(QWidget* parent)
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Quick Access Toolbar — small icons above ribbon tabs
-    qatBar = new QuickAccessToolBar(this);
-    mainLayout->addWidget(qatBar);
+    // Top row: quick access toolbar on the left, command search on the right.
+    auto* topRow = new QWidget(this);
+    auto* topRowLayout = new QHBoxLayout(topRow);
+    topRowLayout->setContentsMargins(0, 0, 0, 0);
+    topRowLayout->setSpacing(8);
+
+    qatBar = new QuickAccessToolBar(topRow);
+    topRowLayout->addWidget(qatBar, 1);
+
+    searchField = new QLineEdit(topRow);
+    searchField->setObjectName(QStringLiteral("ribbonCommandSearch"));
+    searchField->setClearButtonEnabled(true);
+    searchField->setFixedHeight(QATBarHeight - 4);
+    searchField->setMinimumWidth(220);
+    searchField->setMaximumWidth(320);
+    searchField->setPlaceholderText(tr("Search commands"));
+    searchField->addAction(BitmapFactory().iconFromTheme("edit-find"), QLineEdit::LeadingPosition);
+    topRowLayout->addWidget(searchField, 0, Qt::AlignRight | Qt::AlignVCenter);
+
+    minimizeButton = new QToolButton(topRow);
+    minimizeButton->setAutoRaise(true);
+    minimizeButton->setFixedSize(QATBarHeight - 4, QATBarHeight - 4);
+    minimizeButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    topRowLayout->addWidget(minimizeButton, 0, Qt::AlignRight | Qt::AlignVCenter);
+
+    ribbonStateBadge = new QLabel(topRow);
+    ribbonStateBadge->setObjectName(QStringLiteral("ribbonStateBadge"));
+    ribbonStateBadge->setAlignment(Qt::AlignCenter);
+    ribbonStateBadge->setMinimumWidth(58);
+    ribbonStateBadge->setFixedHeight(QATBarHeight - 6);
+    ribbonStateBadge->setStyleSheet(QStringLiteral(
+        "QLabel#ribbonStateBadge {"
+        "  border: 1px solid palette(mid);"
+        "  border-radius: 7px;"
+        "  padding: 0 6px;"
+        "  color: palette(window-text);"
+        "  background: palette(base);"
+        "  font-size: 9px;"
+        "  font-weight: 600;"
+        "}"
+    ));
+    topRowLayout->addWidget(ribbonStateBadge, 0, Qt::AlignRight | Qt::AlignVCenter);
+
+    mainLayout->addWidget(topRow);
 
     // Tab widget for ribbon panels
     tabWidget = new QTabWidget(this);
@@ -528,12 +616,94 @@ RibbonBar::RibbonBar(QWidget* parent)
     mainLayout->addWidget(tabWidget, 1);
     setLayout(mainLayout);
 
-    setFixedHeight(RibbonHeight + QATBarHeight);
+    auto hGrp = App::GetApplication()
+        .GetUserParameter()
+        .GetGroup("BaseApp")
+        ->GetGroup("Preferences")
+        ->GetGroup("MainWindow");
+    ribbonMinimized = hGrp->GetBool("RibbonMinimized", false);
+
+    applyMinimizedState(false);
     setupStyle();
+    updateMinimizeAffordance();
+
+    keyTipOverlay = new RibbonKeyTip(this);
+
+    qApp->installEventFilter(this);
+
+    connect(tabWidget->tabBar(), &QTabBar::tabBarDoubleClicked, this, [this](int) {
+        toggleMinimized();
+    });
+    connect(tabWidget->tabBar(), &QTabBar::tabBarClicked, this, [this](int index) {
+        if (index == fileTabIndex) {
+            openBackstage();
+            return;
+        }
+        if (!ribbonMinimized || index < 0) {
+            if (index >= 0) {
+                lastContentTabIndex = index;
+            }
+            return;
+        }
+        if (previewExpandedWhileMinimized && tabWidget->currentIndex() == index) {
+            collapseMinimizedPreview();
+            return;
+        }
+        showMinimizedPreview();
+    });
+    connect(tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
+        if (index == fileTabIndex) {
+            openBackstage();
+            return;
+        }
+        if (index >= 0) {
+            lastContentTabIndex = index;
+        }
+    });
+    connect(minimizeButton, &QToolButton::clicked, this, [this]() {
+        toggleMinimized();
+    });
+
+    ribbonHeightAnimation = new QVariantAnimation(this);
+    ribbonHeightAnimation->setDuration(130);
+    ribbonHeightAnimation->setEasingCurve(QEasingCurve::InOutCubic);
+    connect(ribbonHeightAnimation, &QVariantAnimation::valueChanged, this, [this](const QVariant& v) {
+        setFixedHeight(v.toInt());
+        updateGeometry();
+    });
+    connect(ribbonHeightAnimation, &QVariantAnimation::finished, this, [this]() {
+        finalizeMinimizedLayout(pendingShowPanelArea);
+    });
+
+    connect(searchField, &QLineEdit::returnPressed, this, [this]() {
+        CommandSearch::openPalette(this, searchField->text());
+        searchField->clear();
+    });
+    connect(searchField, &QLineEdit::selectionChanged, this, [this]() {
+        if (searchField->hasFocus() && !searchField->selectedText().isEmpty()) {
+            searchField->deselect();
+        }
+    });
+
+    if (auto* mainWindow = getMainWindow()) {
+        connect(mainWindow, &MainWindow::workbenchActivated, this, [this](const QString&) {
+            refreshContextualTabs();
+        });
+    }
+
+    inEditConnection = Application::Instance->signalInEdit.connect([this](const ViewProviderDocumentObject&) {
+        refreshContextualTabs();
+    });
+    resetEditConnection
+        = Application::Instance->signalResetEdit.connect([this](const ViewProviderDocumentObject&) {
+              refreshContextualTabs();
+          });
 }
 
 RibbonBar::~RibbonBar()
 {
+    qApp->removeEventFilter(this);
+
     if (_instance == this) {
         _instance = nullptr;
     }
@@ -542,6 +712,164 @@ RibbonBar::~RibbonBar()
 RibbonBar* RibbonBar::instance()
 {
     return _instance;
+}
+
+void RibbonBar::setMinimized(bool minimized)
+{
+    if (ribbonMinimized == minimized) {
+        return;
+    }
+
+    ribbonMinimized = minimized;
+    previewExpandedWhileMinimized = false;
+
+    auto hGrp = App::GetApplication()
+        .GetUserParameter()
+        .GetGroup("BaseApp")
+        ->GetGroup("Preferences")
+        ->GetGroup("MainWindow");
+    hGrp->SetBool("RibbonMinimized", ribbonMinimized);
+
+    applyMinimizedState();
+    updateMinimizeAffordance();
+    Q_EMIT ribbonVisibilityChanged(!ribbonMinimized);
+}
+
+void RibbonBar::applyMinimizedState(bool animated)
+{
+    if (!tabWidget) {
+        return;
+    }
+
+    const bool showPanelArea = !ribbonMinimized || previewExpandedWhileMinimized;
+    pendingShowPanelArea = showPanelArea;
+
+    // Keep content unconstrained while animating to avoid jump cuts.
+    tabWidget->setMinimumHeight(0);
+    tabWidget->setMaximumHeight(QWIDGETSIZE_MAX);
+
+    const int targetHeight = showPanelArea
+        ? (RibbonHeight + QATBarHeight)
+        : (QATBarHeight + TabBarHeight + 8);
+
+    if (!animated || !ribbonHeightAnimation) {
+        setFixedHeight(targetHeight);
+        finalizeMinimizedLayout(showPanelArea);
+        updateGeometry();
+        return;
+    }
+
+    if (ribbonHeightAnimation->state() == QVariantAnimation::Running) {
+        ribbonHeightAnimation->stop();
+    }
+
+    ribbonHeightAnimation->setStartValue(height());
+    ribbonHeightAnimation->setEndValue(targetHeight);
+    ribbonHeightAnimation->start();
+}
+
+void RibbonBar::finalizeMinimizedLayout(bool showPanelArea)
+{
+    if (!tabWidget) {
+        return;
+    }
+
+    if (showPanelArea) {
+        tabWidget->setMinimumHeight(0);
+        tabWidget->setMaximumHeight(QWIDGETSIZE_MAX);
+        setFixedHeight(RibbonHeight + QATBarHeight);
+    }
+    else {
+        tabWidget->setMinimumHeight(TabBarHeight + 6);
+        tabWidget->setMaximumHeight(TabBarHeight + 6);
+        setFixedHeight(QATBarHeight + TabBarHeight + 8);
+    }
+
+    updateGeometry();
+}
+
+void RibbonBar::updateMinimizeAffordance()
+{
+    if (!minimizeButton || !tabWidget || !ribbonStateBadge) {
+        return;
+    }
+
+    if (ribbonMinimized) {
+        minimizeButton->setText(QStringLiteral("▾"));
+        if (previewExpandedWhileMinimized) {
+            minimizeButton->setToolTip(tr("Collapse ribbon preview"));
+            ribbonStateBadge->setText(tr("Preview"));
+            ribbonStateBadge->setToolTip(tr("Temporary ribbon preview is open."));
+        }
+        else {
+            minimizeButton->setToolTip(tr("Expand ribbon (double-click a tab to pin open)"));
+            ribbonStateBadge->setText(tr("Auto-hide"));
+            ribbonStateBadge->setToolTip(tr("Ribbon is minimized and will auto-hide."));
+        }
+        tabWidget->tabBar()->setToolTip(
+            tr("Ribbon is minimized. Click a tab to preview, click outside to collapse.")
+        );
+    }
+    else {
+        minimizeButton->setText(QStringLiteral("▴"));
+        minimizeButton->setToolTip(tr("Minimize ribbon"));
+        ribbonStateBadge->setText(tr("Pinned"));
+        ribbonStateBadge->setToolTip(tr("Ribbon is pinned open."));
+        tabWidget->tabBar()->setToolTip(tr("Double-click a tab to minimize ribbon."));
+    }
+}
+
+void RibbonBar::showMinimizedPreview()
+{
+    if (!ribbonMinimized || previewExpandedWhileMinimized) {
+        return;
+    }
+
+    previewExpandedWhileMinimized = true;
+    applyMinimizedState();
+    updateMinimizeAffordance();
+    Q_EMIT ribbonVisibilityChanged(true);
+}
+
+void RibbonBar::collapseMinimizedPreview()
+{
+    if (!previewExpandedWhileMinimized) {
+        return;
+    }
+
+    previewExpandedWhileMinimized = false;
+    applyMinimizedState();
+    updateMinimizeAffordance();
+    Q_EMIT ribbonVisibilityChanged(false);
+}
+
+bool RibbonBar::eventFilter(QObject* watched, QEvent* event)
+{
+    Q_UNUSED(watched)
+
+    if (!previewExpandedWhileMinimized) {
+        return QWidget::eventFilter(watched, event);
+    }
+
+    if (event->type() == QEvent::MouseButtonPress) {
+        auto* mouseEvent = static_cast<QMouseEvent*>(event);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+        const QPoint globalPos = mouseEvent->globalPosition().toPoint();
+#else
+        const QPoint globalPos = mouseEvent->globalPos();
+#endif
+        if (!rect().contains(mapFromGlobal(globalPos))) {
+            collapseMinimizedPreview();
+        }
+    }
+    else if (event->type() == QEvent::KeyPress) {
+        auto* keyEvent = static_cast<QKeyEvent*>(event);
+        if (keyEvent->key() == Qt::Key_Escape) {
+            collapseMinimizedPreview();
+        }
+    }
+
+    return QWidget::eventFilter(watched, event);
 }
 
 bool RibbonBar::isRibbonEnabled()
@@ -611,6 +939,28 @@ void RibbonBar::setupStyle()
         "}"
         "QTabBar::tab:first {"
         "  margin-left: 2px;"
+        "  background: #1a3a5c;"
+        "  color: white;"
+        "  border-color: #1a3a5c;"
+        "  padding-left: 16px;"
+        "  padding-right: 16px;"
+        "}"
+        "QTabBar::tab:first:hover {"
+        "  background: #2a5a8c;"
+        "  border-color: #2a5a8c;"
+        "}"
+        "QTabBar::tab:first:selected {"
+        "  background: #2a5a8c;"
+        "  border-color: #2a5a8c;"
+        "}"
+        "QLineEdit#ribbonCommandSearch {"
+        "  padding: 2px 8px;"
+        "  border: 1px solid palette(mid);"
+        "  border-radius: 10px;"
+        "  background: palette(base);"
+        "}"
+        "QLineEdit#ribbonCommandSearch:focus {"
+        "  border: 1px solid palette(highlight);"
         "}"
     ));
 }
@@ -625,6 +975,15 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
 
     // Populate Quick Access Toolbar
     qatBar->setup();
+
+    auto* filePage = new RibbonTabPage(tabWidget);
+    fileTabIndex = tabWidget->addTab(filePage, tr("File"));
+    tabWidget->setTabToolTip(fileTabIndex, tr("Open Backstage view"));
+    auto fileTabIcon = BitmapFactory().iconFromTheme("document-open");
+    if (!fileTabIcon.isNull()) {
+        tabWidget->setTabIcon(fileTabIndex, fileTabIcon);
+    }
+    tabWidget->tabBar()->setTabTextColor(fileTabIndex, QColor(255, 255, 255));
 
     QList<ToolBarItem*> items = toolBarItems->getItems();
 
@@ -659,6 +1018,13 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
             }
         }
     }
+
+    if (tabWidget->count() > 1) {
+        lastContentTabIndex = 1;
+        tabWidget->setCurrentIndex(lastContentTabIndex);
+    }
+
+    refreshContextualTabs();
 }
 
 QString RibbonBar::categorizeToolbar(const QString& tbName) const
@@ -713,8 +1079,35 @@ QString RibbonBar::categorizeToolbar(const QString& tbName) const
 
 void RibbonBar::clear()
 {
+    const QStringList contextualNames = contextualTabs.keys();
+    for (const QString& name : contextualNames) {
+        removeContextualTab(name);
+    }
     tabWidget->clear();
     tabPages.clear();
+    fileTabIndex = -1;
+    lastContentTabIndex = -1;
+}
+
+void RibbonBar::openBackstage()
+{
+    auto* backstage = BackstageView::instance();
+    if (!backstage) {
+        return;
+    }
+
+    backstage->navigateTo(tr("New"));
+    backstage->show();
+    backstage->raise();
+    backstage->activateWindow();
+
+    const int fallbackIndex = (lastContentTabIndex >= 0 && lastContentTabIndex < tabWidget->count()
+                               && lastContentTabIndex != fileTabIndex)
+        ? lastContentTabIndex
+        : (tabWidget->count() > 1 ? 1 : -1);
+    if (fallbackIndex >= 0 && tabWidget->currentIndex() != fallbackIndex) {
+        tabWidget->setCurrentIndex(fallbackIndex);
+    }
 }
 
 RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarItem)
@@ -756,6 +1149,23 @@ RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarIte
         btn->setButtonSize(size);
         panel->addButton(btn);
         ++primaryCount;
+    }
+
+    return panel;
+}
+
+RibbonPanel* RibbonBar::createContextPanel(const QString& title, const QStringList& commandNames)
+{
+    auto* panel = new RibbonPanel(title);
+    for (const QString& commandName : commandNames) {
+        if (commandName == QStringLiteral("Separator")) {
+            panel->addSeparator();
+            continue;
+        }
+
+        if (auto* button = createButton(commandName)) {
+            panel->addButton(button);
+        }
     }
 
     return panel;
@@ -828,4 +1238,407 @@ RibbonButton* RibbonBar::createButton(const QString& cmdName)
     }
 
     return btn;
+}
+
+void RibbonBar::refreshContextualTabs()
+{
+    if (!tabWidget) {
+        return;
+    }
+
+    Gui::Document* activeDoc = Application::Instance->activeDocument();
+    ViewProviderDocumentObject* editVp = nullptr;
+    if (activeDoc) {
+        editVp = dynamic_cast<ViewProviderDocumentObject*>(activeDoc->getInEdit());
+    }
+
+    const QString activeWorkbench
+        = QString::fromStdString(WorkbenchManager::instance()->activeName());
+
+    const QStringList contextualNames = contextualTabs.keys();
+    for (const QString& name : contextualNames) {
+        removeContextualTab(name);
+    }
+
+    if (shouldShowSketchContext(activeWorkbench, editVp)) {
+        auto* page = showContextualTab(tr("Sketch"), QColor(217, 110, 43), editVp != nullptr);
+        populateSketchContextualTab(page);
+    }
+
+    if (shouldShowAssemblyContext(activeWorkbench, editVp)) {
+        auto* page = showContextualTab(tr("Assembly"), QColor(42, 124, 176), editVp != nullptr);
+        populateAssemblyContextualTab(page);
+    }
+}
+
+void RibbonBar::populateSketchContextualTab(RibbonTabPage* page)
+{
+    if (!page) {
+        return;
+    }
+
+    page->clearPanels();
+
+    auto* sketchPanel = createContextPanel(
+        tr("Sketch"),
+        {
+            QStringLiteral("Sketcher_NewSketch"),
+            QStringLiteral("Sketcher_EditSketch"),
+            QStringLiteral("Sketcher_ValidateSketch"),
+            QStringLiteral("Sketcher_LeaveSketch"),
+        }
+    );
+    if (sketchPanel->buttonCount() > 0) {
+        page->addPanel(sketchPanel);
+    }
+    else {
+        delete sketchPanel;
+    }
+
+    auto* geometryPanel = createContextPanel(
+        tr("Geometry"),
+        {
+            QStringLiteral("Sketcher_CreateLine"),
+            QStringLiteral("Sketcher_CreateCircle"),
+            QStringLiteral("Sketcher_CreateArc"),
+            QStringLiteral("Sketcher_CreateRectangle"),
+            QStringLiteral("Sketcher_CreatePoint"),
+            QStringLiteral("Sketcher_ToggleConstruction"),
+        }
+    );
+    if (geometryPanel->buttonCount() > 0) {
+        page->addPanel(geometryPanel);
+    }
+    else {
+        delete geometryPanel;
+    }
+
+    auto* constraintsPanel = createContextPanel(
+        tr("Constraints"),
+        {
+            QStringLiteral("Sketcher_ConstrainCoincidentUnified"),
+            QStringLiteral("Sketcher_ConstrainHorizontal"),
+            QStringLiteral("Sketcher_ConstrainVertical"),
+            QStringLiteral("Sketcher_ConstrainParallel"),
+            QStringLiteral("Sketcher_ConstrainPerpendicular"),
+            QStringLiteral("Sketcher_Dimension"),
+            QStringLiteral("Sketcher_ConstrainDistance"),
+            QStringLiteral("Sketcher_ConstrainAngle"),
+        }
+    );
+    if (constraintsPanel->buttonCount() > 0) {
+        page->addPanel(constraintsPanel);
+    }
+    else {
+        delete constraintsPanel;
+    }
+
+    auto* smartDimPanel = new RibbonPanel(tr("Smart Dimension"));
+    auto* gallery = new RibbonGallery(smartDimPanel);
+    gallery->setThumbnailSize(QSize(26, 26));
+    gallery->setVisibleColumns(4);
+    gallery->setVisibleRows(1);
+
+    auto addGalleryCommand = [gallery](const QString& cmdName) {
+        CommandManager& mgr = Application::Instance->commandManager();
+        Command* cmd = mgr.getCommandByName(cmdName.toLatin1().constData());
+        if (!cmd) {
+            return;
+        }
+
+        const char* menuText = cmd->getMenuText();
+        QString label = menuText && menuText[0]
+            ? QApplication::translate(cmd->className(), menuText)
+            : cmdName;
+        label.remove(QLatin1Char('&'));
+
+        QIcon icon;
+        const char* pixmapName = cmd->getPixmap();
+        if (pixmapName && pixmapName[0]) {
+            icon = BitmapFactory().iconFromTheme(pixmapName);
+            if (icon.isNull()) {
+                QPixmap pm = BitmapFactory().pixmap(pixmapName);
+                if (!pm.isNull()) {
+                    icon = QIcon(pm);
+                }
+            }
+        }
+
+        gallery->addItem(RibbonGalleryItem(cmdName, icon, label, label));
+    };
+
+    gallery->addCategory(tr("Dimensions"));
+    addGalleryCommand(QStringLiteral("Sketcher_Dimension"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistance"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistanceX"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistanceY"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainAngle"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainRadius"));
+    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDiameter"));
+
+    connect(gallery, &RibbonGallery::itemActivated, this, [](const QString& cmdName) {
+        if (cmdName.isEmpty()) {
+            return;
+        }
+        CommandManager& mgr = Application::Instance->commandManager();
+        mgr.runCommandByName(cmdName.toLatin1().constData());
+    });
+
+    if (gallery->itemCount() > 0) {
+        smartDimPanel->addCustomWidget(gallery);
+        page->addPanel(smartDimPanel);
+    }
+    else {
+        delete smartDimPanel;
+    }
+}
+
+void RibbonBar::populateAssemblyContextualTab(RibbonTabPage* page)
+{
+    if (!page) {
+        return;
+    }
+
+    page->clearPanels();
+
+    auto* assemblyPanel = createContextPanel(
+        tr("Assembly"),
+        {
+            QStringLiteral("Assembly_CreateAssembly"),
+            QStringLiteral("Assembly_ActivateAssembly"),
+            QStringLiteral("Assembly_InsertLink"),
+            QStringLiteral("Assembly_CreateBom"),
+        }
+    );
+    if (assemblyPanel->buttonCount() > 0) {
+        page->addPanel(assemblyPanel);
+    }
+    else {
+        delete assemblyPanel;
+    }
+
+    auto* jointsPanel = createContextPanel(
+        tr("Joints"),
+        {
+            QStringLiteral("Assembly_CreateJointFixed"),
+            QStringLiteral("Assembly_CreateJointRevolute"),
+            QStringLiteral("Assembly_CreateJointSlider"),
+            QStringLiteral("Assembly_CreateJointCylindrical"),
+            QStringLiteral("Assembly_CreateJointBall"),
+            QStringLiteral("Assembly_CreateJointDistance"),
+        }
+    );
+    if (jointsPanel->buttonCount() > 0) {
+        page->addPanel(jointsPanel);
+    }
+    else {
+        delete jointsPanel;
+    }
+
+    auto* solvePanel = createContextPanel(
+        tr("Solve"),
+        {
+            QStringLiteral("Assembly_ToggleGrounded"),
+            QStringLiteral("Assembly_CreateJointParallel"),
+            QStringLiteral("Assembly_CreateJointPerpendicular"),
+            QStringLiteral("Assembly_CreateJointAngle"),
+        }
+    );
+    if (solvePanel->buttonCount() > 0) {
+        page->addPanel(solvePanel);
+    }
+    else {
+        delete solvePanel;
+    }
+
+    auto* jointPresetPanel = new RibbonPanel(tr("Joint Presets"));
+    auto* gallery = new RibbonGallery(jointPresetPanel);
+    gallery->setThumbnailSize(QSize(26, 26));
+    gallery->setVisibleColumns(5);
+    gallery->setVisibleRows(1);
+
+    auto addGalleryCommand = [gallery](const QString& cmdName) {
+        CommandManager& mgr = Application::Instance->commandManager();
+        Command* cmd = mgr.getCommandByName(cmdName.toLatin1().constData());
+        if (!cmd) {
+            return;
+        }
+
+        const char* menuText = cmd->getMenuText();
+        QString label = menuText && menuText[0]
+            ? QApplication::translate(cmd->className(), menuText)
+            : cmdName;
+        label.remove(QLatin1Char('&'));
+
+        QIcon icon;
+        const char* pixmapName = cmd->getPixmap();
+        if (pixmapName && pixmapName[0]) {
+            icon = BitmapFactory().iconFromTheme(pixmapName);
+            if (icon.isNull()) {
+                QPixmap pm = BitmapFactory().pixmap(pixmapName);
+                if (!pm.isNull()) {
+                    icon = QIcon(pm);
+                }
+            }
+        }
+
+        gallery->addItem(RibbonGalleryItem(cmdName, icon, label, label));
+    };
+
+    gallery->addCategory(tr("Primary Joints"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointFixed"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointRevolute"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointSlider"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointCylindrical"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointBall"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointDistance"));
+
+    gallery->addCategory(tr("Auxiliary Joints"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointParallel"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointPerpendicular"));
+    addGalleryCommand(QStringLiteral("Assembly_CreateJointAngle"));
+
+    connect(gallery, &RibbonGallery::itemActivated, this, [](const QString& cmdName) {
+        if (cmdName.isEmpty()) {
+            return;
+        }
+        CommandManager& mgr = Application::Instance->commandManager();
+        mgr.runCommandByName(cmdName.toLatin1().constData());
+    });
+
+    if (gallery->itemCount() > 0) {
+        jointPresetPanel->addCustomWidget(gallery);
+        page->addPanel(jointPresetPanel);
+    }
+    else {
+        delete jointPresetPanel;
+    }
+}
+
+bool RibbonBar::shouldShowSketchContext(const QString& activeWorkbench,
+                                        const ViewProviderDocumentObject* editViewProvider) const
+{
+    if (activeWorkbench.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
+        return true;
+    }
+    if (!editViewProvider || !editViewProvider->getObject()) {
+        return false;
+    }
+
+    const QString typeName = QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
+    return typeName.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive);
+}
+
+bool RibbonBar::shouldShowAssemblyContext(const QString& activeWorkbench,
+                                          const ViewProviderDocumentObject* editViewProvider) const
+{
+    if (activeWorkbench.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive)) {
+        return true;
+    }
+    if (!editViewProvider || !editViewProvider->getObject()) {
+        return false;
+    }
+
+    const QString typeName = QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
+    return typeName.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive);
+}
+
+// ============================================================================
+// Contextual Tab API
+// ============================================================================
+
+RibbonTabPage* RibbonBar::showContextualTab(const QString& name,
+                                             const QColor& accentColor,
+                                             bool activate)
+{
+    auto it = contextualTabs.find(name);
+
+    if (it != contextualTabs.end()) {
+        // Tab already exists — if currently hidden, re-insert it
+        auto& info = it.value();
+        if (info.tabIndex < 0 && info.page) {
+            info.tabIndex = tabWidget->addTab(info.page, name);
+            if (accentColor.isValid()) {
+                info.accentColor = accentColor;
+            }
+            if (info.accentColor.isValid()) {
+                tabWidget->tabBar()->setTabTextColor(info.tabIndex, info.accentColor);
+            }
+        }
+        if (activate && info.tabIndex >= 0) {
+            tabWidget->setCurrentIndex(info.tabIndex);
+        }
+        Q_EMIT contextualTabShown(name);
+        return info.page;
+    }
+
+    // Create new contextual tab
+    ContextualTabInfo info;
+    info.page = new RibbonTabPage(tabWidget);
+    info.accentColor = accentColor.isValid() ? accentColor : QColor(0, 120, 215);
+    info.tabIndex = tabWidget->addTab(info.page, name);
+
+    if (info.accentColor.isValid()) {
+        tabWidget->tabBar()->setTabTextColor(info.tabIndex, info.accentColor);
+    }
+
+    contextualTabs.insert(name, info);
+
+    if (activate) {
+        tabWidget->setCurrentIndex(info.tabIndex);
+    }
+
+    Q_EMIT contextualTabShown(name);
+    return info.page;
+}
+
+void RibbonBar::hideContextualTab(const QString& name)
+{
+    auto it = contextualTabs.find(name);
+    if (it == contextualTabs.end()) {
+        return;
+    }
+    auto& info = it.value();
+    if (info.tabIndex >= 0) {
+        tabWidget->removeTab(info.tabIndex);
+        info.tabIndex = -1;
+        // Re-sync all contextual tab indices after removal
+        for (auto ctIt = contextualTabs.begin(); ctIt != contextualTabs.end(); ++ctIt) {
+            if (ctIt.value().page && ctIt.value().tabIndex >= 0) {
+                ctIt.value().tabIndex = tabWidget->indexOf(ctIt.value().page);
+            }
+        }
+    }
+    Q_EMIT contextualTabHidden(name);
+}
+
+void RibbonBar::removeContextualTab(const QString& name)
+{
+    auto it = contextualTabs.find(name);
+    if (it == contextualTabs.end()) {
+        return;
+    }
+    auto& info = it.value();
+    if (info.tabIndex >= 0) {
+        tabWidget->removeTab(info.tabIndex);
+    }
+    delete info.page;
+    contextualTabs.erase(it);
+
+    // Re-sync remaining contextual tab indices
+    for (auto ctIt = contextualTabs.begin(); ctIt != contextualTabs.end(); ++ctIt) {
+        if (ctIt.value().page && ctIt.value().tabIndex >= 0) {
+            ctIt.value().tabIndex = tabWidget->indexOf(ctIt.value().page);
+        }
+    }
+    Q_EMIT contextualTabHidden(name);
+}
+
+bool RibbonBar::isContextualTabVisible(const QString& name) const
+{
+    auto it = contextualTabs.find(name);
+    if (it == contextualTabs.end()) {
+        return false;
+    }
+    return it.value().tabIndex >= 0;
 }

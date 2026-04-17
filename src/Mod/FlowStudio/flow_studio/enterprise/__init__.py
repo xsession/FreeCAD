@@ -5,9 +5,16 @@
 
 """Enterprise platform layer for the Flow Studio workbench."""
 
-from .bootstrap import initialize_workbench, on_workbench_activated
+from .bootstrap import (
+    adapter_capability_matrix,
+    initialize_workbench,
+    is_enterprise_enabled,
+    on_workbench_activated,
+)
 
 __all__ = [
+    "adapter_capability_matrix",
     "initialize_workbench",
+    "is_enterprise_enabled",
     "on_workbench_activated",
 ]

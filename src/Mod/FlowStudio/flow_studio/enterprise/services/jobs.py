@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from flow_studio.enterprise.core.contracts import SolverAdapter
 from flow_studio.enterprise.core.domain import (
@@ -64,6 +64,34 @@ class InMemoryJobService:
         """Return registered adapter identifiers."""
 
         return tuple(sorted(self._adapter_registry.keys()))
+
+    def adapter_capability_matrix(self) -> tuple[dict[str, Any], ...]:
+        """Return a UI-ready capability matrix for registered adapters."""
+
+        rows: list[dict[str, Any]] = []
+        for adapter_id in sorted(self._adapter_registry.keys()):
+            adapter = self._adapter_registry[adapter_id]
+            metadata = adapter.metadata()
+            capabilities = adapter.capabilities()
+            rows.append(
+                {
+                    "adapter_id": metadata.adapter_id,
+                    "display_name": metadata.display_name,
+                    "family": metadata.family,
+                    "version": metadata.version,
+                    "commercial_core_safe": metadata.commercial_core_safe,
+                    "experimental": metadata.experimental,
+                    "supported_solver_versions": tuple(metadata.supported_solver_versions),
+                    "supports_remote": capabilities.supports_remote,
+                    "supports_parallel": capabilities.supports_parallel,
+                    "supports_gpu": capabilities.supports_gpu,
+                    "supports_transient": capabilities.supports_transient,
+                    "supported_physics": tuple(capabilities.supported_physics),
+                    "feature_flags": dict(capabilities.feature_flags),
+                    "notes": metadata.notes,
+                }
+            )
+        return tuple(rows)
 
     def remote_target_ids(self) -> tuple[str, ...]:
         """Return configured remote-target identifiers."""

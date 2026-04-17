@@ -13,6 +13,7 @@ set(PartDesign_LIBS
     ${OCC_LIBRARIES}
     ${OCC_DEBUG_LIBRARIES}
     Part
+    Spreadsheet
     FreeCADApp
 )
 
@@ -25,6 +26,12 @@ SET(Features_SRCS
     Body.h
     FeatureBase.h
     FeatureBase.cpp
+    ConfigurationManager.cpp
+    ConfigurationManager.h
+    FeatureReorderValidator.cpp
+    FeatureReorderValidator.h
+    SheetMetalFeature.cpp
+    SheetMetalFeature.h
 )
 SOURCE_GROUP("Features" FILES ${Features_SRCS})
 

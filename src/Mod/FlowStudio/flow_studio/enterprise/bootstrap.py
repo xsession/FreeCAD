@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 import tempfile
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from flow_studio.enterprise.adapters.elmer import ElmerSolverAdapter
 from flow_studio.enterprise.adapters.fluidx3d import FluidX3DOptionalAdapter
@@ -40,6 +40,18 @@ class EnterpriseRuntime:
 
 
 _RUNTIME: Optional[EnterpriseRuntime] = None
+
+
+def is_enterprise_enabled(env: Mapping[str, str] | None = None) -> bool:
+    """Return whether enterprise UI/runtime features are enabled.
+
+    Defaults to enabled to preserve existing behavior.
+    Set FLOWSTUDIO_ENTERPRISE_ENABLED=0/false/off/no to disable.
+    """
+
+    source = env or os.environ
+    raw = str(source.get("FLOWSTUDIO_ENTERPRISE_ENABLED", "1")).strip().lower()
+    return raw not in {"0", "false", "off", "no"}
 
 
 def initialize_workbench() -> EnterpriseRuntime:
@@ -130,3 +142,10 @@ def on_workbench_activated() -> EnterpriseRuntime:
         extra={"default_profile": runtime.default_profile.name},
     )
     return runtime
+
+
+def adapter_capability_matrix() -> tuple[dict[str, Any], ...]:
+    """Return an adapter capability matrix consumable by UI components."""
+
+    runtime = initialize_workbench()
+    return runtime.job_service.adapter_capability_matrix()
