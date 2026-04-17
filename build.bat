@@ -189,6 +189,12 @@ goto :eof
 :test
 echo [BUILD] Running tests...
 cd "%SCRIPT_DIR%"
+set "TEST_PATH=%SCRIPT_DIR%build\debug\bin;%SCRIPT_DIR%build\debug\lib;%SCRIPT_DIR%build\debug\Mod"
+for /d %%D in ("%SCRIPT_DIR%build\debug\Mod\*") do (
+    set "TEST_PATH=!TEST_PATH!;%%~fD"
+)
+set "PATH=!TEST_PATH!;%PIXI_ENV%\Library\bin;%PIXI_ENV%\Library\lib;%PIXI_ENV%;%PIXI_ENV%\Scripts;%PIXI_ENV%\bin;%PATH%"
+
 ctest --test-dir "%SCRIPT_DIR%build\debug"
 if %errorlevel% neq 0 (
     echo [WARNING] Some tests failed. Check output above.
