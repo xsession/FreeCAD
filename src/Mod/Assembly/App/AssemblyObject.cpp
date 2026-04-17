@@ -384,6 +384,10 @@ void AssemblyObject::preDrag(std::vector<App::DocumentObject*> dragParts)
 void AssemblyObject::doDragStep()
 {
     try {
+        if (!mbdAssembly || draggedParts.empty()) {
+            return;
+        }
+
         std::vector<std::shared_ptr<MbD::ASMTPart>> dragMbdParts;
 
         for (auto& part : draggedParts) {
@@ -392,6 +396,9 @@ void AssemblyObject::doDragStep()
             }
 
             auto mbdPart = getMbDPart(part);
+            if (!mbdPart) {
+                continue;
+            }
             dragMbdParts.push_back(mbdPart);
 
             // Update the MBD part's position
@@ -409,6 +416,10 @@ void AssemblyObject::doDragStep()
             Base::Vector3d r1 = mat.getRow(1);
             Base::Vector3d r2 = mat.getRow(2);
             mbdPart->updateMbDFromRotationMatrix(r0.x, r0.y, r0.z, r1.x, r1.y, r1.z, r2.x, r2.y, r2.z);
+        }
+
+        if (dragMbdParts.empty()) {
+            return;
         }
 
         // Timing mbdAssembly->runDragStep()
