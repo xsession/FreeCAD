@@ -16,7 +16,12 @@
 
 #include "src/App/InitApplication.h"
 
+#include <App/Application.h>
+#include <App/Document.h>
+
 #include <Gui/Application.h>
+#include <Gui/Document.h>
+#include <Gui/MDIView.h>
 #include <Gui/View3DInventor.h>
 
 class testSketchWorkflowSetEdit: public QObject
@@ -37,11 +42,23 @@ private:
         }
     }
 
+    static void closeAllDocuments()
+    {
+        App::GetApplication().closeAllDocuments();
+        QCoreApplication::processEvents();
+    }
+
 private Q_SLOTS:
 
     void initTestCase()  // NOLINT
     {
         ensureGuiApplication();
+        closeAllDocuments();
+    }
+
+    void cleanup()  // NOLINT
+    {
+        closeAllDocuments();
     }
 
     // Guard test: activateView(View3DInventor, true) with no open document
@@ -69,6 +86,36 @@ private Q_SLOTS:
         };
         Q_UNUSED(guard)
         QVERIFY(true);
+    }
+
+    // Runtime regression: when a document exists and create=true is requested,
+    // activateView() must leave a 3D view active in the same call flow.
+    void test_activateView_createMakes3DViewActiveOnDocument()  // NOLINT
+    {
+        const QByteArray platform = qgetenv("QT_QPA_PLATFORM");
+        if (platform.compare("offscreen", Qt::CaseInsensitive) == 0
+            || platform.compare("minimal", Qt::CaseInsensitive) == 0) {
+            QSKIP("Runtime 3D-view activation check requires a real OpenGL-capable GUI platform");
+        }
+
+        App::Document* doc = App::GetApplication().newDocument("SketchWorkflowViewActivationDoc");
+        QVERIFY(doc != nullptr);
+
+        auto* guiDoc = Gui::Application::Instance->getDocument(doc);
+        QVERIFY(guiDoc != nullptr);
+
+        QVERIFY(Gui::Application::Instance->activeView() == nullptr);
+
+        Gui::Application::Instance->activateView(
+            Gui::View3DInventor::getClassTypeId(),
+            true);
+
+        QCoreApplication::processEvents();
+
+        Gui::MDIView* activeView = Gui::Application::Instance->activeView();
+        QVERIFY2(activeView != nullptr, "activateView(create=true) should yield an active view");
+        QVERIFY2(activeView->isDerivedFrom(Gui::View3DInventor::getClassTypeId()),
+                 "active view should be a 3D Inventor view");
     }
 
     // Source guard: ensure setEdit() still activates a 3D view before reading
