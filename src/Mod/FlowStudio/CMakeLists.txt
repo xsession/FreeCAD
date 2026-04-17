@@ -34,6 +34,7 @@ SET(FlowStudioEnterpriseCore_SRCS
     flow_studio/enterprise/core/adapter_policy.py
     flow_studio/enterprise/core/contracts.py
     flow_studio/enterprise/core/domain.py
+    flow_studio/enterprise/core/sidecar.py
     flow_studio/enterprise/core/serialization.py
 )
 
@@ -49,6 +50,7 @@ SET(FlowStudioEnterpriseApp_SRCS
 
 SET(FlowStudioEnterpriseUi_SRCS
     flow_studio/enterprise/ui/__init__.py
+    flow_studio/enterprise/ui/adapter_matrix.py
     flow_studio/enterprise/ui/jobs_panel.py
 )
 
@@ -186,6 +188,8 @@ SET(FlowStudioTests_SRCS
     flow_studio/tests/test_enterprise_execution_facade.py
     flow_studio/tests/test_enterprise_policy.py
     flow_studio/tests/test_enterprise_remote.py
+    flow_studio/tests/test_enterprise_bootstrap.py
+    flow_studio/tests/test_enterprise_adapter_matrix.py
     flow_studio/tests/test_elmer_sif_detailed.py
     flow_studio/tests/test_mesh_and_materials.py
     flow_studio/tests/test_multiphysics.py

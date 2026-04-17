@@ -15,11 +15,24 @@ import os
 import FreeCAD
 import FreeCADGui
 
-from flow_studio.enterprise import (
-    initialize_workbench,
-    is_enterprise_enabled,
-    on_workbench_activated,
-)
+def _enterprise_disabled(*_args, **_kwargs):
+    return False
+
+
+initialize_workbench = lambda: None  # noqa: E731
+is_enterprise_enabled = _enterprise_disabled
+on_workbench_activated = lambda: None  # noqa: E731
+
+try:
+    from flow_studio.enterprise import (
+        initialize_workbench,
+        is_enterprise_enabled,
+        on_workbench_activated,
+    )
+except Exception as exc:  # pragma: no cover - startup resilience path
+    FreeCAD.Console.PrintError(
+        f"FlowStudio: enterprise layer unavailable ({exc}). Falling back to core mode.\n"
+    )
 
 FreeCAD.Console.PrintLog("FlowStudio: InitGui.py loading...\n")
 
