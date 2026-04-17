@@ -44,7 +44,7 @@ private Q_SLOTS:
         ensureGuiApplication();
     }
 
-    // Guard test: activateView(View3DInventor, false) with no open document
+    // Guard test: activateView(View3DInventor, true) with no open document
     // must not crash. This is the exact call inserted at the top of
     // PartDesignGui::setEdit() as the Start-page focus-steal fix.
     void test_activateView_noCreate_isNoopWhenNoDocument()  // NOLINT
@@ -132,6 +132,36 @@ private Q_SLOTS:
         QVERIFY2(setEditPos >= 0, "SketchWorkflow setEdit call not found");
         QVERIFY2(activatePos < setEditPos,
                  "SketchWorkflow must activate a 3D view before setEdit");
+    }
+
+    void test_applicationActivateView_sourceSetsCreatedViewActive()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString appPath = repoRoot.filePath(QStringLiteral("src/Gui/Application.cpp"));
+        QFile file(appPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(appPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activateNeedle = QStringLiteral("void Application::activateView(const Base::Type& type, bool create)");
+        const QString createNeedle = QStringLiteral("auto* createdView = doc->createView(type)");
+        const QString setActiveNeedle = QStringLiteral("doc->setActiveWindow(createdView);");
+
+        const int activatePos = source.indexOf(activateNeedle);
+        const int createPos = source.indexOf(createNeedle, activatePos);
+        const int setActivePos = source.indexOf(setActiveNeedle, activatePos);
+
+        QVERIFY2(activatePos >= 0, "Application::activateView not found");
+        QVERIFY2(createPos >= 0, "activateView should store the created view");
+        QVERIFY2(setActivePos >= 0,
+                 "activateView should set newly created view active when create=true");
+        QVERIFY2(createPos < setActivePos,
+                 "activateView should call setActiveWindow(createdView) after createView");
     }
 };
 

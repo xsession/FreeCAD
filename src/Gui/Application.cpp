@@ -1482,7 +1482,9 @@ void Application::activateView(const Base::Type& type, bool create)
             doc->setActiveWindow(mdiViews.back());
         }
         else if (create) {
-            doc->createView(type);
+            if (auto* createdView = doc->createView(type)) {
+                doc->setActiveWindow(createdView);
+            }
         }
     }
 }
