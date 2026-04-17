@@ -102,6 +102,37 @@ private Q_SLOTS:
         QVERIFY2(backstagePos < activatePos, "Backstage hide should run before activateView");
         QVERIFY2(activatePos < activeViewPos, "activateView guard must be before activeView fetch");
     }
+
+    void test_sketchWorkflow_sourceActivates3DViewBeforeSetEdit()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString workflowPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/SketchWorkflow.cpp"));
+        QFile file(workflowPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(workflowPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString createSketchNeedle = QStringLiteral("static void createSketch(");
+        const QString activateNeedle
+            = QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), true)");
+        const QString setEditNeedle = QStringLiteral("PartDesignGui::setEdit(Feat, partDesignBody);");
+
+        const int createSketchPos = source.indexOf(createSketchNeedle);
+        const int activatePos = source.indexOf(activateNeedle, createSketchPos);
+        const int setEditPos = source.indexOf(setEditNeedle, createSketchPos);
+
+        QVERIFY2(createSketchPos >= 0, "SketchWorkflow::createSketch helper not found");
+        QVERIFY2(activatePos >= 0, "SketchWorkflow should activate a 3D view before setEdit");
+        QVERIFY2(setEditPos >= 0, "SketchWorkflow setEdit call not found");
+        QVERIFY2(activatePos < setEditPos,
+                 "SketchWorkflow must activate a 3D view before setEdit");
+    }
 };
 
 QTEST_MAIN(testSketchWorkflowSetEdit)

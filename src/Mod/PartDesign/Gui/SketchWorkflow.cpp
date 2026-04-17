@@ -55,6 +55,7 @@
 #include <Gui/Control.h>
 #include <Gui/Document.h>
 #include <Gui/MainWindow.h>
+#include <Gui/View3DInventor.h>
 #include <Gui/ViewParams.h>
 #include <Gui/ViewProviderPlane.h>
 #include <Gui/Selection/SelectionFilter.h>
@@ -757,6 +758,10 @@ private:
         if (features.empty()) {
             return;
         }
+
+        // Force a 3D view for plane-pick workflows that started from Start page.
+        Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
+
         std::string FeatName = documentOfBody->getUniqueObjectName("Sketch");
         auto* plane = static_cast<App::Plane*>(features.front());
         auto* lcs = plane->getLCS();
