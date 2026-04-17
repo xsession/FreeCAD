@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include <Mod/PartDesign/PartDesignGlobal.h>
+
 /** \file PartDesign/Gui/Utils.h
  *  This file contains some utility function used over PartDesignGui module
  */
@@ -49,7 +51,7 @@ namespace PartDesignGui
 {
 
 /// Activate edit mode of the given object
-bool setEdit(App::DocumentObject* obj, PartDesign::Body* body = nullptr);
+PartDesignGuiExport bool setEdit(App::DocumentObject* obj, PartDesign::Body* body = nullptr);
 
 /// Return active body or show a warning message
 PartDesign::Body* getBody(
