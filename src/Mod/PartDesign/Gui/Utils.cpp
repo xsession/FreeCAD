@@ -35,6 +35,7 @@
 #include <Gui/CommandT.h>
 #include <Gui/MainWindow.h>
 #include <Gui/MDIView.h>
+#include <Gui/View3DInventor.h>
 #include <Mod/PartDesign/App/Body.h>
 #include <Mod/PartDesign/App/Feature.h>
 #include <Mod/PartDesign/App/FeatureSketchBased.h>
@@ -86,6 +87,10 @@ bool setEdit(App::DocumentObject* obj, PartDesign::Body* body)
             return false;
         }
     }
+    // Ensure a 3D view is active, not the Start page or any non-3D MDI window.
+    // Without this, setEdit silently fails when the Start page has focus.
+    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), false);
+
     auto* activeView = Gui::Application::Instance->activeView();
     if (!activeView) {
         return false;
