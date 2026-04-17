@@ -8,12 +8,11 @@
  * before querying the active view, so that a non-3D MDI window (e.g. the
  * Start page) can never "steal" focus and prevent the Sketch editor from
  * opening.
- *
- * Full integration tests that exercise the 3D view path (OpenGL) must be run
- * in a non-offscreen environment; they require Coin3D/Quarter to initialise.
  */
 
 #include <QTest>
+#include <QDir>
+#include <QFile>
 
 #include "src/App/InitApplication.h"
 
@@ -45,40 +44,24 @@ private Q_SLOTS:
         ensureGuiApplication();
     }
 
-    // -----------------------------------------------------------------------
     // Guard test: activateView(View3DInventor, false) with no open document
-    // must not crash.  This is the exact call inserted at the top of
-    // PartDesignGui::setEdit() as the "Start-page focus-steal" fix.
-    // If the call is accidentally removed or its signature changes, this file
-    // will fail to compile, catching the regression at build time.
-    // -----------------------------------------------------------------------
+    // must not crash. This is the exact call inserted at the top of
+    // PartDesignGui::setEdit() as the Start-page focus-steal fix.
     void test_activateView_noCreate_isNoopWhenNoDocument()  // NOLINT
     {
-        // No documents are open -> activeView() must return null.
         QVERIFY(Gui::Application::Instance->activeView() == nullptr);
 
-        // The call that fixes the "jump to Start page" bug must not crash
-        // when there is no 3D view available (create=false).
         Gui::Application::Instance->activateView(
             Gui::View3DInventor::getClassTypeId(),
-            false  // do NOT create a new view
-        );
+            false);
 
         QCoreApplication::processEvents();
-
-        // Still no view - asked for create=false with nothing to activate.
         QVERIFY(Gui::Application::Instance->activeView() == nullptr);
     }
 
-    // -----------------------------------------------------------------------
-    // Compile-time guard: verify that Gui::Application::activateView accepts
-    // a SoType and a bool, matching the exact signature used in the fix.
-    // The test body is intentionally trivial - the value is the compilation.
-    // -----------------------------------------------------------------------
+    // Compile-time guard: check signature used by the fix.
     void test_activateView_signatureGuard()  // NOLINT
     {
-        // This lambda is never invoked; it exists purely to make the compiler
-        // check the call signature matches what the fix depends on.
         auto guard = []() {
             Gui::Application::Instance->activateView(
                 Gui::View3DInventor::getClassTypeId(),
@@ -86,6 +69,34 @@ private Q_SLOTS:
         };
         Q_UNUSED(guard)
         QVERIFY(true);
+    }
+
+    // Source guard: ensure setEdit() still activates a 3D view before reading
+    // activeView(). This protects against accidental reordering/removal.
+    void test_setEdit_sourceContainsActivateViewBeforeActiveViewFetch()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString utilsPath = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/Utils.cpp"));
+        QFile file(utilsPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(utilsPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activateNeedle =
+            QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), false)");
+        const QString activeViewNeedle = QStringLiteral("auto* activeView = Gui::Application::Instance->activeView();");
+
+        const int activatePos = source.indexOf(activateNeedle);
+        const int activeViewPos = source.indexOf(activeViewNeedle);
+
+        QVERIFY2(activatePos >= 0, "activateView guard call missing in Utils.cpp::setEdit");
+        QVERIFY2(activeViewPos >= 0, "activeView fetch line not found in Utils.cpp::setEdit");
+        QVERIFY2(activatePos < activeViewPos, "activateView guard must be before activeView fetch");
     }
 };
 
