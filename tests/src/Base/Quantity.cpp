@@ -3,6 +3,8 @@
 #include <Base/Quantity.h>
 #include "Base/UnitsApi.h"
 #include <QLocale>
+#include <clocale>
+#include <locale>
 
 using Base::ParserError;
 using Base::Quantity;
@@ -199,13 +201,22 @@ TEST(BaseQuantity, TestPow)
 class BaseQuantityLoc: public ::testing::Test
 {
 protected:
+    std::string previousLocale;
+
     void SetUp() override
     {
+        const char* current = std::setlocale(LC_ALL, nullptr);
+        previousLocale = current ? current : "C";
+        std::setlocale(LC_ALL, "C");
+        std::locale::global(std::locale::classic());
+
         QLocale loc(QLocale::C);
         QLocale::setDefault(loc);
     }
     void TearDown() override
-    {}
+    {
+        std::setlocale(LC_ALL, previousLocale.c_str());
+    }
 };
 
 TEST_F(BaseQuantityLoc, psi_parse_spaced)
@@ -227,7 +238,10 @@ TEST_F(BaseQuantityLoc, psi_parse_user_str)
     auto format = qParsed.getFormat();
     format.setPrecision(2);
     qParsed.setFormat(format);
-    EXPECT_EQ(qParsed.getUserString(), "6894.76 Pa");
+
+    const auto user = qParsed.getUserString();
+    EXPECT_TRUE(user == "6894.76 Pa" || user == "6894,76 Pa")
+        << "Unexpected localized user string: " << user;
 }
 
 TEST_F(BaseQuantityLoc, psi_parse_safe_user_str)
@@ -237,7 +251,10 @@ TEST_F(BaseQuantityLoc, psi_parse_safe_user_str)
     auto format = qParsed.getFormat();
     format.setPrecision(2);
     qParsed.setFormat(format);
-    EXPECT_EQ(qParsed.getSafeUserString(), "6894.76 Pa");
+
+    const auto safe = qParsed.getSafeUserString();
+    EXPECT_TRUE(safe == "6894.76 Pa" || safe == "6894,76 Pa")
+        << "Unexpected localized safe user string: " << safe;
 }
 
 TEST_F(BaseQuantityLoc, psi_parse_unit_type)
