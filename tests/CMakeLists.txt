@@ -63,6 +63,16 @@ function(setup_qt_test)
         add_executable(${_testname}_Tests_run ${_testname}.cpp)
         add_test(NAME ${_testname}_Tests_run COMMAND ${_testname}_Tests_run)
 
+        set(_qt_test_env "QT_QPA_PLATFORM=offscreen")
+        if(WIN32)
+            if(EXISTS "${_conda_prefix}/Library/lib/qt6/plugins")
+                list(APPEND _qt_test_env "QT_PLUGIN_PATH=${_conda_prefix}/Library/lib/qt6/plugins")
+            endif()
+            if(EXISTS "${_conda_prefix}")
+                list(APPEND _qt_test_env "PYTHONHOME=${_conda_prefix}")
+            endif()
+        endif()
+
         if(NOT BUILD_DYNAMIC_LINK_PYTHON)
             list(APPEND ${_testname}_LIBS
                 ${Python3_LIBRARIES}
@@ -83,14 +93,14 @@ function(setup_qt_test)
                 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
             set_tests_properties(${_testname}_Tests_run PROPERTIES
                 LABELS "Qt"
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+                ENVIRONMENT "${_qt_test_env}"
                 ENVIRONMENT_MODIFICATION "${_test_env_mod}")
         else()
             set_target_properties(${_testname}_Tests_run PROPERTIES
                 RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/tests)
             set_tests_properties(${_testname}_Tests_run PROPERTIES
                 LABELS "Qt"
-                ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+                ENVIRONMENT "${_qt_test_env}")
         endif()
     endforeach()
 endfunction()
@@ -153,6 +163,9 @@ endif(BUILD_TECHDRAW)
 if(WIN32)
     set(_test_env_mod "PATH=path_list_prepend:${CMAKE_BINARY_DIR}/bin")
     cmake_path(GET CMAKE_PREFIX_PATH PARENT_PATH _conda_prefix)
+    if(EXISTS "${_conda_prefix}")
+        list(APPEND _test_env_mod "PATH=path_list_prepend:${_conda_prefix}")
+    endif()
     if(EXISTS "${_conda_prefix}/Library/bin")
         list(APPEND _test_env_mod "PATH=path_list_prepend:${_conda_prefix}/Library/bin")
     elseif(EXISTS "${CMAKE_PREFIX_PATH}/bin")
