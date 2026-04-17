@@ -97,7 +97,7 @@ bool setEdit(App::DocumentObject* obj, PartDesign::Body* body)
 
     // Ensure a 3D view is active, not the Start page or any non-3D MDI window.
     // Without this, setEdit silently fails when a non-3D UI surface has focus.
-    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), false);
+    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
 
     auto* activeView = Gui::Application::Instance->activeView();
     if (!activeView) {

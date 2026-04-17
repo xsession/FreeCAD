@@ -595,7 +595,7 @@ void CmdPartDesignNewSketch::activated(int iMsg)
             backstage->hide();
         }
     }
-    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), false);
+    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
 
     // DEBUG: Log selection at the very start of the command
     {

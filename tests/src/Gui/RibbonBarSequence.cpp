@@ -5,6 +5,8 @@
 #include <QTabBar>
 #include <QTabWidget>
 #include <QTest>
+#include <QDir>
+#include <QFile>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QWidget>
@@ -128,6 +130,33 @@ private Q_SLOTS:
         ) + 16;
 
         QVERIFY(button.sizeHint().width() >= expectedMin);
+    }
+
+    void test_BackstageHideRestoresWorkbenchChrome()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString backstagePath = repoRoot.filePath(QStringLiteral("src/Gui/BackstageView.cpp"));
+        QFile file(backstagePath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(backstagePath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString hideEventNeedle = QStringLiteral("void BackstageView::hideEvent(QHideEvent* event)");
+        const QString ribbonNeedle = QStringLiteral("ribbon->show();");
+        const QString activateNeedle = QStringLiteral("workbench->activate();");
+
+        const int hideEventPos = source.indexOf(hideEventNeedle);
+        const int ribbonPos = source.indexOf(ribbonNeedle, hideEventPos);
+        const int activatePos = source.indexOf(activateNeedle, hideEventPos);
+
+        QVERIFY2(hideEventPos >= 0, "BackstageView hideEvent override missing");
+        QVERIFY2(ribbonPos >= 0, "BackstageView hideEvent should restore ribbon visibility");
+        QVERIFY2(activatePos >= 0, "BackstageView hideEvent should reactivate the active workbench");
+        QVERIFY2(ribbonPos < activatePos,
+                 "BackstageView hideEvent should restore ribbon visibility before workbench reactivation");
     }
 };
 

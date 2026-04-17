@@ -4,7 +4,7 @@
  * is callable and handles the no-doc / no-view case safely.
  *
  * Background: PartDesignGui::setEdit() was fixed to call
- *   Gui::Application::Instance->activateView(View3DInventor::getClassTypeId(), false)
+ *   Gui::Application::Instance->activateView(View3DInventor::getClassTypeId(), true)
  * before querying the active view, so that a non-3D MDI window (e.g. the
  * Start page) can never "steal" focus and prevent the Sketch editor from
  * opening.
@@ -53,7 +53,7 @@ private Q_SLOTS:
 
         Gui::Application::Instance->activateView(
             Gui::View3DInventor::getClassTypeId(),
-            false);
+            true);
 
         QCoreApplication::processEvents();
         QVERIFY(Gui::Application::Instance->activeView() == nullptr);
@@ -65,7 +65,7 @@ private Q_SLOTS:
         auto guard = []() {
             Gui::Application::Instance->activateView(
                 Gui::View3DInventor::getClassTypeId(),
-                false);
+                true);
         };
         Q_UNUSED(guard)
         QVERIFY(true);
@@ -87,15 +87,19 @@ private Q_SLOTS:
         QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(utilsPath));
         const QString source = QString::fromUtf8(file.readAll());
 
+        const QString backstageNeedle = QStringLiteral("backstage->hide();");
         const QString activateNeedle =
-            QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), false)");
+            QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), true)");
         const QString activeViewNeedle = QStringLiteral("auto* activeView = Gui::Application::Instance->activeView();");
 
+        const int backstagePos = source.indexOf(backstageNeedle);
         const int activatePos = source.indexOf(activateNeedle);
         const int activeViewPos = source.indexOf(activeViewNeedle);
 
+        QVERIFY2(backstagePos >= 0, "Backstage hide call missing in Utils.cpp::setEdit");
         QVERIFY2(activatePos >= 0, "activateView guard call missing in Utils.cpp::setEdit");
         QVERIFY2(activeViewPos >= 0, "activeView fetch line not found in Utils.cpp::setEdit");
+        QVERIFY2(backstagePos < activatePos, "Backstage hide should run before activateView");
         QVERIFY2(activatePos < activeViewPos, "activateView guard must be before activeView fetch");
     }
 };

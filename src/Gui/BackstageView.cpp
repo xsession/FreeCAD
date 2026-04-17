@@ -29,6 +29,7 @@
 #include <QListWidget>
 #include <QPainter>
 #include <QPushButton>
+#include <QHideEvent>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -36,6 +37,9 @@
 #include "MainWindow.h"
 #include "FileDialog.h"
 #include "Command.h"
+#include "RibbonBar.h"
+#include "Workbench.h"
+#include "WorkbenchManager.h"
 
 using namespace Gui;
 
@@ -326,6 +330,20 @@ void BackstageView::showEvent(QShowEvent* event)
     if (parentWidget()) {
         resize(parentWidget()->size());
         raise();
+    }
+}
+
+void BackstageView::hideEvent(QHideEvent* event)
+{
+    QWidget::hideEvent(event);
+
+    auto* ribbon = RibbonBar::instance();
+    if (ribbon && RibbonBar::isRibbonEnabled()) {
+        ribbon->show();
+    }
+
+    if (auto* workbench = WorkbenchManager::instance()->active()) {
+        workbench->activate();
     }
 }
 
