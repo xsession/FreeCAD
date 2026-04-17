@@ -3,10 +3,21 @@
 #include <QColor>
 #include <QtCore/Qt>
 
+#include "src/App/InitApplication.h"
 #include "Mod/TechDraw/App/LineFormat.h"
 
 namespace
 {
+
+struct TechDrawLineFormatTestEnv
+{
+    TechDrawLineFormatTestEnv()
+    {
+        tests::initApplication();
+    }
+};
+
+TechDrawLineFormatTestEnv testEnv;
 
 TechDraw::LineFormat makeLineFormat()
 {
