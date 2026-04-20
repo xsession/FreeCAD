@@ -335,15 +335,11 @@ void BackstageView::showEvent(QShowEvent* event)
 
 void BackstageView::hideEvent(QHideEvent* event)
 {
+    auto* ribbon = RibbonBar::instance();
     QWidget::hideEvent(event);
 
-    auto* ribbon = RibbonBar::instance();
     if (ribbon && RibbonBar::isRibbonEnabled()) {
         ribbon->show();
-    }
-
-    if (auto* workbench = WorkbenchManager::instance()->active()) {
-        workbench->activate();
     }
 }
 

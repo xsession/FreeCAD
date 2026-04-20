@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-This document proposes a practical plan for building a new FreeCAD-derived variant with a strict frontend/backend separation:
+This document proposes a practical plan for building a new FreeCAD-derived variant with a strict frontend/backend separation and an eventual mandate to clone the complete FreeCAD feature set, bundled workbenches, and strategically important plugin ecosystem:
 
 - Frontend: React
 - Backend: Rust
@@ -25,6 +25,14 @@ The end state is not "React calling legacy C++ directly." The end state is:
 - React owns presentation and interaction.
 - Rust owns application orchestration and external API surface.
 - Native C++ libraries are isolated workers/adapters invoked by Rust.
+
+For the full-clone version of the program, the long-term destination is even stronger:
+
+- every major FreeCAD user workflow is available through the React UI
+- every core document, property, command, recompute, and automation concept is backend-owned by Rust
+- every bundled workbench is either fully reimplemented in Rust/React or hosted through a compatibility layer
+- major third-party plugins/workbenches are brought forward through compatibility adapters, then migrated to explicit frontend/backend extension APIs
+- native C++ remains only where it is the most practical implementation of geometry kernels, solver logic, or legacy compatibility
 
 ---
 
@@ -69,11 +77,11 @@ The variant must preserve:
 Not in the initial program:
 
 - rewriting OCCT in Rust
-- rewriting all FreeCAD workbenches at once
+- rewriting all FreeCAD workbenches at once as a single first milestone
 - browser-only CAD as the first milestone
 - replacing all Python support in phase 1
 - full cloud collaboration in MVP
-- feature parity with every FreeCAD workbench before first release
+- complete feature parity with every FreeCAD workbench before first release
 
 ---
 
@@ -1519,7 +1527,7 @@ This gives you the best balance of:
 
 ## 32. Bottom Line
 
-A React frontend plus Rust backend FreeCAD variant is viable only if it is treated as an architectural extraction project, not a geometric rewrite.
+A React frontend plus Rust backend FreeCAD variant is viable only if it is treated as an architectural extraction project first, and only then as a full-clone reimplementation program.
 
 The correct strategy is:
 
@@ -1528,3 +1536,575 @@ The correct strategy is:
 - isolate native CAD logic behind a controlled bridge
 - ship a narrow vertical slice early
 - replace legacy internals selectively, only where justified by data
+
+---
+
+## 33. Complete FreeCAD Clone Objective
+
+### 33.1 Expanded Product Mandate
+
+If the explicit goal is to clone the complete feature set of FreeCAD and its plugin ecosystem using a Rust + React stack, the program must be framed as a multi-track platform reimplementation rather than only a UI modernization effort.
+
+That means the target scope is:
+
+- core application shell and document model
+- all major bundled workbenches
+- all standard file import/export pathways
+- Python macro and automation behavior
+- workbench/plugin loading and extension surfaces
+- task panels, tree, properties, selections, expressions, units, preferences, and command system
+- technical workflows like Path, FEM, TechDraw, Spreadsheet, Assembly, Surface, Reverse Engineering, and addon management
+
+### 33.2 Definition of "Complete Feature Clone"
+
+For this initiative, "complete feature clone" should mean:
+
+- workflow parity for all bundled workbenches shipped in the targeted FreeCAD baseline
+- document compatibility for the supported release family
+- command parity for end-user operations, not merely object/model parity
+- automation parity for the practical subset used by macros and plugin workbenches
+- extension parity for user-installed addons, with a documented compatibility classification
+- no hard dependency on the legacy Qt GUI for any shipping end-user workflow
+
+### 33.3 Scope Rule
+
+The clone objective should be measured at four levels:
+
+1. Document parity
+2. Workflow parity
+3. Automation parity
+4. Extension parity
+
+Only cloning the data model is not enough. Only cloning the visual layout is not enough. The program succeeds only when users can perform the same meaningful engineering jobs in the new stack.
+
+---
+
+## 34. Full Feature Inventory Program
+
+### 34.1 Required Baseline Audit
+
+Before implementation planning is considered complete, create a machine-readable inventory of:
+
+- all bundled workbenches
+- all commands
+- all document object types
+- all view providers
+- all import/export formats
+- all task panels
+- all property types
+- all preference panels
+- all Python-exposed modules, classes, and commands
+- all addon-manager discoverable first-party and high-value third-party plugins
+
+Store this inventory as versioned source data, not prose only.
+
+Recommended artifacts:
+
+- `docs/variant/parity/workbenches.yaml`
+- `docs/variant/parity/commands.yaml`
+- `docs/variant/parity/object_types.yaml`
+- `docs/variant/parity/import_export.yaml`
+- `docs/variant/parity/plugins.yaml`
+- `docs/variant/parity/python_api_surface.yaml`
+
+### 34.2 Core Built-In Workbench Families to Inventory
+
+At minimum, the parity matrix must cover:
+
+- Start
+- Part
+- PartDesign
+- Sketcher
+- Draft
+- Arch or BIM-related modules in the target baseline
+- Assembly
+- TechDraw
+- Spreadsheet
+- FEM
+- Path or CAM
+- Mesh
+- MeshPart
+- Surface
+- Points
+- Material
+- Measure
+- Inspection
+- ReverseEngineering
+- Import/export utilities
+- Robot
+- Plot
+- Web
+- OpenSCAD integration
+- FlowStudio or other custom bundled modules in this fork
+
+### 34.3 Plugin Ecosystem Classes
+
+Third-party addons should be classified into:
+
+- Tier A: strategic high-adoption plugins that must work near launch
+- Tier B: important engineering plugins supported through compatibility mode
+- Tier C: legacy or low-usage plugins supported later or only via adapters
+
+Examples of plugin categories to inventory:
+
+- Sheet metal
+- Fasteners
+- Assembly-related addons
+- BIM/architecture addons
+- CFD/CAE addons
+- electronics or PCB integrations
+- rendering and visualization addons
+- manufacturing/post-processing addons
+- data exchange or PLM connectors
+
+### 34.4 Parity Matrix Fields
+
+Each feature row in the inventory should include:
+
+- feature ID
+- workbench
+- command name
+- user-facing workflow description
+- required object types
+- dependency on OCCT/native worker
+- dependency on Python
+- dependency on Qt-only behavior
+- migration strategy
+- parity tier
+- test fixture
+- acceptance criteria
+- status
+
+---
+
+## 35. Full Workbench and Plugin Reimplementation Strategy
+
+### 35.1 Migration Modes
+
+Every workbench and plugin should be assigned one of four migration modes:
+
+#### Mode A: Native compatibility hosted behind Rust
+
+Use this when:
+
+- the subsystem is large
+- native logic is already stable
+- UI can be replaced without immediately rewriting core behavior
+
+Examples:
+
+- Part
+- PartDesign
+- Sketcher solver integration
+- import/export pipelines
+
+#### Mode B: Rust orchestration with native kernel operations
+
+Use this when:
+
+- command semantics can be Rust-owned
+- geometry execution can remain native
+- the UI can be fully React-based
+
+Examples:
+
+- document recompute orchestration
+- property editing
+- task workflows
+- selection and viewport state
+
+#### Mode C: Full Rust/React reimplementation
+
+Use this when:
+
+- the subsystem is mostly orchestration or application logic
+- native GUI coupling is high but domain complexity is moderate
+- ownership by Rust gives large long-term benefits
+
+Examples:
+
+- addon manager
+- preferences and settings
+- startup flows
+- project/workspace handling
+- task/job scheduler
+- plugin manager
+- notifications and logging UI
+
+#### Mode D: Sunset or replace with a modern extension API
+
+Use this when:
+
+- the original subsystem is tightly bound to Qt internals
+- direct compatibility is expensive and low value
+- a migration shim plus new extension API is better
+
+Examples:
+
+- some GUI-heavy macro helpers
+- highly coupled custom dialogs
+- legacy view-provider-only plugins
+
+### 35.2 Full Clone Waves
+
+The complete clone should be split into implementation waves:
+
+#### Wave 1: Core shell and modeling essentials
+
+- Start
+- document management
+- tree, properties, selection, undo/redo
+- Part
+- PartDesign
+- Sketcher
+- viewport
+- expressions and units
+- save/open/import/export basics
+
+#### Wave 2: production engineering workflows
+
+- Draft
+- Arch/BIM target workflows
+- Spreadsheet
+- TechDraw
+- Material
+- Measure
+- addon management
+- plugin compatibility host
+
+#### Wave 3: advanced engineering and manufacturing
+
+- FEM
+- Path/CAM
+- Mesh and mesh-part tooling
+- Surface
+- Points
+- inspection workflows
+- reverse engineering
+
+#### Wave 4: specialist and ecosystem completion
+
+- Robot
+- Plot
+- Web
+- OpenSCAD integration
+- assembly ecosystem refinement
+- strategic third-party plugins
+- deep automation compatibility
+
+### 35.3 Plugin Forward-Porting Strategy
+
+Each supported plugin should have one of these forward paths:
+
+- run unchanged in Python compatibility mode
+- run with a Qt-to-React adapter shim for command and panel registration
+- be partially ported to Rust backend plus React frontend
+- be fully rewritten as a first-class Rust/React extension
+
+---
+
+## 36. React + Rust Ownership Model for Full Parity
+
+### 36.1 What Must Eventually Move to Rust
+
+For a true platform clone, Rust should become authoritative for:
+
+- command registry and dispatch
+- transaction and undo/redo semantics
+- document/session lifecycle
+- plugin manifests and capability policies
+- job scheduling and recompute orchestration
+- selection model
+- workspace/project metadata
+- settings and preferences
+- API versioning and remote automation
+- test harnesses and parity validation
+
+### 36.2 What Must Eventually Move to React
+
+For the frontend to count as a real reimplementation, React should own:
+
+- all top-level shell navigation
+- workbench chrome and panels
+- document tabs
+- tree views
+- property editors
+- task panels
+- sketch editing UI layer
+- TechDraw UI workflows
+- FEM/Path/Spreadsheet interaction surfaces
+- plugin panels and frontend extension surfaces
+
+### 36.3 What May Remain Native Long-Term
+
+Even in the full-clone target, it is reasonable for these to remain native for years:
+
+- OCCT-heavy geometry operations
+- topology naming and B-Rep details
+- deep solver internals
+- some import/export codecs
+- parts of mesh generation/tessellation
+- specialized legacy algorithms where rewrite ROI is poor
+
+The goal is not ideological purity. The goal is complete user-facing parity with a maintainable architecture.
+
+---
+
+## 37. Python and Plugin Compatibility for a Full Clone
+
+### 37.1 Compatibility Tiers
+
+Define explicit compatibility tiers for Python and plugin support:
+
+#### Tier 1: Full supported compatibility
+
+- supported without code changes
+- tested in CI
+- documented as release-blocking
+
+#### Tier 2: Supported with adaptation
+
+- minor migration changes required
+- stable backend APIs provided
+- documented upgrade path
+
+#### Tier 3: Best-effort legacy mode
+
+- may run under compatibility host
+- not guaranteed for all GUI behaviors
+- not release-blocking
+
+#### Tier 4: Not supported
+
+- legacy or unsafe behavior
+- direct Qt widget assumptions
+- unsupported hacks or brittle internals
+
+### 37.2 New Extension API Surface
+
+To make a complete ecosystem sustainable, define new extension APIs for:
+
+- registering commands
+- declaring backend jobs
+- adding tree/property/task UI contributions
+- contributing import/export handlers
+- adding analysis or manufacturing pipelines
+- listening to document, selection, and recompute events
+
+### 37.3 Qt Plugin Migration
+
+Many plugins will be coupled to:
+
+- `Gui.runCommand`
+- Qt task panels
+- dock widgets
+- view providers
+- direct selection observers
+
+Provide migration layers for:
+
+- command registration adapters
+- task-panel-to-schema conversion
+- property panel schema rendering
+- selection event subscriptions
+- backend-executed Python command hosts
+
+### 37.4 Macro and Console Parity
+
+If full FreeCAD cloning is the goal, include:
+
+- Python console equivalent
+- macro recorder/player
+- macro management UI
+- script execution with document/session bindings
+- backend-safe automation API
+
+---
+
+## 38. Acceptance Criteria for Complete Feature Parity
+
+### 38.1 Workbench-Level Acceptance
+
+Each workbench is only considered complete when:
+
+- major user workflows are executable in React UI
+- command coverage reaches agreed parity threshold
+- core fixtures load and roundtrip successfully
+- automated tests cover creation, edit, recompute, save, reopen
+- user docs exist for migrated workflows
+- required plugins for that workbench tier are classified and supported
+
+### 38.2 Plugin-Level Acceptance
+
+A plugin is only considered supported when:
+
+- it installs through the new addon/plugin system
+- commands load without legacy GUI dependency failures
+- panels or workflows render in React or via sanctioned adapters
+- automation hooks function through the backend API
+- failures are isolated and diagnosable
+
+### 38.3 Product-Level Acceptance
+
+The full-clone program reaches success when:
+
+1. all bundled workbenches in scope have accepted parity plans
+2. all Tier A plugins are supported or replaced
+3. common daily workflows no longer require launching legacy Qt FreeCAD
+4. document roundtrips are trusted by internal power users
+5. automation/macro users can migrate without losing critical productivity
+6. major regressions are tracked by a continuously updated parity dashboard
+
+---
+
+## 39. Expanded Delivery Program for a Complete Clone
+
+### 39.1 Program Phases
+
+The original MVP phases are still valid, but a true full-clone program needs additional program-level phases:
+
+#### Program Phase A: Inventory and baseline capture
+
+Duration: 2-4 months
+
+Deliverables:
+
+- complete feature inventory
+- plugin ecosystem inventory
+- parity matrix
+- golden workflow suite
+- baseline performance and compatibility measurements
+
+#### Program Phase B: platform extraction
+
+Duration: 4-8 months
+
+Deliverables:
+
+- Rust backend foundation
+- React shell and viewport base
+- native worker isolation
+- protocol definitions
+- command/event model
+
+#### Program Phase C: core modeling parity
+
+Duration: 8-14 months
+
+Deliverables:
+
+- Part/PartDesign/Sketcher daily-use parity
+- document lifecycle parity
+- property/expression/unit parity
+- FCStd roundtrip confidence
+
+#### Program Phase D: workbench expansion
+
+Duration: 10-18 months
+
+Deliverables:
+
+- Draft, Spreadsheet, TechDraw, Material, Measure, addon workflows
+- Arch/BIM strategy implemented
+- plugin host stable
+
+#### Program Phase E: advanced engineering parity
+
+Duration: 10-18 months
+
+Deliverables:
+
+- FEM, Path, Mesh, Surface, ReverseEngineering, Inspection
+- deeper plugin ecosystem support
+- performance hardening for large documents and assemblies
+
+#### Program Phase F: ecosystem and de-legacy
+
+Duration: 6-12 months
+
+Deliverables:
+
+- Tier A plugin support complete
+- legacy GUI dependencies removed from core release path
+- migration tooling and docs published
+- optional remote/service-backed backend mode stabilized
+
+### 39.2 Realistic Timeline
+
+For a complete FreeCAD + plugin clone, a more realistic schedule is:
+
+- narrow vertical slice: 6-10 months
+- strong internal dogfood release: 12-18 months
+- broad bundled-workbench parity: 24-36 months
+- serious plugin ecosystem parity: 30-42 months
+
+This assumes a dedicated, experienced team and stable funding.
+
+### 39.3 Team Size for Full Clone
+
+The earlier team estimates are too small for the complete-clone goal.
+
+More realistic team for sustained execution:
+
+- 4 React/frontend engineers
+- 4 Rust/backend engineers
+- 3 C++/OCCT/FreeCAD bridge engineers
+- 2 rendering/viewport engineers
+- 2 CAD domain engineers
+- 2 QA/automation engineers
+- 1 product lead
+- 1 UX/design lead
+- 1 developer relations or plugin migration engineer
+
+Total: about 20 people.
+
+### 39.4 Program Governance
+
+For a project this large, add:
+
+- architecture review board
+- parity dashboard reviewed every sprint
+- ADRs for every extension-surface decision
+- plugin compatibility board
+- golden workflow signoff from domain owners
+- release gates tied to parity categories, not just code completion
+
+---
+
+## 40. Recommended Next Documents
+
+To make this expanded plan actionable, create these follow-on documents immediately:
+
+1. `FREECAD_FULL_PARITY_MATRIX.md`
+2. `FREECAD_PLUGIN_COMPATIBILITY_STRATEGY.md`
+3. `FREECAD_WORKBENCH_MIGRATION_WAVES.md`
+4. `FREECAD_PYTHON_AUTOMATION_COMPATIBILITY.md`
+5. `FREECAD_VIEWPORT_AND_SELECTION_ARCHITECTURE.md`
+6. `FREECAD_EXTENSION_API_DESIGN.md`
+7. `FREECAD_GOLDEN_WORKFLOW_TEST_PLAN.md`
+8. `FREECAD_DATA_MODEL_AND_COMMAND_TAXONOMY.md`
+
+### 40.1 Suggested Immediate Backlog for the Full-Clone Goal
+
+#### Next 30 days
+
+- generate feature inventory from source tree
+- classify workbenches and plugins by migration mode
+- define parity matrix schema
+- identify Tier A plugins
+- define command taxonomy and document object taxonomy
+
+#### Next 60 days
+
+- build golden workflow fixtures for top 20 workflows
+- define frontend extension APIs
+- define backend plugin APIs
+- define Python compatibility service boundaries
+- map every Qt-only workflow hotspot
+
+#### Next 90 days
+
+- freeze baseline feature scope for target FreeCAD release
+- publish bundle and plugin compatibility roadmap
+- begin Wave 1 implementation with explicit parity dashboards
+- start workbench-by-workbench migration tracking

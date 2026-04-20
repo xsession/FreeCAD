@@ -5,10 +5,16 @@
 
 if(TARGET Qt6::uic)
     get_target_property(PYSIDE6_UIC_EXECUTABLE Qt6::uic LOCATION)
+    if(COMMAND freecad_stage_qt_host_tool)
+        freecad_stage_qt_host_tool(PYSIDE6_UIC_EXECUTABLE "${PYSIDE6_UIC_EXECUTABLE}")
+    endif()
     set(UICOPTIONS "--generator=python")
 endif()
 if(TARGET Qt6::rcc)
     get_target_property(PYSIDE6_RCC_EXECUTABLE Qt6::rcc LOCATION)
+    if(COMMAND freecad_stage_qt_host_tool)
+        freecad_stage_qt_host_tool(PYSIDE6_RCC_EXECUTABLE "${PYSIDE6_RCC_EXECUTABLE}")
+    endif()
     set(RCCOPTIONS "--generator=python" "--compress-algo=zlib" "--compress=1")
 endif()
 

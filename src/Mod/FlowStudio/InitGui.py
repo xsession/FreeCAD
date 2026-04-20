@@ -15,12 +15,8 @@ import os
 import FreeCAD
 import FreeCADGui
 
-def _enterprise_disabled(*_args, **_kwargs):
-    return False
-
-
 initialize_workbench = lambda: None  # noqa: E731
-is_enterprise_enabled = _enterprise_disabled
+is_enterprise_enabled = lambda *_args, **_kwargs: False  # noqa: E731
 on_workbench_activated = lambda: None  # noqa: E731
 
 try:
@@ -131,6 +127,26 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
             _flow_dir = _os.path.join(_fc.getHomePath(), "Mod", "FlowStudio")
         self.__class__.Icon = _os.path.join(_flow_dir, "Resources", "icons", "FlowStudioWorkbench.svg")
 
+    @staticmethod
+    def _enterprise_disabled(*_args, **_kwargs):
+        return False
+
+    @staticmethod
+    def _noop(*_args, **_kwargs):
+        return None
+
+    @staticmethod
+    def _resolve_enterprise_callable(name, fallback):
+        """Resolve enterprise hooks safely under FreeCAD's InitGui execution model."""
+        candidate = globals().get(name, fallback)
+        if callable(candidate):
+            return candidate
+
+        FreeCAD.Console.PrintError(
+            f"FlowStudio: enterprise hook '{name}' unavailable at runtime. Falling back.\n"
+        )
+        return fallback
+
     # ------------------------------------------------------------------
     # Workbench lifecycle
     # ------------------------------------------------------------------
@@ -141,11 +157,17 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         main_window_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
         ribbon_enabled = bool(main_window_prefs.GetBool("UseRibbonBar", False))
 
-        enterprise_enabled = is_enterprise_enabled()
+        enterprise_enabled_fn = self._resolve_enterprise_callable(
+            "is_enterprise_enabled", self._enterprise_disabled
+        )
+        initialize_workbench_fn = self._resolve_enterprise_callable(
+            "initialize_workbench", self._noop
+        )
+        enterprise_enabled = enterprise_enabled_fn()
         if enterprise_enabled:
             import flow_studio.enterprise_commands  # noqa: F401
 
-            initialize_workbench()
+            initialize_workbench_fn()
         else:
             FreeCAD.Console.PrintLog(
                 "FlowStudio: Enterprise feature set disabled by FLOWSTUDIO_ENTERPRISE_ENABLED.\n"
@@ -227,8 +249,14 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     def Activated(self):
         """Called every time the workbench becomes active."""
-        if is_enterprise_enabled():
-            on_workbench_activated()
+        enterprise_enabled_fn = self._resolve_enterprise_callable(
+            "is_enterprise_enabled", self._enterprise_disabled
+        )
+        on_workbench_activated_fn = self._resolve_enterprise_callable(
+            "on_workbench_activated", self._noop
+        )
+        if enterprise_enabled_fn():
+            on_workbench_activated_fn()
 
     def Deactivated(self):
         """Called when switching away from this workbench."""

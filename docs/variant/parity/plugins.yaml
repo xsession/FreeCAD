@@ -1,0 +1,73 @@
+version: 1
+plugin_categories:
+  - id: plugin_sheet_metal
+    name: Sheet metal
+    importance: high
+    compatibility_tier_target: Tier 1
+    migration_strategy: adapter_first_selective_rewrite
+    priority: P1
+    status: planned
+
+  - id: plugin_fasteners
+    name: Fasteners
+    importance: high
+    compatibility_tier_target: Tier 1
+    migration_strategy: backend_plugin_api
+    priority: P1
+    status: planned
+
+  - id: plugin_assembly_addons
+    name: Assembly addons
+    importance: high
+    compatibility_tier_target: Tier 2
+    migration_strategy: compatibility_host_then_converge
+    priority: P1
+    status: planned
+
+  - id: plugin_bim_addons
+    name: BIM addons
+    importance: high
+    compatibility_tier_target: Tier 2
+    migration_strategy: mixed_compatibility_and_targeted_rewrite
+    priority: P2
+    status: planned
+
+  - id: plugin_cfd_cae
+    name: CFD and CAE addons
+    importance: high
+    compatibility_tier_target: Tier 2
+    migration_strategy: backend_jobs_and_plugin_apis
+    priority: P2
+    status: planned
+
+  - id: plugin_rendering
+    name: Rendering and visualization
+    importance: medium
+    compatibility_tier_target: Tier 2
+    migration_strategy: worker_based_integrations
+    priority: P3
+    status: planned
+
+  - id: plugin_pcb_electronics
+    name: Electronics and PCB
+    importance: medium
+    compatibility_tier_target: Tier 2
+    migration_strategy: plugin_api_and_compat_host
+    priority: P3
+    status: planned
+
+  - id: plugin_plm_connectors
+    name: PLM and PDM connectors
+    importance: medium
+    compatibility_tier_target: Tier 2
+    migration_strategy: rust_backend_integrations
+    priority: P3
+    status: planned
+
+  - id: plugin_legacy_gui_macros
+    name: Legacy GUI-heavy macros and tools
+    importance: low
+    compatibility_tier_target: Tier 3
+    migration_strategy: compatibility_mode_only
+    priority: P3
+    status: planned

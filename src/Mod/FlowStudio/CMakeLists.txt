@@ -205,18 +205,21 @@ SET(FlowStudioIcons_SRCS
     Resources/icons/FlowStudioConvection.svg
     Resources/icons/FlowStudioCurrentDensity.svg
     Resources/icons/FlowStudioDielectricMaterial.svg
+    Resources/icons/FlowStudioElectricFlux.svg
     Resources/icons/FlowStudioElectricPotential.svg
     Resources/icons/FlowStudioElectromagnetic.svg
     Resources/icons/FlowStudioElectromagneticPhysics.svg
     Resources/icons/FlowStudioElectrostatic.svg
     Resources/icons/FlowStudioElectrostaticPhysics.svg
     Resources/icons/FlowStudioEMMaterial.svg
+    Resources/icons/FlowStudioFarFieldEM.svg
     Resources/icons/FlowStudioFixedDisplacement.svg
     Resources/icons/FlowStudioForce.svg
     Resources/icons/FlowStudioGeneric.svg
     Resources/icons/FlowStudioHeatFlux.svg
     Resources/icons/FlowStudioInitial.svg
     Resources/icons/FlowStudioInlet.svg
+    Resources/icons/FlowStudioMagneticFluxDensity.svg
     Resources/icons/FlowStudioMagneticPotential.svg
     Resources/icons/FlowStudioMaterial.svg
     Resources/icons/FlowStudioMesh.svg

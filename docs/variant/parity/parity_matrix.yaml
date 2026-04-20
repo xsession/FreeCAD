@@ -1,0 +1,93 @@
+version: 1
+metadata:
+  source_plan: FREECAD_REACT_RUST_VARIANT_PLAN.md
+  source_matrix: FREECAD_FULL_PARITY_MATRIX.md
+  description: >
+    Machine-readable parity planning data for the React + Rust FreeCAD variant.
+status_legend:
+  - not_started
+  - inventorying
+  - planned
+  - in_progress
+  - compat_mode
+  - partial
+  - feature_complete
+  - workflow_complete
+  - accepted
+  - blocked
+  - deferred
+migration_mode_legend:
+  A: Native compatibility hosted behind Rust
+  B: Rust orchestration with native kernel operations
+  C: Full Rust/React reimplementation
+  D: Sunset or replace with new extension API
+priority_legend:
+  - P0
+  - P1
+  - P2
+  - P3
+domains:
+  - id: application
+    items:
+      - id: app_document_lifecycle
+        name: Document lifecycle
+        target_ownership: rust_native
+        migration_mode: B
+        priority: P0
+        status: planned
+        acceptance: fcstd_open_save_recover_supported
+
+      - id: app_command_system
+        name: Command system
+        target_ownership: rust
+        migration_mode: C
+        priority: P0
+        status: planned
+        acceptance: command_registry_versioned_and_stable
+
+      - id: app_selection_model
+        name: Selection model
+        target_ownership: rust_react_native
+        migration_mode: B
+        priority: P0
+        status: planned
+        acceptance: backend_canonical_selection_across_workbenches
+
+      - id: app_properties_units_expressions
+        name: Properties, units, and expressions
+        target_ownership: rust_react
+        migration_mode: B
+        priority: P0
+        status: planned
+        acceptance: major_property_types_and_expression_workflows_supported
+
+      - id: app_addon_management
+        name: Addon management
+        target_ownership: rust_react
+        migration_mode: C
+        priority: P1
+        status: planned
+        acceptance: install_update_remove_supported_plugins
+
+      - id: app_macro_automation
+        name: Macro and automation support
+        target_ownership: rust_python_react
+        migration_mode: B
+        priority: P1
+        status: planned
+        acceptance: tier_1_and_tier_2_automation_paths_supported
+
+  - id: workbenches
+    refs:
+      file: workbenches.yaml
+      key: workbenches
+
+  - id: plugins
+    refs:
+      file: plugins.yaml
+      key: plugin_categories
+
+  - id: golden_workflows
+    refs:
+      file: golden_workflows.yaml
+      key: golden_workflows

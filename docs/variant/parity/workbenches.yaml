@@ -1,0 +1,369 @@
+version: 1
+generated_from:
+  - docs/modules/*.md
+  - repo-specific module planning assumptions
+workbenches:
+  - id: wb_start
+    name: Start
+    module_doc: docs/modules/Start.md
+    category: core
+    bundled: true
+    target_ownership: react_rust
+    migration_mode: C
+    priority: P0
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - new_document
+      - open_document
+      - recent_files
+      - onboarding
+
+  - id: wb_part
+    name: Part
+    module_doc: docs/modules/Part.md
+    category: modeling
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P0
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - primitive_creation
+      - booleans
+      - fillet_chamfer
+      - topology_editing
+      - import_driven_modeling
+
+  - id: wb_partdesign
+    name: PartDesign
+    module_doc: docs/modules/PartDesign.md
+    category: modeling
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P0
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - body_creation
+      - sketch_attachment
+      - pad_pocket
+      - datum_features
+      - pattern_features
+
+  - id: wb_sketcher
+    name: Sketcher
+    module_doc: docs/modules/Sketcher.md
+    category: modeling
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P0
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - create_geometry
+      - add_constraints
+      - dimension_editing
+      - solve_and_validate
+
+  - id: wb_draft
+    name: Draft
+    module_doc: docs/modules/Draft.md
+    category: drafting
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P1
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - line_wire_tools
+      - snaps
+      - transforms
+      - annotation
+
+  - id: wb_bim
+    name: BIM
+    module_doc: docs/modules/BIM.md
+    category: architecture
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P1
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - architectural_objects
+      - spatial_workflows
+      - project_modeling
+
+  - id: wb_assembly
+    name: Assembly
+    module_doc: docs/modules/Assembly.md
+    category: assembly
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P1
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - part_positioning
+      - constraints_or_joints
+      - large_assembly_navigation
+
+  - id: wb_spreadsheet
+    name: Spreadsheet
+    module_doc: docs/modules/Spreadsheet.md
+    category: data
+    bundled: true
+    target_ownership: react_rust
+    migration_mode: C
+    priority: P1
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - cell_editing
+      - aliases
+      - expression_binding
+
+  - id: wb_techdraw
+    name: TechDraw
+    module_doc: docs/modules/TechDraw.md
+    category: documentation
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P1
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - page_creation
+      - view_generation
+      - dimensioning
+      - export
+
+  - id: wb_material
+    name: Material
+    module_doc: docs/modules/Material.md
+    category: metadata
+    bundled: true
+    target_ownership: react_rust
+    migration_mode: C
+    priority: P1
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - library_browsing
+      - assignment
+      - metadata_editing
+
+  - id: wb_measure
+    name: Measure
+    module_doc: docs/modules/Measure.md
+    category: analysis
+    bundled: true
+    target_ownership: rust_native_react
+    migration_mode: B
+    priority: P1
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - distance_measurement
+      - angle_measurement
+      - area_measurement
+
+  - id: wb_fem
+    name: FEM
+    module_doc: docs/modules/FEM.md
+    category: simulation
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P2
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - material_assignment
+      - meshing
+      - constraint_setup
+      - solver_orchestration
+
+  - id: wb_cam
+    name: CAM
+    module_doc: docs/modules/CAM.md
+    category: manufacturing
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P2
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - operation_creation
+      - toolpath_generation
+      - post_processing
+
+  - id: wb_mesh
+    name: Mesh
+    module_doc: docs/modules/Mesh.md
+    category: mesh
+    bundled: true
+    target_ownership: mixed
+    migration_mode: B
+    priority: P2
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - mesh_import
+      - mesh_repair
+      - mesh_display
+
+  - id: wb_meshpart
+    name: MeshPart
+    module_doc: docs/modules/MeshPart.md
+    category: mesh
+    bundled: true
+    target_ownership: mixed
+    migration_mode: B
+    priority: P2
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - shape_to_mesh
+      - mesh_to_shape_support
+
+  - id: wb_surface
+    name: Surface
+    module_doc: docs/modules/Surface.md
+    category: surfacing
+    bundled: true
+    target_ownership: mixed
+    migration_mode: B
+    priority: P2
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - surface_creation
+      - fills
+      - ruled_surfaces
+
+  - id: wb_points
+    name: Points
+    module_doc: docs/modules/Points.md
+    category: geometry
+    bundled: true
+    target_ownership: mixed
+    migration_mode: B
+    priority: P2
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - point_import
+      - point_display
+      - point_transform
+
+  - id: wb_reverseengineering
+    name: ReverseEngineering
+    module_doc: docs/modules/ReverseEngineering.md
+    category: analysis
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P2
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - scan_assisted_workflows
+      - point_to_geometry_support
+
+  - id: wb_inspection
+    name: Inspection
+    module_doc: docs/modules/Inspection.md
+    category: analysis
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P2
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - compare_geometry
+      - inspection_reporting
+
+  - id: wb_import
+    name: Import
+    module_doc: docs/modules/Import.md
+    category: io
+    bundled: true
+    target_ownership: rust_native
+    migration_mode: B
+    priority: P0
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - import_step
+      - import_iges
+      - import_mesh
+      - exchange_formats
+
+  - id: wb_openscad
+    name: OpenSCAD
+    module_doc: docs/modules/OpenSCAD.md
+    category: io
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P3
+    status: planned
+    parity_target: feature_complete
+    key_workflows:
+      - scad_interop
+      - script_driven_geometry
+
+  - id: wb_robot
+    name: Robot
+    module_doc: docs/modules/Robot.md
+    category: simulation
+    bundled: true
+    target_ownership: mixed
+    migration_mode: A
+    priority: P3
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - robot_model_setup
+      - kinematic_visualization
+
+  - id: wb_utilities
+    name: Utilities
+    module_doc: docs/modules/Utilities.md
+    category: support
+    bundled: true
+    target_ownership: react_rust
+    migration_mode: C
+    priority: P1
+    status: planned
+    parity_target: workflow_complete
+    key_workflows:
+      - helper_tools
+      - diagnostics
+      - support_actions
+
+  - id: wb_flowstudio
+    name: FlowStudio
+    module_doc: null
+    category: simulation
+    bundled: true
+    target_ownership: mixed
+    migration_mode: B
+    priority: P1
+    status: planned
+    parity_target: major_workflows_complete
+    key_workflows:
+      - solver_setup
+      - adapter_driven_execution
+      - workflow_configuration

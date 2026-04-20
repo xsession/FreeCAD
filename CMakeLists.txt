@@ -56,6 +56,88 @@ if(WIN32)
     set(CMAKE_USE_PTHREADS_INIT 0 CACHE BOOL "Use pthreads" FORCE)
     set(CMAKE_USE_WIN32_THREADS_INIT 1 CACHE BOOL "Use Win32 threads" FORCE)
     set(CMAKE_THREAD_LIBS_INIT "" CACHE STRING "Thread library flags" FORCE)
+
+    if(MSVC)
+        string(REGEX REPLACE "(^| )/imsvc\"[^\"]+\"" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+        string(REGEX REPLACE "(^| )/imsvc\"[^\"]+\"" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+
+        function(_fc_append_unique_flags target_var)
+            set(_fc_value "${${target_var}}")
+            foreach(_fc_flag IN LISTS ARGN)
+                string(FIND "${_fc_value}" "${_fc_flag}" _fc_flag_pos)
+                if(_fc_flag_pos EQUAL -1)
+                    string(APPEND _fc_value " ${_fc_flag}")
+                endif()
+            endforeach()
+            set(${target_var} "${_fc_value}" PARENT_SCOPE)
+        endfunction()
+
+        file(TO_CMAKE_PATH "${CMAKE_CXX_COMPILER}" _fc_compiler_path)
+        get_filename_component(_fc_vc_host_arch_dir "${_fc_compiler_path}" DIRECTORY)
+        get_filename_component(_fc_vc_host_dir "${_fc_vc_host_arch_dir}" DIRECTORY)
+        get_filename_component(_fc_vc_bin_dir "${_fc_vc_host_dir}" DIRECTORY)
+        get_filename_component(_fc_vc_tools_version_dir "${_fc_vc_bin_dir}" DIRECTORY)
+
+        set(_fc_msvc_include_dirs
+            "${_fc_vc_tools_version_dir}/include"
+        )
+        set(_fc_msvc_lib_dirs
+            "${_fc_vc_tools_version_dir}/lib/x64"
+        )
+
+        set(_fc_windows_kits_root "C:/Program Files (x86)/Windows Kits/10")
+        file(GLOB _fc_windows_sdk_include_roots LIST_DIRECTORIES true "${_fc_windows_kits_root}/Include/10.*")
+        list(SORT _fc_windows_sdk_include_roots COMPARE NATURAL ORDER DESCENDING)
+        if(_fc_windows_sdk_include_roots)
+            list(GET _fc_windows_sdk_include_roots 0 _fc_windows_sdk_include_root)
+            get_filename_component(_fc_windows_sdk_version "${_fc_windows_sdk_include_root}" NAME)
+            list(APPEND _fc_msvc_include_dirs
+                "${_fc_windows_kits_root}/Include/${_fc_windows_sdk_version}/ucrt"
+                "${_fc_windows_kits_root}/Include/${_fc_windows_sdk_version}/shared"
+                "${_fc_windows_kits_root}/Include/${_fc_windows_sdk_version}/um"
+                "${_fc_windows_kits_root}/Include/${_fc_windows_sdk_version}/winrt"
+                "${_fc_windows_kits_root}/Include/${_fc_windows_sdk_version}/cppwinrt"
+            )
+            list(APPEND _fc_msvc_lib_dirs
+                "${_fc_windows_kits_root}/Lib/${_fc_windows_sdk_version}/ucrt/x64"
+                "${_fc_windows_kits_root}/Lib/${_fc_windows_sdk_version}/um/x64"
+            )
+        endif()
+
+        list(REMOVE_DUPLICATES _fc_msvc_include_dirs)
+        list(REMOVE_DUPLICATES _fc_msvc_lib_dirs)
+
+        set(_fc_msvc_include_flags)
+        foreach(_fc_dir IN LISTS _fc_msvc_include_dirs)
+            if(EXISTS "${_fc_dir}")
+                list(APPEND _fc_msvc_include_flags "/I\"${_fc_dir}\"")
+            endif()
+        endforeach()
+
+        set(_fc_msvc_lib_flags)
+        foreach(_fc_dir IN LISTS _fc_msvc_lib_dirs)
+            if(EXISTS "${_fc_dir}")
+                list(APPEND _fc_msvc_lib_flags "/LIBPATH:\"${_fc_dir}\"")
+            endif()
+        endforeach()
+
+        _fc_append_unique_flags(CMAKE_C_FLAGS ${_fc_msvc_include_flags})
+        _fc_append_unique_flags(CMAKE_CXX_FLAGS ${_fc_msvc_include_flags})
+        _fc_append_unique_flags(CMAKE_EXE_LINKER_FLAGS ${_fc_msvc_lib_flags})
+        _fc_append_unique_flags(CMAKE_MODULE_LINKER_FLAGS ${_fc_msvc_lib_flags})
+        _fc_append_unique_flags(CMAKE_SHARED_LINKER_FLAGS ${_fc_msvc_lib_flags})
+
+        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}" CACHE STRING "Flags used by the C compiler during all build types." FORCE)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}" CACHE STRING "Flags used by the CXX compiler during all build types." FORCE)
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}" CACHE STRING "Flags used by the linker for executables." FORCE)
+        set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS}" CACHE STRING "Flags used by the linker for modules." FORCE)
+        set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS}" CACHE STRING "Flags used by the linker for shared libraries." FORCE)
+
+        list(LENGTH _fc_msvc_include_flags _fc_include_count)
+        list(LENGTH _fc_msvc_lib_flags _fc_lib_count)
+        message(STATUS "Configured direct MSVC include flags: ${_fc_include_count}")
+        message(STATUS "Configured direct MSVC library flags: ${_fc_lib_count}")
+    endif()
 endif()
 
 function(_fc_remove_list_item list_var item)

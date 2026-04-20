@@ -1,0 +1,91 @@
+version: 1
+golden_workflows:
+  - id: GW-001
+    name: Core document roundtrip
+    domain: core
+    summary: New document, save, close, reopen
+    fixture_required: true
+    priority: P0
+    status: planned
+    acceptance: document_roundtrip_intact
+
+  - id: GW-002
+    name: PartDesign pad
+    domain: partdesign
+    summary: Create body, create sketch on XY, add profile, pad, save, reopen
+    fixture_required: true
+    priority: P0
+    status: planned
+    acceptance: full_workflow_parity
+
+  - id: GW-003
+    name: Sketcher constrained sketch
+    domain: sketcher
+    summary: Create geometry, apply constraints, edit dimensions, solve
+    fixture_required: true
+    priority: P0
+    status: planned
+    acceptance: solver_and_edit_parity
+
+  - id: GW-004
+    name: Part boolean workflow
+    domain: part
+    summary: Create primitives, boolean them, add fillet or chamfer
+    fixture_required: true
+    priority: P0
+    status: planned
+    acceptance: feature_workflow_parity
+
+  - id: GW-005
+    name: Draft editing flow
+    domain: draft
+    summary: Create draft objects, transform them, annotate
+    fixture_required: true
+    priority: P1
+    status: planned
+    acceptance: workflow_parity
+
+  - id: GW-006
+    name: Spreadsheet-driven model
+    domain: spreadsheet
+    summary: Use spreadsheet aliases and expressions to drive model dimensions
+    fixture_required: true
+    priority: P1
+    status: planned
+    acceptance: expression_parity
+
+  - id: GW-007
+    name: TechDraw export
+    domain: techdraw
+    summary: Create drawing page from model views and export
+    fixture_required: true
+    priority: P1
+    status: planned
+    acceptance: drawing_workflow_parity
+
+  - id: GW-008
+    name: STEP roundtrip
+    domain: import_export
+    summary: Import STEP, inspect model, export STEP
+    fixture_required: true
+    priority: P0
+    status: planned
+    acceptance: format_workflow_parity
+
+  - id: GW-009
+    name: Strategic plugin install and run
+    domain: plugin
+    summary: Install a supported addon and execute its core workflow
+    fixture_required: true
+    priority: P1
+    status: planned
+    acceptance: plugin_workflow_parity
+
+  - id: GW-010
+    name: Python macro execution
+    domain: automation
+    summary: Run a macro that opens or mutates a document and recomputes it
+    fixture_required: true
+    priority: P1
+    status: planned
+    acceptance: automation_parity

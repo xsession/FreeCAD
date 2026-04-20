@@ -36,6 +36,7 @@
 #include <QPainterPath>
 #include <QLinearGradient>
 #include <QKeyEvent>
+#include <QSignalBlocker>
 #include <QToolBar>
 #include <QStringList>
 #include <QTabBar>
@@ -661,11 +662,7 @@ RibbonBar::RibbonBar(QWidget* parent)
         showMinimizedPreview();
     });
     connect(tabWidget, &QTabWidget::currentChanged, this, [this](int index) {
-        if (index == fileTabIndex) {
-            openBackstage();
-            return;
-        }
-        if (index >= 0) {
+        if (index >= 0 && index != fileTabIndex) {
             lastContentTabIndex = index;
         }
     });
@@ -980,6 +977,7 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         return;
     }
 
+    const QSignalBlocker blocker(tabWidget);
     clear();
 
     // Populate Quick Access Toolbar

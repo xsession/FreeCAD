@@ -1,5 +1,42 @@
 # -------------------------------- Qt --------------------------------
 
+function(freecad_stage_qt_host_tool out_var tool_executable)
+    if(NOT WIN32 OR NOT EXISTS "${tool_executable}")
+        set(${out_var} "${tool_executable}" PARENT_SCOPE)
+        return()
+    endif()
+
+    get_filename_component(_tool_name "${tool_executable}" NAME)
+    get_filename_component(_qt6_dir "${tool_executable}" DIRECTORY)
+    get_filename_component(_library_dir "${_qt6_dir}" DIRECTORY)
+    get_filename_component(_prefix_dir "${_library_dir}" DIRECTORY)
+    set(_runtime_dir "${_prefix_dir}/bin")
+    set(_stage_dir "${CMAKE_BINARY_DIR}/qt-host-tools")
+    set(_staged_tool "${_stage_dir}/${_tool_name}")
+
+    file(MAKE_DIRECTORY "${_stage_dir}")
+    configure_file("${tool_executable}" "${_staged_tool}" COPYONLY)
+    if(EXISTS "${_runtime_dir}")
+        file(COPY "${_runtime_dir}/" DESTINATION "${_stage_dir}"
+            FILES_MATCHING
+            PATTERN "*.dll"
+        )
+    endif()
+
+    set(${out_var} "${_staged_tool}" PARENT_SCOPE)
+endfunction()
+
+function(freecad_override_imported_qt_tool tool_target staged_tool)
+    if(NOT TARGET "${tool_target}" OR NOT EXISTS "${staged_tool}")
+        return()
+    endif()
+
+    set_property(TARGET "${tool_target}" PROPERTY IMPORTED_LOCATION "${staged_tool}")
+    foreach(_config DEBUG RELEASE RELWITHDEBINFO MINSIZEREL)
+        set_property(TARGET "${tool_target}" PROPERTY "IMPORTED_LOCATION_${_config}" "${staged_tool}")
+    endforeach()
+endfunction()
+
 set(FREECAD_QT_COMPONENTS Core Concurrent Network Xml)
 if (FREECAD_QT_MAJOR_VERSION EQUAL 6)
     set (Qt6Core_MOC_EXECUTABLE Qt6::moc)
@@ -38,6 +75,29 @@ endforeach()
 set(CMAKE_AUTOMOC TRUE)
 set(CMAKE_AUTOUIC TRUE)
 set(QtCore_MOC_EXECUTABLE ${Qt${FREECAD_QT_MAJOR_VERSION}Core_MOC_EXECUTABLE})
+
+if(FREECAD_QT_MAJOR_VERSION EQUAL 6)
+    get_target_property(_freecad_qt_moc_executable Qt6::moc LOCATION)
+    freecad_stage_qt_host_tool(_freecad_staged_moc "${_freecad_qt_moc_executable}")
+    set(Qt6Core_MOC_EXECUTABLE "${_freecad_staged_moc}")
+    set(QtCore_MOC_EXECUTABLE "${_freecad_staged_moc}")
+    set(CMAKE_AUTOMOC_EXECUTABLE "${_freecad_staged_moc}")
+    freecad_override_imported_qt_tool(Qt6::moc "${_freecad_staged_moc}")
+
+    if(TARGET Qt6::uic)
+        get_target_property(_freecad_qt_uic_executable Qt6::uic LOCATION)
+        freecad_stage_qt_host_tool(_freecad_staged_uic "${_freecad_qt_uic_executable}")
+        set(CMAKE_AUTOUIC_EXECUTABLE "${_freecad_staged_uic}")
+        freecad_override_imported_qt_tool(Qt6::uic "${_freecad_staged_uic}")
+    endif()
+
+    if(TARGET Qt6::rcc)
+        get_target_property(_freecad_qt_rcc_executable Qt6::rcc LOCATION)
+        freecad_stage_qt_host_tool(_freecad_staged_rcc "${_freecad_qt_rcc_executable}")
+        set(CMAKE_AUTORCC_EXECUTABLE "${_freecad_staged_rcc}")
+        freecad_override_imported_qt_tool(Qt6::rcc "${_freecad_staged_rcc}")
+    endif()
+endif()
 
 add_definitions(-DQT_NO_KEYWORDS)
 
