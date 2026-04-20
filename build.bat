@@ -26,6 +26,9 @@ REM Detect number of CPU cores for parallel compilation
 set "NPROC=%NUMBER_OF_PROCESSORS%"
 if not defined NPROC set "NPROC=4"
 
+REM Parse command early so we can avoid unnecessary compiler bootstrap
+set "CMD=%~1"
+
 REM ---- Check/Install pixi ----
 :check_pixi
 set "PATH=%USERPROFILE%\.pixi\bin;%PATH%"
@@ -57,6 +60,10 @@ if not exist "%SCRIPT_DIR%tests\lib\googletest\CMakeLists.txt" (
 
 REM ---- Set up Visual Studio compiler environment if cl.exe not found ----
 :check_compiler
+if /I "%CMD%"=="run" goto :compiler_ok
+if /I "%CMD%"=="test" goto :compiler_ok
+if /I "%CMD%"=="clean" goto :compiler_ok
+
 REM Use delayed expansion for ProgramFiles(x86) ? parens break normal expansion
 set "VSWHERE=!ProgramFiles(x86)!\Microsoft Visual Studio\Installer\vswhere.exe"
 where cl.exe >nul 2>&1
@@ -80,7 +87,8 @@ if not defined VSDIR (
 REM Initialize the VS developer environment (x64)
 if exist "!VSDIR!\VC\Auxiliary\Build\vcvars64.bat" (
     echo [BUILD] Found Visual Studio at: !VSDIR!
-    call "!VSDIR!\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1
+    set "VCVARS_BAT=!VSDIR!\VC\Auxiliary\Build\vcvars64.bat"
+    for /f "delims=" %%E in ('cmd /d /q /c ""!VCVARS_BAT!" >nul 2>&1 && set"') do set "%%E"
 ) else (
     echo [ERROR] vcvars64.bat not found. Install "Desktop development with C++".
     exit /b 1
@@ -103,7 +111,6 @@ set "LIB=%PIXI_ENV%\Library\lib;%LIB%"
 set "INCLUDE=%PIXI_ENV%\Library\include;%INCLUDE%"
 
 REM ---- Parse command ----
-set "CMD=%~1"
 if "%CMD%"=="" goto :full_build
 if "%CMD%"=="configure" goto :configure
 if "%CMD%"=="build" goto :build

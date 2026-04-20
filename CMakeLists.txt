@@ -50,6 +50,43 @@ endif()
 
 project(FreeCAD)
 
+if(WIN32)
+    # Some dependency stacks can report pthread support on Windows when a MinGW-style
+    # environment is present on PATH. That leaks `-lpthreads` into MSVC link lines.
+    set(CMAKE_USE_PTHREADS_INIT 0 CACHE BOOL "Use pthreads" FORCE)
+    set(CMAKE_USE_WIN32_THREADS_INIT 1 CACHE BOOL "Use Win32 threads" FORCE)
+    set(CMAKE_THREAD_LIBS_INIT "" CACHE STRING "Thread library flags" FORCE)
+endif()
+
+function(_fc_remove_list_item list_var item)
+    if(DEFINED ${list_var})
+        set(_fc_list "${${list_var}}")
+        if(_fc_list)
+            list(REMOVE_ITEM _fc_list "${item}")
+            set(${list_var} "${_fc_list}" PARENT_SCOPE)
+        endif()
+    endif()
+endfunction()
+
+function(_fc_scrub_imported_target_threads target_name)
+    if(NOT TARGET "${target_name}")
+        return()
+    endif()
+
+    get_target_property(_fc_iface_libs "${target_name}" INTERFACE_LINK_LIBRARIES)
+    if(_fc_iface_libs)
+        _fc_remove_list_item(_fc_iface_libs "Threads::Threads")
+        _fc_remove_list_item(_fc_iface_libs "-lpthreads")
+        set_property(TARGET "${target_name}" PROPERTY INTERFACE_LINK_LIBRARIES "${_fc_iface_libs}")
+    endif()
+
+    get_target_property(_fc_iface_opts "${target_name}" INTERFACE_LINK_OPTIONS)
+    if(_fc_iface_opts)
+        _fc_remove_list_item(_fc_iface_opts "-lpthreads")
+        set_property(TARGET "${target_name}" PROPERTY INTERFACE_LINK_OPTIONS "${_fc_iface_opts}")
+    endif()
+endfunction()
+
 # Sanitizer support
 option(FREECAD_USE_SANITIZER_ASAN "Enable AddressSanitizer ie. (ASan)" OFF) 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -137,6 +174,15 @@ if(NOT FREECAD_LIBPACK_USE OR FREECAD_LIBPACK_CHECKFILE_CLBUNDLER OR FREECAD_LIB
 
     # SetupCoin3D can overwrite find_package(Boost) output so keep this after.
     SetupBoost()
+
+    if(WIN32)
+        # Qt and Boost can pull in Threads::Threads from package config files. On this
+        # MSVC setup that imported thread target resolves to a MinGW-style `-lpthreads`
+        # linker flag, which breaks Windows link lines.
+        _fc_scrub_imported_target_threads(Threads::Threads)
+        _fc_scrub_imported_target_threads(Qt6::Platform)
+        _fc_scrub_imported_target_threads(Boost::thread)
+    endif()
 
     if(BUILD_BIM)
         SetupLark()
