@@ -16,9 +16,10 @@ class BaseBoundaryCondition(BaseFlowObject):
     def __init__(self, obj):
         super().__init__(obj)
 
-        obj.addProperty(
-            "App::PropertyLinkSubList", "References", "Boundary",
-            "Face references for this boundary condition"
+        self.add_reference_property(
+            obj,
+            "Boundary",
+            "Referenced faces, surfaces, or parts for this boundary condition",
         )
         obj.addProperty(
             "App::PropertyString", "BoundaryType", "Boundary",

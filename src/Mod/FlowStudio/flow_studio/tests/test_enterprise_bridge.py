@@ -51,6 +51,7 @@ def test_legacy_analysis_bridge_builds_openfoam_study():
                 DynamicViscosity=1.81e-5,
                 SpecificHeat=1005.0,
                 ThermalConductivity=0.0257,
+                References=[(part, "Solid1")],
             ),
             _make_child(
                 "FlowStudio::Solver",
@@ -69,6 +70,7 @@ def test_legacy_analysis_bridge_builds_openfoam_study():
     assert study.solver_family == "openfoam"
     assert study.geometry_ref == "Document/Body"
     assert study.mesh_recipe.generator_id == "gmsh.default"
+    assert study.materials[0].target_ref == "Document/Body/Solid1"
     assert study.physics[0].family == "cht"
     assert study.adapter_extensions["openfoam.primary"]["solver_binary"] == "simpleFoam"
 

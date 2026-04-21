@@ -36,20 +36,43 @@ MATERIALS_DB = {
 }
 
 try:
+    from flow_studio.engineering_database import material_presets as _material_presets
+    MATERIALS_DB.update(
+        {
+            name: props
+            for name, props in _material_presets("Gases", "Liquids").items()
+            if all(
+                key in props
+                for key in (
+                    "Density",
+                    "DynamicViscosity",
+                    "KinematicViscosity",
+                    "SpecificHeat",
+                    "ThermalConductivity",
+                    "PrandtlNumber",
+                )
+            )
+        }
+    )
+except Exception:
+    pass
+
+try:
     from PySide import QtGui  # noqa: E402
-    from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel  # noqa: E402
+    from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel  # noqa: E402
     _HAS_GUI = True
 except ImportError:
     _HAS_GUI = False
 
 
-class TaskFluidMaterial(BaseTaskPanel if _HAS_GUI else object):
+class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
 
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
 
         layout.addWidget(QtGui.QLabel("<b>Fluid Material Properties</b>"))
+        self._add_selection_section(layout, "Assigned Fluid Region")
 
         # Preset selector
         presets = [
@@ -57,9 +80,17 @@ class TaskFluidMaterial(BaseTaskPanel if _HAS_GUI else object):
             "Oil (SAE 30)", "Glycerin", "Mercury", "R134a",
             "Nitrogen", "Oxygen",
         ]
+        presets = sorted(set(presets + list(MATERIALS_DB)))
+        if "Custom" in presets:
+            presets.remove("Custom")
+        presets.insert(0, "Custom")
         self.cb_preset = self._combo(presets, self.obj.Preset)
         self._add_row(layout, "Preset:", self.cb_preset)
         self.cb_preset.currentTextChanged.connect(self._on_preset_changed)
+
+        btn_db = QtGui.QPushButton("Engineering Database...")
+        btn_db.clicked.connect(self._open_database)
+        layout.addWidget(btn_db)
 
         # Properties
         self.sp_rho = self._spin_float(self.obj.Density, 0.001, 20000, 4, 0.1)
@@ -92,6 +123,10 @@ class TaskFluidMaterial(BaseTaskPanel if _HAS_GUI else object):
             self.sp_cp.setValue(m["SpecificHeat"])
             self.sp_k.setValue(m["ThermalConductivity"])
             self.sp_pr.setValue(m["PrandtlNumber"])
+
+    def _open_database(self):
+        from flow_studio.engineering_database_editor import show_engineering_database_editor
+        show_engineering_database_editor()
 
     def _store(self):
         self.obj.Preset = self.cb_preset.currentText()

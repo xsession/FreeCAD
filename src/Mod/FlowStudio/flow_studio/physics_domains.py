@@ -190,7 +190,30 @@ THERMAL = PhysicsDomain(
     physics_model_type="FlowStudio::ThermalPhysicsModel",
 )
 
+OPTICAL = PhysicsDomain(
+    key="Optical",
+    label="Optical / Photonics",
+    description="Geometrical optics, illumination, lens/source/detector setup, "
+                "and wave-optics photonics through open-source backends.",
+    icon="FlowStudioElectromagnetic.svg",
+    analysis_types=[
+        "Sequential Ray Trace",
+        "Non-Sequential Ray Trace",
+        "Illumination",
+        "Wave Optics FDTD",
+        "Photonic Crystal",
+    ],
+    bc_types=[
+        "FlowStudio::BCOpticalSource",
+        "FlowStudio::BCOpticalDetector",
+        "FlowStudio::BCOpticalBoundary",
+    ],
+    solver_backends=["Raysect", "Meep", "openEMS", "Optiland"],
+    material_type="FlowStudio::OpticalMaterial",
+    physics_model_type="FlowStudio::OpticalPhysicsModel",
+)
+
 
 # Register all built-in domains
-for _dom in (CFD, STRUCTURAL, ELECTROSTATIC, ELECTROMAGNETIC, THERMAL):
+for _dom in (CFD, STRUCTURAL, ELECTROSTATIC, ELECTROMAGNETIC, THERMAL, OPTICAL):
     register_domain(_dom)

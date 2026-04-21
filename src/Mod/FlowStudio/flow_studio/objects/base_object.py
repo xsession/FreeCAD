@@ -22,6 +22,17 @@ class BaseFlowObject:
         obj.FlowType = self.Type
         obj.setPropertyStatus("FlowType", "ReadOnly")
 
+    def add_reference_property(self, obj, group="Geometry", description=None):
+        """Add a reusable geometry/subelement reference property."""
+        if "References" in getattr(obj, "PropertiesList", []):
+            return
+        obj.addProperty(
+            "App::PropertyLinkSubList",
+            "References",
+            group,
+            description or "Referenced parts, faces, or regions used by this FlowStudio object",
+        )
+
     def onDocumentRestored(self, obj):
         """Re-attach proxy after file load."""
         obj.Proxy = self

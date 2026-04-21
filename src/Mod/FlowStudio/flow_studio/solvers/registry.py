@@ -14,6 +14,10 @@ _REGISTRY_PATHS = {
     "OpenFOAM": ("flow_studio.solvers.openfoam_runner", "OpenFOAMRunner"),
     "FluidX3D": ("flow_studio.solvers.fluidx3d_runner", "FluidX3DRunner"),
     "Elmer": ("flow_studio.solvers.elmer_runner", "ElmerRunner"),
+    "Raysect": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
+    "Meep": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
+    "openEMS": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
+    "Optiland": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
 }
 
 # Domain → list of available solver backend names
@@ -23,6 +27,7 @@ _DOMAIN_SOLVERS = {
     "Electrostatic": ["Elmer"],
     "Electromagnetic": ["Elmer"],
     "Thermal": ["Elmer"],
+    "Optical": ["Raysect", "Meep", "openEMS", "Optiland"],
 }
 
 
@@ -83,6 +88,10 @@ def available_backends_installed(extra_paths=None):
         "OpenFOAM": "OpenFOAM",
         "FluidX3D": "FluidX3D",
         "Elmer":    "Elmer",
+        "Raysect":  "Raysect",
+        "Meep":     "Meep",
+        "openEMS":  "openEMS",
+        "Optiland": "Optiland",
     }
     installed = []
     for name in _REGISTRY_PATHS:

@@ -6,15 +6,16 @@
 """Task panel for Outlet boundary condition."""
 
 from PySide import QtGui
-from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
 
 
-class TaskBCOutlet(BaseTaskPanel):
+class TaskBCOutlet(FloEFDTaskPanel):
 
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
         layout.addWidget(QtGui.QLabel("<b>Outlet Boundary Condition</b>"))
+        self._add_selection_section(layout)
 
         self.cb_type = self._combo(
             ["Static Pressure", "Mass Flow Rate", "Outflow (Zero Gradient)"],

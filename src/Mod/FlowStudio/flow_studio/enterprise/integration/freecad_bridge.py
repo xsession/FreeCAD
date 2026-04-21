@@ -35,6 +35,25 @@ def _group_items(obj) -> Sequence[object]:
     return tuple(group or ())
 
 
+def _reference_targets(obj: object, fallback: str) -> tuple[str, ...]:
+    """Return stable document target refs from a FreeCAD References property."""
+
+    refs = _safe_getattr(obj, "References", ()) or ()
+    targets: list[str] = []
+    for ref_obj, sub_elements in refs:
+        obj_name = _safe_getattr(ref_obj, "Name", None) or _safe_getattr(ref_obj, "Label", None)
+        base_ref = f"Document/{obj_name or 'LinkedObject'}"
+        if isinstance(sub_elements, str):
+            sub_names = (sub_elements,)
+        else:
+            sub_names = tuple(sub_elements or ())
+        if sub_names:
+            targets.extend(f"{base_ref}/{sub_name}" for sub_name in sub_names)
+        else:
+            targets.append(base_ref)
+    return tuple(dict.fromkeys(targets)) or (fallback,)
+
+
 @dataclass(frozen=True)
 class LegacyAnalysisBridge:
     """Translate existing analysis containers into canonical study models.
@@ -141,12 +160,14 @@ class LegacyAnalysisBridge:
                 _safe_getattr(material_object, "ThermalConductivity", 0.0) or 0.0
             ),
         }
-        return (
+        targets = _reference_targets(material_object, "FluidDomain")
+        return tuple(
             MaterialAssignment(
-                target_ref="FluidDomain",
+                target_ref=target,
                 material_id=str(_safe_getattr(material_object, "MaterialName", "fluid")),
                 properties=properties,
-            ),
+            )
+            for target in targets
         )
 
     @staticmethod

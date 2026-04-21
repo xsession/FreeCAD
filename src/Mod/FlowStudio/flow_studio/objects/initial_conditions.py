@@ -16,6 +16,12 @@ class InitialConditions(BaseFlowObject):
     def __init__(self, obj):
         super().__init__(obj)
 
+        self.add_reference_property(
+            obj,
+            "Initial Conditions",
+            "Referenced parts, bodies, faces, or regions using these initial conditions",
+        )
+
         # Velocity
         obj.addProperty(
             "App::PropertyFloat", "Ux", "Velocity",

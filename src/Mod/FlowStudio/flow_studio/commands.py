@@ -98,6 +98,76 @@ def _add_to_analysis(obj):
         analysis.addObject(obj)
 
 
+def _selected_geometry_references():
+    """Return current GUI selection as PropertyLinkSubList-compatible refs."""
+    if not FreeCAD.GuiUp:
+        return []
+
+    refs = []
+    try:
+        selection = FreeCADGui.Selection.getSelectionEx()
+    except Exception:
+        return refs
+
+    for item in selection:
+        obj = getattr(item, "Object", None)
+        if obj is None:
+            continue
+
+        flow_type = getattr(obj, "FlowType", "")
+        if isinstance(flow_type, str) and flow_type.startswith("FlowStudio::"):
+            continue
+
+        sub_names = list(getattr(item, "SubElementNames", []) or [])
+        refs.append((obj, sub_names))
+
+    return refs
+
+
+def _assign_current_selection(obj, message_prefix="FlowStudio"):
+    """Assign current part/face selection to a FlowStudio object if supported."""
+    if obj is None:
+        return False
+    properties = getattr(obj, "PropertiesList", [])
+    target_property = None
+    if "References" in properties:
+        target_property = "References"
+    elif "FaceRefs" in properties:
+        target_property = "FaceRefs"
+    if target_property is None:
+        return False
+
+    refs = _selected_geometry_references()
+    if not refs:
+        return False
+
+    setattr(obj, target_property, refs)
+    assigned = []
+    for ref_obj, sub_names in refs:
+        label = getattr(ref_obj, "Label", getattr(ref_obj, "Name", "Object"))
+        if sub_names:
+            assigned.append(f"{label}:{','.join(sub_names)}")
+        else:
+            assigned.append(label)
+    FreeCAD.Console.PrintMessage(
+        f"{message_prefix}: assigned selection to {getattr(obj, 'Label', obj.Name)} "
+        f"({'; '.join(assigned)})\n"
+    )
+    return True
+
+
+def _open_task_panel(obj):
+    """Open the object's task panel after command creation when available."""
+    if not FreeCAD.GuiUp or obj is None:
+        return
+    try:
+        FreeCADGui.ActiveDocument.setEdit(obj.Name)
+    except Exception as exc:
+        FreeCAD.Console.PrintLog(
+            f"FlowStudio: task panel not available for {getattr(obj, 'Name', obj)} ({exc})\n"
+        )
+
+
 # ======================================================================
 #  ANALYSIS commands
 # ======================================================================
@@ -251,6 +321,41 @@ class _CmdThermalAnalysis:
         FreeCAD.ActiveDocument.recompute()
 
 
+class _CmdOpticalAnalysis:
+    """Create a new Optical / Photonics analysis."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectromagnetic.svg"),
+            "MenuText": translate("FlowStudio", "New Optical Analysis"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create an optical / photonics analysis for ray tracing, illumination, or wave optics",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Optical Analysis")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis, makeOpticalPhysicsModel,
+            makeOpticalMaterial, makeSolver,
+        )
+        analysis = makeDomainAnalysis(name="OpticalAnalysis", domain_key="Optical")
+        for maker in (makeOpticalPhysicsModel, makeOpticalMaterial, makeSolver):
+            child = maker()
+            if getattr(child, "FlowType", "") == "FlowStudio::Solver":
+                try:
+                    child.SolverBackend = "Raysect"
+                except Exception:
+                    pass
+            analysis.addObject(child)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+
+
 class _CmdPhysicsModel:
     def GetResources(self):
         return {
@@ -292,9 +397,11 @@ class _CmdFluidMaterial:
         FreeCAD.ActiveDocument.openTransaction("Add Fluid Material")
         from flow_studio.ObjectsFlowStudio import makeFluidMaterial
         obj = makeFluidMaterial()
+        _assign_current_selection(obj, "FlowStudio Material")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdInitialConditions:
@@ -315,9 +422,11 @@ class _CmdInitialConditions:
         FreeCAD.ActiveDocument.openTransaction("Add Initial Conditions")
         from flow_studio.ObjectsFlowStudio import makeInitialConditions
         obj = makeInitialConditions()
+        _assign_current_selection(obj, "FlowStudio Initial Conditions")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 # ======================================================================
@@ -343,9 +452,11 @@ class _CmdBCWall:
         FreeCAD.ActiveDocument.openTransaction("Add Wall BC")
         from flow_studio.ObjectsFlowStudio import makeBCWall
         obj = makeBCWall()
+        _assign_current_selection(obj, "FlowStudio Wall BC")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdBCInlet:
@@ -367,9 +478,11 @@ class _CmdBCInlet:
         FreeCAD.ActiveDocument.openTransaction("Add Inlet BC")
         from flow_studio.ObjectsFlowStudio import makeBCInlet
         obj = makeBCInlet()
+        _assign_current_selection(obj, "FlowStudio Inlet BC")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdBCOutlet:
@@ -391,9 +504,11 @@ class _CmdBCOutlet:
         FreeCAD.ActiveDocument.openTransaction("Add Outlet BC")
         from flow_studio.ObjectsFlowStudio import makeBCOutlet
         obj = makeBCOutlet()
+        _assign_current_selection(obj, "FlowStudio Outlet BC")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdBCOpenBoundary:
@@ -415,6 +530,7 @@ class _CmdBCOpenBoundary:
         FreeCAD.ActiveDocument.openTransaction("Add Open BC")
         from flow_studio.ObjectsFlowStudio import makeBCOpenBoundary
         obj = makeBCOpenBoundary()
+        _assign_current_selection(obj, "FlowStudio Open BC")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -439,6 +555,7 @@ class _CmdBCSymmetry:
         FreeCAD.ActiveDocument.openTransaction("Add Symmetry BC")
         from flow_studio.ObjectsFlowStudio import makeBCSymmetry
         obj = makeBCSymmetry()
+        _assign_current_selection(obj, "FlowStudio Symmetry BC")
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -772,9 +889,12 @@ class _CmdSolidMaterial:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Solid Material")
         from flow_studio.ObjectsFlowStudio import makeSolidMaterial
-        _add_to_analysis(makeSolidMaterial())
+        obj = makeSolidMaterial()
+        _assign_current_selection(obj, "FlowStudio Solid Material")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdStructuralPhysics:
@@ -813,7 +933,9 @@ class _CmdBCFixedDisplacement:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Fixed Displacement BC")
         from flow_studio.ObjectsFlowStudio import makeBCFixedDisplacement
-        _add_to_analysis(makeBCFixedDisplacement())
+        obj = makeBCFixedDisplacement()
+        _assign_current_selection(obj, "FlowStudio Fixed Displacement BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -834,7 +956,9 @@ class _CmdBCForce:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Force BC")
         from flow_studio.ObjectsFlowStudio import makeBCForce
-        _add_to_analysis(makeBCForce())
+        obj = makeBCForce()
+        _assign_current_selection(obj, "FlowStudio Force BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -855,7 +979,9 @@ class _CmdBCPressureLoad:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Pressure Load BC")
         from flow_studio.ObjectsFlowStudio import makeBCPressureLoad
-        _add_to_analysis(makeBCPressureLoad())
+        obj = makeBCPressureLoad()
+        _assign_current_selection(obj, "FlowStudio Pressure Load BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -879,9 +1005,12 @@ class _CmdElectrostaticMaterial:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Electrostatic Material")
         from flow_studio.ObjectsFlowStudio import makeElectrostaticMaterial
-        _add_to_analysis(makeElectrostaticMaterial())
+        obj = makeElectrostaticMaterial()
+        _assign_current_selection(obj, "FlowStudio Electrostatic Material")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdElectrostaticPhysics:
@@ -920,7 +1049,9 @@ class _CmdBCElectricPotential:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Electric Potential BC")
         from flow_studio.ObjectsFlowStudio import makeBCElectricPotential
-        _add_to_analysis(makeBCElectricPotential())
+        obj = makeBCElectricPotential()
+        _assign_current_selection(obj, "FlowStudio Electric Potential BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -941,7 +1072,9 @@ class _CmdBCSurfaceCharge:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Surface Charge BC")
         from flow_studio.ObjectsFlowStudio import makeBCSurfaceCharge
-        _add_to_analysis(makeBCSurfaceCharge())
+        obj = makeBCSurfaceCharge()
+        _assign_current_selection(obj, "FlowStudio Surface Charge BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -962,7 +1095,9 @@ class _CmdBCElectricFlux:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Electric Flux BC")
         from flow_studio.ObjectsFlowStudio import makeBCElectricFlux
-        _add_to_analysis(makeBCElectricFlux())
+        obj = makeBCElectricFlux()
+        _assign_current_selection(obj, "FlowStudio Electric Flux BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -986,9 +1121,12 @@ class _CmdElectromagneticMaterial:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add EM Material")
         from flow_studio.ObjectsFlowStudio import makeElectromagneticMaterial
-        _add_to_analysis(makeElectromagneticMaterial())
+        obj = makeElectromagneticMaterial()
+        _assign_current_selection(obj, "FlowStudio Electromagnetic Material")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdElectromagneticPhysics:
@@ -1027,7 +1165,9 @@ class _CmdBCMagneticPotential:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Magnetic Potential BC")
         from flow_studio.ObjectsFlowStudio import makeBCMagneticPotential
-        _add_to_analysis(makeBCMagneticPotential())
+        obj = makeBCMagneticPotential()
+        _assign_current_selection(obj, "FlowStudio Magnetic Potential BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1048,7 +1188,9 @@ class _CmdBCCurrentDensity:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Current Density BC")
         from flow_studio.ObjectsFlowStudio import makeBCCurrentDensity
-        _add_to_analysis(makeBCCurrentDensity())
+        obj = makeBCCurrentDensity()
+        _assign_current_selection(obj, "FlowStudio Current Density BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1069,7 +1211,9 @@ class _CmdBCMagneticFluxDensity:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Magnetic Flux Density BC")
         from flow_studio.ObjectsFlowStudio import makeBCMagneticFluxDensity
-        _add_to_analysis(makeBCMagneticFluxDensity())
+        obj = makeBCMagneticFluxDensity()
+        _assign_current_selection(obj, "FlowStudio Magnetic Flux Density BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1090,7 +1234,9 @@ class _CmdBCFarFieldEM:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Far-Field EM BC")
         from flow_studio.ObjectsFlowStudio import makeBCFarFieldEM
-        _add_to_analysis(makeBCFarFieldEM())
+        obj = makeBCFarFieldEM()
+        _assign_current_selection(obj, "FlowStudio Far-Field EM BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1114,9 +1260,12 @@ class _CmdThermalMaterial:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Thermal Material")
         from flow_studio.ObjectsFlowStudio import makeThermalMaterial
-        _add_to_analysis(makeThermalMaterial())
+        obj = makeThermalMaterial()
+        _assign_current_selection(obj, "FlowStudio Thermal Material")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 class _CmdThermalPhysics:
@@ -1155,7 +1304,9 @@ class _CmdBCTemperature:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Temperature BC")
         from flow_studio.ObjectsFlowStudio import makeBCTemperature
-        _add_to_analysis(makeBCTemperature())
+        obj = makeBCTemperature()
+        _assign_current_selection(obj, "FlowStudio Temperature BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1176,7 +1327,9 @@ class _CmdBCHeatFlux:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Heat Flux BC")
         from flow_studio.ObjectsFlowStudio import makeBCHeatFlux
-        _add_to_analysis(makeBCHeatFlux())
+        obj = makeBCHeatFlux()
+        _assign_current_selection(obj, "FlowStudio Heat Flux BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1197,7 +1350,9 @@ class _CmdBCConvection:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Convection BC")
         from flow_studio.ObjectsFlowStudio import makeBCConvection
-        _add_to_analysis(makeBCConvection())
+        obj = makeBCConvection()
+        _assign_current_selection(obj, "FlowStudio Convection BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
 
@@ -1218,9 +1373,123 @@ class _CmdBCRadiation:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Add Radiation BC")
         from flow_studio.ObjectsFlowStudio import makeBCRadiation
-        _add_to_analysis(makeBCRadiation())
+        obj = makeBCRadiation()
+        _assign_current_selection(obj, "FlowStudio Radiation BC")
+        _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+
+
+# ======================================================================
+#  OPTICAL commands
+# ======================================================================
+
+class _CmdOpticalMaterial:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectromagnetic.svg"),
+            "MenuText": translate("FlowStudio", "Optical Material"),
+            "ToolTip": translate("FlowStudio", "Assign glass, coating, mirror, or absorber optical properties"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Optical Material")
+        from flow_studio.ObjectsFlowStudio import makeOpticalMaterial
+        obj = makeOpticalMaterial()
+        _assign_current_selection(obj, "FlowStudio Optical Material")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdOpticalPhysics:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPhysics.svg"),
+            "MenuText": translate("FlowStudio", "Optical Physics"),
+            "ToolTip": translate("FlowStudio", "Configure ray optics, illumination, or wave-optics settings"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Optical Physics")
+        from flow_studio.ObjectsFlowStudio import makeOpticalPhysicsModel
+        obj = makeOpticalPhysicsModel()
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+
+
+class _CmdBCOpticalSource:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostStreamlines.svg"),
+            "MenuText": translate("FlowStudio", "Optical Source"),
+            "ToolTip": translate("FlowStudio", "Add a collimated beam, LED, point source, Gaussian beam, or laser source"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Optical Source")
+        from flow_studio.ObjectsFlowStudio import makeBCOpticalSource
+        obj = makeBCOpticalSource()
+        _assign_current_selection(obj, "FlowStudio Optical Source")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdBCOpticalDetector:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostProbe.svg"),
+            "MenuText": translate("FlowStudio", "Optical Detector"),
+            "ToolTip": translate("FlowStudio", "Add an irradiance, power, spot, phase, or spectrum detector"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Optical Detector")
+        from flow_studio.ObjectsFlowStudio import makeBCOpticalDetector
+        obj = makeBCOpticalDetector()
+        _assign_current_selection(obj, "FlowStudio Optical Detector")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdBCOpticalBoundary:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostContour.svg"),
+            "MenuText": translate("FlowStudio", "Optical Boundary"),
+            "ToolTip": translate("FlowStudio", "Assign refractive, reflective, absorbing, scattering, periodic, or PML behavior"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Optical Boundary")
+        from flow_studio.ObjectsFlowStudio import makeBCOpticalBoundary
+        obj = makeBCOpticalBoundary()
+        _assign_current_selection(obj, "FlowStudio Optical Boundary")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
 
 
 # ======================================================================
@@ -1489,6 +1758,132 @@ class _CmdGenerateParaviewScript:
 
 
 # ======================================================================
+#  FloEFD-style setup/result feature commands
+# ======================================================================
+
+class _CmdVolumeSource:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioThermal.svg"),
+            "MenuText": translate("FlowStudio", "Volume Source"),
+            "ToolTip": translate("FlowStudio", "Add a volumetric heat/mass/momentum source to selected parts."),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Volume Source")
+        from flow_studio.ObjectsFlowStudio import makeVolumeSource
+        obj = makeVolumeSource()
+        _assign_current_selection(obj, "FlowStudio Volume Source")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdFan:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioSolver.svg"),
+            "MenuText": translate("FlowStudio", "Fan"),
+            "ToolTip": translate("FlowStudio", "Add an internal, external inlet, or external outlet fan on selected faces."),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Fan")
+        from flow_studio.ObjectsFlowStudio import makeFan
+        obj = makeFan()
+        _assign_current_selection(obj, "FlowStudio Fan")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdResultPlot:
+    plot_kind = "Surface Plot"
+    name = "Result Plot"
+
+    def GetResources(self):
+        icon = "FlowStudioPostContour.svg"
+        if self.plot_kind == "Flow Trajectories":
+            icon = "FlowStudioPostStreamlines.svg"
+        elif self.plot_kind in ("XY Plot", "Point Parameters"):
+            icon = "FlowStudioPostProbe.svg"
+        return {
+            "Pixmap": _icon(icon),
+            "MenuText": translate("FlowStudio", self.name),
+            "ToolTip": translate("FlowStudio", f"Create a {self.plot_kind} result definition."),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction(f"Add {self.plot_kind}")
+        from flow_studio.ObjectsFlowStudio import makeResultPlot
+        name = self.plot_kind.replace(" ", "")
+        obj = makeResultPlot(name=name, plot_kind=self.plot_kind)
+        _assign_current_selection(obj, f"FlowStudio {self.plot_kind}")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdSurfacePlot(_CmdResultPlot):
+    plot_kind = "Surface Plot"
+    name = "Surface Plot"
+
+
+class _CmdCutPlot(_CmdResultPlot):
+    plot_kind = "Cut Plot"
+    name = "Cut Plot"
+
+
+class _CmdXYPlot(_CmdResultPlot):
+    plot_kind = "XY Plot"
+    name = "XY Plot"
+
+
+class _CmdFlowTrajectories(_CmdResultPlot):
+    plot_kind = "Flow Trajectories"
+    name = "Flow Trajectories"
+
+
+class _CmdPointParameters(_CmdResultPlot):
+    plot_kind = "Point Parameters"
+    name = "Point Parameters"
+
+
+class _CmdParticleStudy:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostStreamlines.svg"),
+            "MenuText": translate("FlowStudio", "Particle Study"),
+            "ToolTip": translate("FlowStudio", "Create a particle tracing study with injection selections."),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Particle Study")
+        from flow_studio.ObjectsFlowStudio import makeParticleStudy
+        obj = makeParticleStudy()
+        _assign_current_selection(obj, "FlowStudio Particle Study")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+# ======================================================================
 #  WORKFLOW GUIDE command
 # ======================================================================
 
@@ -1715,6 +2110,99 @@ class _CmdCheckWorkflow:
                 )
 
 
+class _CmdEngineeringDatabase:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioMaterial.svg"),
+            "MenuText": translate("FlowStudio", "Engineering Database"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Open the material, fan, heat sink, component, and unit engineering database editor",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.GuiUp
+
+    def Activated(self):
+        from flow_studio.engineering_database_editor import show_engineering_database_editor
+        show_engineering_database_editor()
+
+
+class _CmdCheckGeometry:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioMeshRegion.svg"),
+            "MenuText": translate("FlowStudio", "Check Geometry"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Open the FlowStudio geometry checker, fluid-volume preview, and leak tracking tools",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.GuiUp and FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        from flow_studio.taskpanels.task_geometry_tools import TaskCheckGeometry
+
+        FreeCADGui.Control.showDialog(TaskCheckGeometry())
+
+
+class _CmdShowFluidVolume:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioMesh.svg"),
+            "MenuText": translate("FlowStudio", "Show Fluid Volume"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create or toggle a translucent preview of the detected FlowStudio fluid volume envelope",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        from flow_studio.geometry_tools import (
+            fluid_volume_is_visible,
+            hide_fluid_volume,
+            show_fluid_volume,
+        )
+
+        if fluid_volume_is_visible():
+            hide_fluid_volume()
+            FreeCAD.Console.PrintMessage("[FlowStudio] Fluid volume hidden.\n")
+        else:
+            obj = show_fluid_volume()
+            if obj is None:
+                FreeCAD.Console.PrintWarning(
+                    "[FlowStudio] Fluid volume could not be created. Add or select geometry first.\n"
+                )
+            else:
+                FreeCAD.Console.PrintMessage("[FlowStudio] Fluid volume shown.\n")
+
+
+class _CmdLeakTracking:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostStreamlines.svg"),
+            "MenuText": translate("FlowStudio", "Leak Tracking"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Track a possible leak or connection between one internal and one external selected face",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.GuiUp and FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        from flow_studio.taskpanels.task_geometry_tools import TaskLeakTracking
+
+        FreeCADGui.Control.showDialog(TaskLeakTracking())
+
+
 # ======================================================================
 # Register all commands
 # ======================================================================
@@ -1725,11 +2213,16 @@ FreeCADGui.addCommand("FlowStudio_StructuralAnalysis", _CmdStructuralAnalysis())
 FreeCADGui.addCommand("FlowStudio_ElectrostaticAnalysis", _CmdElectrostaticAnalysis())
 FreeCADGui.addCommand("FlowStudio_ElectromagneticAnalysis", _CmdElectromagneticAnalysis())
 FreeCADGui.addCommand("FlowStudio_ThermalAnalysis", _CmdThermalAnalysis())
+FreeCADGui.addCommand("FlowStudio_OpticalAnalysis", _CmdOpticalAnalysis())
 
 # --- CFD setup ---
 FreeCADGui.addCommand("FlowStudio_PhysicsModel", _CmdPhysicsModel())
 FreeCADGui.addCommand("FlowStudio_FluidMaterial", _CmdFluidMaterial())
 FreeCADGui.addCommand("FlowStudio_InitialConditions", _CmdInitialConditions())
+FreeCADGui.addCommand("FlowStudio_EngineeringDatabase", _CmdEngineeringDatabase())
+FreeCADGui.addCommand("FlowStudio_CheckGeometry", _CmdCheckGeometry())
+FreeCADGui.addCommand("FlowStudio_ShowFluidVolume", _CmdShowFluidVolume())
+FreeCADGui.addCommand("FlowStudio_LeakTracking", _CmdLeakTracking())
 
 # --- CFD BCs ---
 FreeCADGui.addCommand("FlowStudio_BC_Wall", _CmdBCWall())
@@ -1768,6 +2261,13 @@ FreeCADGui.addCommand("FlowStudio_BC_HeatFlux", _CmdBCHeatFlux())
 FreeCADGui.addCommand("FlowStudio_BC_Convection", _CmdBCConvection())
 FreeCADGui.addCommand("FlowStudio_BC_Radiation", _CmdBCRadiation())
 
+# --- Optical ---
+FreeCADGui.addCommand("FlowStudio_OpticalMaterial", _CmdOpticalMaterial())
+FreeCADGui.addCommand("FlowStudio_OpticalPhysics", _CmdOpticalPhysics())
+FreeCADGui.addCommand("FlowStudio_BC_OpticalSource", _CmdBCOpticalSource())
+FreeCADGui.addCommand("FlowStudio_BC_OpticalDetector", _CmdBCOpticalDetector())
+FreeCADGui.addCommand("FlowStudio_BC_OpticalBoundary", _CmdBCOpticalBoundary())
+
 # --- Mesh ---
 FreeCADGui.addCommand("FlowStudio_MeshGmsh", _CmdMeshGmsh())
 FreeCADGui.addCommand("FlowStudio_MeshRegion", _CmdMeshRegion())
@@ -1784,6 +2284,16 @@ FreeCADGui.addCommand("FlowStudio_PostContour", _CmdPostContour())
 FreeCADGui.addCommand("FlowStudio_PostStreamlines", _CmdPostStreamlines())
 FreeCADGui.addCommand("FlowStudio_PostProbe", _CmdPostProbe())
 FreeCADGui.addCommand("FlowStudio_PostForceReport", _CmdPostForceReport())
+
+# --- FloEFD-style setup/results ---
+FreeCADGui.addCommand("FlowStudio_VolumeSource", _CmdVolumeSource())
+FreeCADGui.addCommand("FlowStudio_Fan", _CmdFan())
+FreeCADGui.addCommand("FlowStudio_SurfacePlot", _CmdSurfacePlot())
+FreeCADGui.addCommand("FlowStudio_CutPlot", _CmdCutPlot())
+FreeCADGui.addCommand("FlowStudio_XYPlot", _CmdXYPlot())
+FreeCADGui.addCommand("FlowStudio_FlowTrajectories", _CmdFlowTrajectories())
+FreeCADGui.addCommand("FlowStudio_PointParameters", _CmdPointParameters())
+FreeCADGui.addCommand("FlowStudio_ParticleStudy", _CmdParticleStudy())
 
 # --- Measurement / Paraview ---
 FreeCADGui.addCommand("FlowStudio_MeasurementPoint", _CmdMeasurementPoint())

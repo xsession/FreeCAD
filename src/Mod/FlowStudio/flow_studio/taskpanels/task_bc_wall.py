@@ -6,15 +6,16 @@
 """Task panel for Wall boundary condition."""
 
 from PySide import QtGui
-from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
 
 
-class TaskBCWall(BaseTaskPanel):
+class TaskBCWall(FloEFDTaskPanel):
 
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
         layout.addWidget(QtGui.QLabel("<b>Wall Boundary Condition</b>"))
+        self._add_selection_section(layout)
 
         self.cb_type = self._combo(
             ["No-Slip", "Slip", "Moving Wall (Translational)",

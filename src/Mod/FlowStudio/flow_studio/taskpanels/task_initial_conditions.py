@@ -6,15 +6,16 @@
 """Task panel for InitialConditions."""
 
 from PySide import QtGui
-from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
 
 
-class TaskInitialConditions(BaseTaskPanel):
+class TaskInitialConditions(FloEFDTaskPanel):
 
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
         layout.addWidget(QtGui.QLabel("<b>Initial Conditions</b>"))
+        self._add_selection_section(layout)
 
         # Velocity
         self.sp_ux = self._spin_float(self.obj.Ux)

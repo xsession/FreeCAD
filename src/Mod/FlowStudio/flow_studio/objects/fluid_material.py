@@ -16,6 +16,12 @@ class FluidMaterial(BaseFlowObject):
     def __init__(self, obj):
         super().__init__(obj)
 
+        self.add_reference_property(
+            obj,
+            "Material Assignment",
+            "Referenced parts, bodies, faces, or regions using this fluid material",
+        )
+
         # Material name
         obj.addProperty(
             "App::PropertyString", "MaterialName", "Material",

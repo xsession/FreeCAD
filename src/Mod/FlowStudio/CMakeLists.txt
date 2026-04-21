@@ -8,7 +8,10 @@ SET(FlowStudioBase_SRCS
 SET(FlowStudioPackage_SRCS
     flow_studio/__init__.py
     flow_studio/commands.py
+    flow_studio/engineering_database.py
+    flow_studio/engineering_database_editor.py
     flow_studio/enterprise_commands.py
+    flow_studio/geometry_tools.py
     flow_studio/ObjectsFlowStudio.py
     flow_studio/physics_domains.py
     flow_studio/solver_deps.py
@@ -75,6 +78,7 @@ SET(FlowStudioEnterpriseTesting_SRCS
 
 SET(FlowStudioDocs_SRCS
     docs/ARCHITECTURE.md
+    docs/OPTICAL_SOLVER_DEEPSEARCH.md
 )
 
 SET(FlowStudioFeminout_SRCS
@@ -91,6 +95,7 @@ SET(FlowStudioObjects_SRCS
     flow_studio/objects/bc_electrostatic.py
     flow_studio/objects/bc_inlet.py
     flow_studio/objects/bc_open_boundary.py
+    flow_studio/objects/bc_optical.py
     flow_studio/objects/bc_outlet.py
     flow_studio/objects/bc_structural.py
     flow_studio/objects/bc_symmetry.py
@@ -102,12 +107,15 @@ SET(FlowStudioObjects_SRCS
     flow_studio/objects/electrostatic_material.py
     flow_studio/objects/electrostatic_physics_model.py
     flow_studio/objects/fluid_material.py
+    flow_studio/objects/flowefd_features.py
     flow_studio/objects/initial_conditions.py
     flow_studio/objects/measurement_point.py
     flow_studio/objects/measurement_surface.py
     flow_studio/objects/measurement_volume.py
     flow_studio/objects/mesh_gmsh.py
     flow_studio/objects/mesh_region.py
+    flow_studio/objects/optical_material.py
+    flow_studio/objects/optical_physics_model.py
     flow_studio/objects/physics_model.py
     flow_studio/objects/post_pipeline.py
     flow_studio/objects/solid_material.py
@@ -124,6 +132,7 @@ SET(FlowStudioSolvers_SRCS
     flow_studio/solvers/elmer_sif.py
     flow_studio/solvers/fluidx3d_runner.py
     flow_studio/solvers/openfoam_runner.py
+    flow_studio/solvers/optical_runner.py
     flow_studio/solvers/registry.py
 )
 
@@ -135,7 +144,11 @@ SET(FlowStudioTaskpanels_SRCS
     flow_studio/taskpanels/task_bc_outlet.py
     flow_studio/taskpanels/task_bc_wall.py
     flow_studio/taskpanels/task_fluid_material.py
+    flow_studio/taskpanels/task_flowefd_features.py
+    flow_studio/taskpanels/task_geometry_tools.py
+    flow_studio/taskpanels/task_generic_bc.py
     flow_studio/taskpanels/task_initial_conditions.py
+    flow_studio/taskpanels/task_materials.py
     flow_studio/taskpanels/task_measurement_point.py
     flow_studio/taskpanels/task_measurement_surface.py
     flow_studio/taskpanels/task_measurement_volume.py
@@ -163,7 +176,10 @@ SET(FlowStudioViewproviders_SRCS
     flow_studio/viewproviders/vp_bc_wall.py
     flow_studio/viewproviders/vp_boundary_layer.py
     flow_studio/viewproviders/vp_fluid_material.py
+    flow_studio/viewproviders/vp_flowefd_feature.py
+    flow_studio/viewproviders/vp_generic_bc.py
     flow_studio/viewproviders/vp_initial_conditions.py
+    flow_studio/viewproviders/vp_material.py
     flow_studio/viewproviders/vp_measurement_point.py
     flow_studio/viewproviders/vp_measurement_surface.py
     flow_studio/viewproviders/vp_measurement_volume.py

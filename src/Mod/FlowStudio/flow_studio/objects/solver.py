@@ -25,6 +25,10 @@ class Solver(BaseFlowObject):
             "OpenFOAM",
             "FluidX3D",
             "SU2",
+            "Raysect",
+            "Meep",
+            "openEMS",
+            "Optiland",
         ]
         obj.SolverBackend = "OpenFOAM"
 

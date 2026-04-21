@@ -17,6 +17,23 @@ import FreeCAD
 from flow_studio.solvers.base_solver import BaseSolverRunner
 
 
+def _openfoam_patch_names(obj):
+    """Return patch names from a FlowStudio References property."""
+
+    refs = getattr(obj, "References", None) or ()
+    names = []
+    for ref_obj, sub_elements in refs:
+        if isinstance(sub_elements, str):
+            sub_names = (sub_elements,)
+        else:
+            sub_names = tuple(sub_elements or ())
+        if sub_names:
+            names.extend(sub_names)
+            continue
+        names.append(getattr(ref_obj, "Name", getattr(ref_obj, "Label", "patch")))
+    return tuple(dict.fromkeys(name for name in names if name)) or (obj.Name,)
+
+
 class OpenFOAMRunner(BaseSolverRunner):
     """Generate and run OpenFOAM cases."""
 
@@ -441,23 +458,23 @@ class OpenFOAMRunner(BaseSolverRunner):
         p0 = ic.Pressure if ic else 0.0
         bc_entries = []
         for bc in bcs:
-            patch_name = bc.Name
-            if bc.BoundaryType == "wall":
-                bc_entries.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "inlet":
-                bc_entries.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "outlet":
-                p_val = getattr(bc, "StaticPressure", 0.0)
-                bc_entries.append(
-                    f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {p_val};\n    }}"
-                )
-            elif bc.BoundaryType == "symmetry":
-                bc_entries.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
-            elif bc.BoundaryType == "open":
-                p_val = getattr(bc, "FarFieldPressure", 101325.0)
-                bc_entries.append(
-                    f"    {patch_name}\n    {{\n        type            totalPressure;\n        p0              uniform {p_val};\n        value           uniform {p_val};\n    }}"
-                )
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    bc_entries.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "inlet":
+                    bc_entries.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "outlet":
+                    p_val = getattr(bc, "StaticPressure", 0.0)
+                    bc_entries.append(
+                        f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {p_val};\n    }}"
+                    )
+                elif bc.BoundaryType == "symmetry":
+                    bc_entries.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
+                elif bc.BoundaryType == "open":
+                    p_val = getattr(bc, "FarFieldPressure", 101325.0)
+                    bc_entries.append(
+                        f"    {patch_name}\n    {{\n        type            totalPressure;\n        p0              uniform {p_val};\n        value           uniform {p_val};\n    }}"
+                    )
 
         lines = [
             "FoamFile",
@@ -487,50 +504,50 @@ class OpenFOAMRunner(BaseSolverRunner):
 
         bc_entries = []
         for bc in bcs:
-            patch_name = bc.Name
-            if bc.BoundaryType == "wall":
-                if getattr(bc, "WallType", "No-Slip") == "No-Slip":
-                    bc_entries.append(
-                        f"    {patch_name}\n    {{\n        type            noSlip;\n    }}"
-                    )
-                elif bc.WallType == "Slip":
-                    bc_entries.append(
-                        f"    {patch_name}\n    {{\n        type            slip;\n    }}"
-                    )
-                elif bc.WallType.startswith("Moving"):
-                    vx = getattr(bc, "WallVelocityX", 0.0)
-                    vy = getattr(bc, "WallVelocityY", 0.0)
-                    vz = getattr(bc, "WallVelocityZ", 0.0)
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    if getattr(bc, "WallType", "No-Slip") == "No-Slip":
+                        bc_entries.append(
+                            f"    {patch_name}\n    {{\n        type            noSlip;\n    }}"
+                        )
+                    elif bc.WallType == "Slip":
+                        bc_entries.append(
+                            f"    {patch_name}\n    {{\n        type            slip;\n    }}"
+                        )
+                    elif bc.WallType.startswith("Moving"):
+                        vx = getattr(bc, "WallVelocityX", 0.0)
+                        vy = getattr(bc, "WallVelocityY", 0.0)
+                        vz = getattr(bc, "WallVelocityZ", 0.0)
+                        bc_entries.append(
+                            f"    {patch_name}\n    {{\n        type            fixedValue;\n"
+                            f"        value           uniform ({vx} {vy} {vz});\n    }}"
+                        )
+                    else:
+                        bc_entries.append(
+                            f"    {patch_name}\n    {{\n        type            noSlip;\n    }}"
+                        )
+                elif bc.BoundaryType == "inlet":
+                    vx = getattr(bc, "Ux", 0.0)
+                    vy = getattr(bc, "Uy", 0.0)
+                    vz = getattr(bc, "Uz", 1.0)
                     bc_entries.append(
                         f"    {patch_name}\n    {{\n        type            fixedValue;\n"
                         f"        value           uniform ({vx} {vy} {vz});\n    }}"
                     )
-                else:
+                elif bc.BoundaryType == "outlet":
                     bc_entries.append(
-                        f"    {patch_name}\n    {{\n        type            noSlip;\n    }}"
+                        f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}"
                     )
-            elif bc.BoundaryType == "inlet":
-                vx = getattr(bc, "Ux", 0.0)
-                vy = getattr(bc, "Uy", 0.0)
-                vz = getattr(bc, "Uz", 1.0)
-                bc_entries.append(
-                    f"    {patch_name}\n    {{\n        type            fixedValue;\n"
-                    f"        value           uniform ({vx} {vy} {vz});\n    }}"
-                )
-            elif bc.BoundaryType == "outlet":
-                bc_entries.append(
-                    f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}"
-                )
-            elif bc.BoundaryType == "symmetry":
-                bc_entries.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
-            elif bc.BoundaryType == "open":
-                vx = getattr(bc, "FarFieldVelocityX", 0.0)
-                vy = getattr(bc, "FarFieldVelocityY", 0.0)
-                vz = getattr(bc, "FarFieldVelocityZ", 0.0)
-                bc_entries.append(
-                    f"    {patch_name}\n    {{\n        type            pressureInletOutletVelocity;\n"
-                    f"        value           uniform ({vx} {vy} {vz});\n    }}"
-                )
+                elif bc.BoundaryType == "symmetry":
+                    bc_entries.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
+                elif bc.BoundaryType == "open":
+                    vx = getattr(bc, "FarFieldVelocityX", 0.0)
+                    vy = getattr(bc, "FarFieldVelocityY", 0.0)
+                    vz = getattr(bc, "FarFieldVelocityZ", 0.0)
+                    bc_entries.append(
+                        f"    {patch_name}\n    {{\n        type            pressureInletOutletVelocity;\n"
+                        f"        value           uniform ({vx} {vy} {vz});\n    }}"
+                    )
 
         lines = [
             "FoamFile",
@@ -570,14 +587,15 @@ class OpenFOAMRunner(BaseSolverRunner):
         k0 = ic.TurbulentKineticEnergy if ic else 0.001
         lines = self._scalar_field_header("k", "[0 2 -2 0 0 0 0]", k0)
         for bc in bcs:
-            if bc.BoundaryType == "wall":
-                lines.append(f"    {bc.Name}\n    {{\n        type            kqRWallFunction;\n        value           uniform {k0};\n    }}")
-            elif bc.BoundaryType in ("inlet", "open"):
-                lines.append(f"    {bc.Name}\n    {{\n        type            fixedValue;\n        value           uniform {k0};\n    }}")
-            elif bc.BoundaryType == "outlet":
-                lines.append(f"    {bc.Name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "symmetry":
-                lines.append(f"    {bc.Name}\n    {{\n        type            symmetry;\n    }}")
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    lines.append(f"    {patch_name}\n    {{\n        type            kqRWallFunction;\n        value           uniform {k0};\n    }}")
+                elif bc.BoundaryType in ("inlet", "open"):
+                    lines.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {k0};\n    }}")
+                elif bc.BoundaryType == "outlet":
+                    lines.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "symmetry":
+                    lines.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
         lines += ["}", ""]
         self._write_file("0/k", "\n".join(lines))
 
@@ -585,14 +603,15 @@ class OpenFOAMRunner(BaseSolverRunner):
         e0 = ic.TurbulentDissipationRate if ic else 0.001
         lines = self._scalar_field_header("epsilon", "[0 2 -3 0 0 0 0]", e0)
         for bc in bcs:
-            if bc.BoundaryType == "wall":
-                lines.append(f"    {bc.Name}\n    {{\n        type            epsilonWallFunction;\n        value           uniform {e0};\n    }}")
-            elif bc.BoundaryType in ("inlet", "open"):
-                lines.append(f"    {bc.Name}\n    {{\n        type            fixedValue;\n        value           uniform {e0};\n    }}")
-            elif bc.BoundaryType == "outlet":
-                lines.append(f"    {bc.Name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "symmetry":
-                lines.append(f"    {bc.Name}\n    {{\n        type            symmetry;\n    }}")
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    lines.append(f"    {patch_name}\n    {{\n        type            epsilonWallFunction;\n        value           uniform {e0};\n    }}")
+                elif bc.BoundaryType in ("inlet", "open"):
+                    lines.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {e0};\n    }}")
+                elif bc.BoundaryType == "outlet":
+                    lines.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "symmetry":
+                    lines.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
         lines += ["}", ""]
         self._write_file("0/epsilon", "\n".join(lines))
 
@@ -600,14 +619,15 @@ class OpenFOAMRunner(BaseSolverRunner):
         w0 = ic.SpecificDissipationRate if ic else 1.0
         lines = self._scalar_field_header("omega", "[0 0 -1 0 0 0 0]", w0)
         for bc in bcs:
-            if bc.BoundaryType == "wall":
-                lines.append(f"    {bc.Name}\n    {{\n        type            omegaWallFunction;\n        value           uniform {w0};\n    }}")
-            elif bc.BoundaryType in ("inlet", "open"):
-                lines.append(f"    {bc.Name}\n    {{\n        type            fixedValue;\n        value           uniform {w0};\n    }}")
-            elif bc.BoundaryType == "outlet":
-                lines.append(f"    {bc.Name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "symmetry":
-                lines.append(f"    {bc.Name}\n    {{\n        type            symmetry;\n    }}")
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    lines.append(f"    {patch_name}\n    {{\n        type            omegaWallFunction;\n        value           uniform {w0};\n    }}")
+                elif bc.BoundaryType in ("inlet", "open"):
+                    lines.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {w0};\n    }}")
+                elif bc.BoundaryType == "outlet":
+                    lines.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "symmetry":
+                    lines.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
         lines += ["}", ""]
         self._write_file("0/omega", "\n".join(lines))
 
@@ -615,14 +635,15 @@ class OpenFOAMRunner(BaseSolverRunner):
         nt0 = ic.NuTilda if ic else 1.5e-4
         lines = self._scalar_field_header("nuTilda", "[0 2 -1 0 0 0 0]", nt0)
         for bc in bcs:
-            if bc.BoundaryType == "wall":
-                lines.append(f"    {bc.Name}\n    {{\n        type            fixedValue;\n        value           uniform 0;\n    }}")
-            elif bc.BoundaryType in ("inlet", "open"):
-                lines.append(f"    {bc.Name}\n    {{\n        type            fixedValue;\n        value           uniform {nt0};\n    }}")
-            elif bc.BoundaryType == "outlet":
-                lines.append(f"    {bc.Name}\n    {{\n        type            zeroGradient;\n    }}")
-            elif bc.BoundaryType == "symmetry":
-                lines.append(f"    {bc.Name}\n    {{\n        type            symmetry;\n    }}")
+            for patch_name in _openfoam_patch_names(bc):
+                if bc.BoundaryType == "wall":
+                    lines.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform 0;\n    }}")
+                elif bc.BoundaryType in ("inlet", "open"):
+                    lines.append(f"    {patch_name}\n    {{\n        type            fixedValue;\n        value           uniform {nt0};\n    }}")
+                elif bc.BoundaryType == "outlet":
+                    lines.append(f"    {patch_name}\n    {{\n        type            zeroGradient;\n    }}")
+                elif bc.BoundaryType == "symmetry":
+                    lines.append(f"    {patch_name}\n    {{\n        type            symmetry;\n    }}")
         lines += ["}", ""]
         self._write_file("0/nuTilda", "\n".join(lines))
 

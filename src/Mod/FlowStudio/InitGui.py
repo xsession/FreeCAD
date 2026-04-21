@@ -63,17 +63,30 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_ElectrostaticAnalysis",
         "FlowStudio_ElectromagneticAnalysis",
         "FlowStudio_ThermalAnalysis",
+        "FlowStudio_OpticalAnalysis",
     ]
 
     CFD_SETUP_COMMANDS = [
         "FlowStudio_PhysicsModel",
         "FlowStudio_FluidMaterial",
+        "FlowStudio_EngineeringDatabase",
         "FlowStudio_InitialConditions",
+        "FlowStudio_CheckGeometry",
+        "FlowStudio_ShowFluidVolume",
+        "FlowStudio_LeakTracking",
         "FlowStudio_BC_Inlet",
         "FlowStudio_BC_Outlet",
         "FlowStudio_BC_Wall",
         "FlowStudio_BC_OpenBoundary",
         "FlowStudio_BC_Symmetry",
+        "FlowStudio_Fan",
+        "FlowStudio_VolumeSource",
+    ]
+
+    GEOMETRY_COMMANDS = [
+        "FlowStudio_CheckGeometry",
+        "FlowStudio_ShowFluidVolume",
+        "FlowStudio_LeakTracking",
     ]
 
     MESH_SOLVE_COMMANDS = [
@@ -90,6 +103,12 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_PostStreamlines",
         "FlowStudio_PostProbe",
         "FlowStudio_PostForceReport",
+        "FlowStudio_SurfacePlot",
+        "FlowStudio_CutPlot",
+        "FlowStudio_XYPlot",
+        "FlowStudio_FlowTrajectories",
+        "FlowStudio_PointParameters",
+        "FlowStudio_ParticleStudy",
         "FlowStudio_GenerateParaviewScript",
     ]
 
@@ -106,6 +125,12 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_BC_CurrentDensity",
         "FlowStudio_BC_MagneticFluxDensity",
         "FlowStudio_BC_FarFieldEM",
+        "Separator",
+        "FlowStudio_OpticalMaterial",
+        "FlowStudio_OpticalPhysics",
+        "FlowStudio_BC_OpticalSource",
+        "FlowStudio_BC_OpticalDetector",
+        "FlowStudio_BC_OpticalBoundary",
     ]
 
     ENTERPRISE_COMMANDS = [
@@ -180,9 +205,11 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 [
                     "FlowStudio_PhysicsModel",
                     "FlowStudio_FluidMaterial",
+                    "FlowStudio_EngineeringDatabase",
                     "FlowStudio_InitialConditions",
                 ],
             )
+            self.appendToolbar("FlowStudio Geometry Tools", self.GEOMETRY_COMMANDS)
             self.appendToolbar(
                 "FlowStudio BC Core",
                 [
@@ -191,6 +218,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "FlowStudio_BC_Wall",
                     "FlowStudio_BC_OpenBoundary",
                     "FlowStudio_BC_Symmetry",
+                    "FlowStudio_Fan",
+                    "FlowStudio_VolumeSource",
                 ],
             )
             self.appendToolbar(
@@ -206,6 +235,17 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 [
                     "FlowStudio_SolverSettings",
                     "FlowStudio_RunSolver",
+                ],
+            )
+            self.appendToolbar(
+                "FlowStudio Results",
+                [
+                    "FlowStudio_SurfacePlot",
+                    "FlowStudio_CutPlot",
+                    "FlowStudio_XYPlot",
+                    "FlowStudio_FlowTrajectories",
+                    "FlowStudio_PointParameters",
+                    "FlowStudio_ParticleStudy",
                 ],
             )
             self.appendToolbar(
@@ -229,11 +269,22 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "FlowStudio_BC_FarFieldEM",
                 ],
             )
+            self.appendToolbar(
+                "FlowStudio Optical",
+                [
+                    "FlowStudio_OpticalMaterial",
+                    "FlowStudio_OpticalPhysics",
+                    "FlowStudio_BC_OpticalSource",
+                    "FlowStudio_BC_OpticalDetector",
+                    "FlowStudio_BC_OpticalBoundary",
+                ],
+            )
             if enterprise_enabled:
                 self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
         else:
             self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
             self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)
+            self.appendToolbar("FlowStudio Geometry Tools", self.GEOMETRY_COMMANDS)
             self.appendToolbar("FlowStudio Solve", self.MESH_SOLVE_COMMANDS)
             self.appendToolbar("FlowStudio Physics", self.PHYSICS_COMMANDS)
             if enterprise_enabled:
@@ -241,6 +292,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
         self.appendMenu("FlowStudio", self.ANALYSIS_COMMANDS)
         self.appendMenu(["FlowStudio", "CFD Setup"], self.CFD_SETUP_COMMANDS)
+        self.appendMenu(["FlowStudio", "Geometry Tools"], self.GEOMETRY_COMMANDS)
         self.appendMenu(["FlowStudio", "Physics Setup"], self.PHYSICS_COMMANDS)
         self.appendMenu(["FlowStudio", "Solve"], self.MESH_SOLVE_COMMANDS)
         self.appendMenu(["FlowStudio", "Post-Processing"], self.POST_COMMANDS)

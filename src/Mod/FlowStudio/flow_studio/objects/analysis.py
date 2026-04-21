@@ -6,7 +6,7 @@
 """SimulationAnalysis – top-level analysis container for any physics domain.
 
 Replaces the old CFDAnalysis with a domain-aware container that supports
-CFD, FEM/structural, electrostatic, electromagnetic, and thermal analyses.
+CFD, FEM/structural, electrostatic, electromagnetic, thermal, and optical analyses.
 Inspired by CST Studio Suite's multi-physics project concept.
 """
 
@@ -19,7 +19,7 @@ class CFDAnalysis(BaseFlowObject):
 
     The ``PhysicsDomain`` property selects which physics discipline this
     analysis represents (CFD, Structural, Electrostatic, Electromagnetic,
-    Thermal).  The ``AnalysisType`` enum is dynamically populated based on
+    Thermal, Optical).  The ``AnalysisType`` enum is dynamically populated based on
     the chosen domain.
 
     Kept as ``CFDAnalysis`` class name for backward compatibility — the
@@ -35,6 +35,7 @@ class CFDAnalysis(BaseFlowObject):
         "Electrostatic": "FlowStudio::ElectrostaticAnalysis",
         "Electromagnetic": "FlowStudio::ElectromagneticAnalysis",
         "Thermal": "FlowStudio::ThermalAnalysis",
+        "Optical": "FlowStudio::OpticalAnalysis",
     }
 
     def __init__(self, obj, domain_key="CFD"):
@@ -62,6 +63,8 @@ class CFDAnalysis(BaseFlowObject):
         # Default solver depends on domain
         if domain_key == "CFD":
             obj.SolverBackend = "OpenFOAM"
+        elif domain_key == "Optical":
+            obj.SolverBackend = "Raysect"
         else:
             obj.SolverBackend = "Elmer"
 

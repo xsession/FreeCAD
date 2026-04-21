@@ -262,6 +262,30 @@ _BACKEND_DEPS = {
         ("matplotlib", "python_optional", False,
          "Install matplotlib: pip install matplotlib (for plots)"),
     ],
+    "Raysect": [
+        ("raysect", "python_package", True,
+         "Install Raysect: pip install raysect"),
+        ("numpy", "python_optional", False,
+         "Install NumPy: pip install numpy"),
+    ],
+    "Meep": [
+        ("meep", "python_package", True,
+         "Install Meep from Conda Forge, usually: conda install -c conda-forge pymeep"),
+        ("h5py", "python_optional", False,
+         "Install h5py for field/result output: pip install h5py"),
+    ],
+    "openEMS": [
+        ("openEMS", "python_package", False,
+         "Install openEMS Python bindings if available for your platform"),
+        ("openEMS", "executable", False,
+         "Install openEMS: https://openems.de/start/"),
+    ],
+    "Optiland": [
+        ("optiland", "python_package", True,
+         "Install Optiland from its project package/source distribution"),
+        ("torch", "python_optional", False,
+         "Install PyTorch for differentiable/GPU tracing workflows"),
+    ],
 }
 
 

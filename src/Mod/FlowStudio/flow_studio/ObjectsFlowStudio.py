@@ -245,8 +245,8 @@ def makeSolidMaterial(doc=None, name="SolidMaterial"):
     from flow_studio.objects.solid_material import SolidMaterial
     SolidMaterial(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_material import VPMaterial
+        VPMaterial(obj.ViewObject)
     return obj
 
 
@@ -269,8 +269,8 @@ def makeBCFixedDisplacement(doc=None, name="FixedDisplacement"):
     from flow_studio.objects.bc_structural import BCFixedDisplacement
     BCFixedDisplacement(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -281,8 +281,8 @@ def makeBCForce(doc=None, name="Force"):
     from flow_studio.objects.bc_structural import BCForce
     BCForce(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -293,8 +293,8 @@ def makeBCPressureLoad(doc=None, name="PressureLoad"):
     from flow_studio.objects.bc_structural import BCPressureLoad
     BCPressureLoad(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -307,8 +307,8 @@ def makeElectrostaticMaterial(doc=None, name="ElectrostaticMaterial"):
     from flow_studio.objects.electrostatic_material import ElectrostaticMaterial
     ElectrostaticMaterial(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_material import VPMaterial
+        VPMaterial(obj.ViewObject)
     return obj
 
 
@@ -331,8 +331,8 @@ def makeBCElectricPotential(doc=None, name="ElectricPotential"):
     from flow_studio.objects.bc_electrostatic import BCElectricPotential
     BCElectricPotential(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -343,8 +343,8 @@ def makeBCSurfaceCharge(doc=None, name="SurfaceCharge"):
     from flow_studio.objects.bc_electrostatic import BCSurfaceCharge
     BCSurfaceCharge(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -355,8 +355,8 @@ def makeBCElectricFlux(doc=None, name="ElectricFlux"):
     from flow_studio.objects.bc_electrostatic import BCElectricFlux
     BCElectricFlux(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -369,8 +369,8 @@ def makeElectromagneticMaterial(doc=None, name="ElectromagneticMaterial"):
     from flow_studio.objects.electromagnetic_material import ElectromagneticMaterial
     ElectromagneticMaterial(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_material import VPMaterial
+        VPMaterial(obj.ViewObject)
     return obj
 
 
@@ -393,8 +393,8 @@ def makeBCMagneticPotential(doc=None, name="MagneticPotential"):
     from flow_studio.objects.bc_electromagnetic import BCMagneticPotential
     BCMagneticPotential(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -405,8 +405,8 @@ def makeBCCurrentDensity(doc=None, name="CurrentDensity"):
     from flow_studio.objects.bc_electromagnetic import BCCurrentDensity
     BCCurrentDensity(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -417,8 +417,8 @@ def makeBCMagneticFluxDensity(doc=None, name="MagneticFluxDensity"):
     from flow_studio.objects.bc_electromagnetic import BCMagneticFluxDensity
     BCMagneticFluxDensity(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -429,8 +429,70 @@ def makeBCFarFieldEM(doc=None, name="FarFieldEM"):
     from flow_studio.objects.bc_electromagnetic import BCFarFieldEM
     BCFarFieldEM(obj)
     if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+# --- Optical ---
+
+def makeOpticalMaterial(doc=None, name="OpticalMaterial"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.optical_material import OpticalMaterial
+    OpticalMaterial(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_material import VPMaterial
+        VPMaterial(obj.ViewObject)
+    return obj
+
+
+def makeOpticalPhysicsModel(doc=None, name="OpticalPhysics"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.optical_physics_model import OpticalPhysicsModel
+    OpticalPhysicsModel(obj)
+    if FreeCAD.GuiUp:
         from flow_studio.viewproviders.base_vp import BaseFlowVP
         BaseFlowVP(obj.ViewObject)
+    return obj
+
+
+def makeBCOpticalSource(doc=None, name="OpticalSource"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_optical import BCOpticalSource
+    BCOpticalSource(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+def makeBCOpticalDetector(doc=None, name="OpticalDetector"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_optical import BCOpticalDetector
+    BCOpticalDetector(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+def makeBCOpticalBoundary(doc=None, name="OpticalBoundary"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_optical import BCOpticalBoundary
+    BCOpticalBoundary(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -443,8 +505,8 @@ def makeThermalMaterial(doc=None, name="ThermalMaterial"):
     from flow_studio.objects.thermal_material import ThermalMaterial
     ThermalMaterial(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_material import VPMaterial
+        VPMaterial(obj.ViewObject)
     return obj
 
 
@@ -467,8 +529,8 @@ def makeBCTemperature(doc=None, name="Temperature"):
     from flow_studio.objects.bc_thermal import BCTemperature
     BCTemperature(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -479,8 +541,8 @@ def makeBCHeatFlux(doc=None, name="HeatFlux"):
     from flow_studio.objects.bc_thermal import BCHeatFlux
     BCHeatFlux(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -491,8 +553,8 @@ def makeBCConvection(doc=None, name="Convection"):
     from flow_studio.objects.bc_thermal import BCConvection
     BCConvection(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -503,8 +565,8 @@ def makeBCRadiation(doc=None, name="Radiation"):
     from flow_studio.objects.bc_thermal import BCRadiation
     BCRadiation(obj)
     if FreeCAD.GuiUp:
-        from flow_studio.viewproviders.base_vp import BaseFlowVP
-        BaseFlowVP(obj.ViewObject)
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
     return obj
 
 
@@ -545,4 +607,55 @@ def makeMeasurementVolume(doc=None, name="MeasureVolume"):
     if FreeCAD.GuiUp:
         from flow_studio.viewproviders.vp_measurement_volume import VPMeasurementVolume
         VPMeasurementVolume(obj.ViewObject)
+    return obj
+
+
+# ======================================================================
+# FloEFD-style setup and result feature objects
+# ======================================================================
+
+def _attach_flowefd_vp(obj):
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_flowefd_feature import VPFlowEFDFeature
+        VPFlowEFDFeature(obj.ViewObject)
+
+
+def makeVolumeSource(doc=None, name="VolumeSource"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.flowefd_features import VolumeSource
+    VolumeSource(obj)
+    _attach_flowefd_vp(obj)
+    return obj
+
+
+def makeFan(doc=None, name="Fan"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.flowefd_features import FanFeature
+    FanFeature(obj)
+    _attach_flowefd_vp(obj)
+    return obj
+
+
+def makeResultPlot(doc=None, name="ResultPlot", plot_kind="Surface Plot"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.flowefd_features import ResultPlot
+    ResultPlot(obj)
+    obj.PlotKind = plot_kind
+    _attach_flowefd_vp(obj)
+    return obj
+
+
+def makeParticleStudy(doc=None, name="ParticleStudy"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.flowefd_features import ParticleStudy
+    ParticleStudy(obj)
+    _attach_flowefd_vp(obj)
     return obj
