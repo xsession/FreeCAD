@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/document.schema.json",
+  "title": "DocumentRef",
+  "type": "object",
+  "required": [
+    "document_id",
+    "display_name",
+    "active_workbench",
+    "dirty"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "file_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "active_workbench": {
+      "type": "string"
+    },
+    "dirty": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}

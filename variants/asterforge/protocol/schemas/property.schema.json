@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/property.schema.json",
+  "title": "PropertyMetadata",
+  "type": "object",
+  "required": [
+    "property_id",
+    "display_name",
+    "property_type",
+    "value_kind",
+    "read_only",
+    "expression_capable",
+    "value_preview"
+  ],
+  "properties": {
+    "property_id": {
+      "type": "string"
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "property_type": {
+      "type": "string"
+    },
+    "value_kind": {
+      "type": "string"
+    },
+    "read_only": {
+      "type": "boolean"
+    },
+    "unit": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "expression_capable": {
+      "type": "boolean"
+    },
+    "value_preview": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

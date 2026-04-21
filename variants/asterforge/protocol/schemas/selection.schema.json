@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/selection.schema.json",
+  "title": "SelectionRef",
+  "type": "object",
+  "required": [
+    "document_id",
+    "object_id",
+    "selection_mode"
+  ],
+  "properties": {
+    "document_id": {
+      "type": "string"
+    },
+    "object_id": {
+      "type": "string"
+    },
+    "subelement": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "selection_mode": {
+      "type": "string",
+      "enum": [
+        "object",
+        "subelement",
+        "preselection"
+      ]
+    }
+  },
+  "additionalProperties": false
+}

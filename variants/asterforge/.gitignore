@@ -1,0 +1,5 @@
+frontend/app/node_modules/
+frontend/app/dist/
+frontend/app/.vite/
+target/
+Cargo.lock

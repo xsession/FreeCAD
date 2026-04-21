@@ -1,0 +1,343 @@
+syntax = "proto3";
+
+package asterforge.protocol.v1;
+
+message DocumentRef {
+  string document_id = 1;
+  string display_name = 2;
+  string file_path = 3;
+  string active_workbench = 4;
+  bool dirty = 5;
+}
+
+message ObjectNode {
+  string object_id = 1;
+  string label = 2;
+  string object_type = 3;
+  string visibility = 4;
+  repeated ObjectNode children = 5;
+}
+
+message ObjectTreeResponse {
+  DocumentRef document = 1;
+  repeated ObjectNode roots = 2;
+}
+
+message PropertyMetadata {
+  string property_id = 1;
+  string display_name = 2;
+  string property_type = 3;
+  string value_kind = 4;
+  bool read_only = 5;
+  string unit = 6;
+  bool expression_capable = 7;
+  string value_preview = 8;
+}
+
+message PropertyGroup {
+  string group_id = 1;
+  string title = 2;
+  repeated PropertyMetadata properties = 3;
+}
+
+message PropertyResponse {
+  string object_id = 1;
+  repeated PropertyGroup groups = 2;
+}
+
+message ViewportBounds {
+  float x = 1;
+  float y = 2;
+  float width = 3;
+  float height = 4;
+}
+
+message ViewportDrawable {
+  string object_id = 1;
+  string label = 2;
+  string kind = 3;
+  string accent = 4;
+  ViewportBounds bounds = 5;
+  repeated string paths = 6;
+}
+
+message ViewportScene {
+  repeated float camera_eye = 1;
+  repeated float camera_target = 2;
+  repeated ViewportDrawable drawables = 3;
+}
+
+message ViewportResponse {
+  string document_id = 1;
+  string selected_object_id = 2;
+  ViewportScene scene = 3;
+}
+
+message WorkbenchState {
+  string workbench_id = 1;
+  string display_name = 2;
+  string mode = 3;
+}
+
+message CommandDefinition {
+  string command_id = 1;
+  string label = 2;
+  string group = 3;
+  string shortcut = 4;
+  bool enabled = 5;
+  bool requires_selection = 6;
+  string description = 7;
+}
+
+message CommandCatalogResponse {
+  string document_id = 1;
+  WorkbenchState workbench = 2;
+  repeated CommandDefinition commands = 3;
+}
+
+message TaskPanelRow {
+  string label = 1;
+  string value = 2;
+  bool emphasis = 3;
+}
+
+message TaskPanelSection {
+  string section_id = 1;
+  string title = 2;
+  repeated TaskPanelRow rows = 3;
+}
+
+message TaskPanelResponse {
+  string document_id = 1;
+  string title = 2;
+  string description = 3;
+  repeated TaskPanelSection sections = 4;
+  repeated string suggested_commands = 5;
+}
+
+message FeatureHistoryEntry {
+  string object_id = 1;
+  string label = 2;
+  string object_type = 3;
+  uint32 sequence_index = 4;
+  string source_object_id = 5;
+  string role = 6;
+  bool suppressed = 7;
+  bool active = 8;
+  string inactive_reason = 9;
+  bool rolled_back = 10;
+}
+
+message FeatureHistoryResponse {
+  string document_id = 1;
+  repeated FeatureHistoryEntry entries = 2;
+}
+
+message DiagnosticsSummary {
+  uint32 total_features = 1;
+  uint32 suppressed_count = 2;
+  uint32 inactive_count = 3;
+  uint32 rolled_back_count = 4;
+  uint32 viewport_drawable_count = 5;
+  uint32 warning_count = 6;
+  uint32 error_count = 7;
+  bool history_marker_active = 8;
+  string worker_mode = 9;
+}
+
+message DiagnosticsSelection {
+  string object_id = 1;
+  string object_label = 2;
+  string object_type = 3;
+  string model_state = 4;
+  string dependency_note = 5;
+  bool visible_in_viewport = 6;
+}
+
+message DiagnosticSignal {
+  string level = 1;
+  string title = 2;
+  string detail = 3;
+}
+
+message DiagnosticsResponse {
+  string document_id = 1;
+  DiagnosticsSummary summary = 2;
+  DiagnosticsSelection selection = 3;
+  repeated DiagnosticSignal recent_signals = 4;
+}
+
+// CommandInvocation.arguments is currently used for lightweight mutation inputs such as:
+// - length_mm for partdesign.edit_pad
+// - length_mm for partdesign.pad
+// - depth_mm for partdesign.pocket / partdesign.edit_pocket
+// - sketch_label for partdesign.new_sketch
+// - history commands currently use the selected object / target object rather than extra arguments
+
+message BootReport {
+  repeated string services = 1;
+  repeated string event_streams = 2;
+}
+
+message SelectionRef {
+  string document_id = 1;
+  string object_id = 2;
+  string subelement = 3;
+  string selection_mode = 4;
+}
+
+message SelectionReply {
+  string selected_object_id = 1;
+}
+
+message SelectionModeOption {
+  string mode_id = 1;
+  string label = 2;
+  string description = 3;
+  bool enabled = 4;
+  uint32 object_count = 5;
+}
+
+message SelectionState {
+  string document_id = 1;
+  string current_mode = 2;
+  string selected_object_id = 3;
+  string selected_object_label = 4;
+  string selected_object_type = 5;
+  repeated SelectionModeOption available_modes = 6;
+}
+
+message SelectionModeRequest {
+  string document_id = 1;
+  string mode_id = 2;
+}
+
+message PreselectionState {
+  string document_id = 1;
+  string current_mode = 2;
+  string object_id = 3;
+  string object_label = 4;
+  string object_type = 5;
+  bool selectable = 6;
+  string model_state = 7;
+  string dependency_note = 8;
+  repeated string suggested_commands = 9;
+  string detail = 10;
+}
+
+message JobStatusEntry {
+  string job_id = 1;
+  string title = 2;
+  string command_id = 3;
+  string state = 4;
+  uint32 progress_percent = 5;
+  string detail = 6;
+  string object_id = 7;
+  repeated JobStageEntry stages = 8;
+}
+
+message JobStageEntry {
+  string stage_id = 1;
+  string label = 2;
+  string state = 3;
+  uint32 progress_percent = 4;
+}
+
+message JobStatusResponse {
+  string document_id = 1;
+  repeated JobStatusEntry jobs = 2;
+}
+
+message PreselectionRequest {
+  string document_id = 1;
+  string object_id = 2;
+}
+
+message CommandInvocation {
+  string command_id = 1;
+  string document_id = 2;
+  string target_object_id = 3;
+  map<string, string> arguments = 4;
+}
+
+message EventEnvelope {
+  string topic = 1;
+  string level = 2;
+  string message = 3;
+  string document_id = 4;
+  string object_id = 5;
+}
+
+message OpenDocumentRequest {
+  string file_path = 1;
+}
+
+message ObjectTreeRequest {
+  string document_id = 1;
+}
+
+message PropertyRequest {
+  string document_id = 1;
+  string object_id = 2;
+}
+
+message CommandReply {
+  string command_id = 1;
+  bool accepted = 2;
+  string status_message = 3;
+}
+
+message SubscribeRequest {
+  string document_id = 1;
+}
+
+message BootPayload {
+  BootReport boot_report = 1;
+  DocumentRef document = 2;
+  repeated ObjectNode object_tree = 3;
+  string selected_object_id = 4;
+  SelectionState selection_state = 5;
+  PreselectionState preselection_state = 6;
+  JobStatusResponse jobs = 7;
+  PropertyResponse properties = 8;
+  ViewportResponse viewport = 9;
+  FeatureHistoryResponse feature_history = 10;
+  CommandCatalogResponse command_catalog = 11;
+  TaskPanelResponse task_panel = 12;
+  DiagnosticsResponse diagnostics = 13;
+  repeated EventEnvelope events = 14;
+}
+
+message Empty {}
+
+service AppService {
+  rpc Bootstrap(Empty) returns (BootPayload);
+}
+
+service DocumentService {
+  rpc OpenDocument(OpenDocumentRequest) returns (DocumentRef);
+  rpc FetchObjectTree(ObjectTreeRequest) returns (ObjectTreeResponse);
+  rpc FetchProperties(PropertyRequest) returns (PropertyResponse);
+  rpc FetchViewport(ObjectTreeRequest) returns (ViewportResponse);
+  rpc FetchFeatureHistory(ObjectTreeRequest) returns (FeatureHistoryResponse);
+  rpc FetchCommands(ObjectTreeRequest) returns (CommandCatalogResponse);
+  rpc FetchTaskPanel(ObjectTreeRequest) returns (TaskPanelResponse);
+  rpc FetchDiagnostics(ObjectTreeRequest) returns (DiagnosticsResponse);
+  rpc FetchSelectionState(ObjectTreeRequest) returns (SelectionState);
+  rpc FetchPreselectionState(ObjectTreeRequest) returns (PreselectionState);
+  rpc FetchJobs(ObjectTreeRequest) returns (JobStatusResponse);
+}
+
+service CommandService {
+  rpc RunCommand(CommandInvocation) returns (CommandReply);
+}
+
+service EventService {
+  rpc Subscribe(SubscribeRequest) returns (stream EventEnvelope);
+}
+
+service SelectionService {
+  rpc SetSelection(SelectionRef) returns (SelectionReply);
+  rpc SetSelectionMode(SelectionModeRequest) returns (SelectionState);
+  rpc SetPreselection(PreselectionRequest) returns (PreselectionState);
+}

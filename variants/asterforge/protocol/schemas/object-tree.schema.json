@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/object-tree.schema.json",
+  "title": "ObjectTreeResponse",
+  "type": "object",
+  "required": [
+    "document",
+    "roots"
+  ],
+  "properties": {
+    "document": {
+      "$ref": "./document.schema.json"
+    },
+    "roots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/objectNode"
+      }
+    }
+  },
+  "$defs": {
+    "objectNode": {
+      "type": "object",
+      "required": [
+        "object_id",
+        "label",
+        "object_type",
+        "visibility",
+        "children"
+      ],
+      "properties": {
+        "object_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "object_type": {
+          "type": "string"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": [
+            "visible",
+            "hidden",
+            "inherited"
+          ]
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/objectNode"
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

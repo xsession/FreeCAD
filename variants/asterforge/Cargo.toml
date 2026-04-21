@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "backend/crates/api-gateway",
+    "native/freecad-bridge",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[workspace.dependencies]
+anyhow = "1"
+axum = { version = "0.8", features = ["json", "macros"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
