@@ -22,6 +22,7 @@ import os
 import platform
 import shutil
 import importlib
+from functools import lru_cache
 from dataclasses import dataclass, field
 
 
@@ -77,6 +78,13 @@ class BackendReport:
 # ======================================================================
 # Executable search
 # ======================================================================
+
+_VERSION_FLAGS = {
+    "gmsh": ("--version",),
+    "paraview": ("--version",),
+}
+
+_VERSION_DETECT_TIMEOUT = 1.0
 
 # Common installation locations beyond PATH
 _COMMON_DIRS = {
@@ -148,20 +156,25 @@ def find_executable(name, extra_paths=None):
     return None, ""
 
 
+@lru_cache(maxsize=128)
 def _detect_version(exe_path, name):
     """Try to detect version by running ``<exe> --version`` etc."""
     import subprocess
-    for flag in ("--version", "-v", "-version"):
+
+    flags = _VERSION_FLAGS.get(name.lower(), ("--version", "-v", "-version"))
+    for flag in flags:
         try:
             result = subprocess.run(
                 [exe_path, flag],
-                capture_output=True, text=True, timeout=5,
+                capture_output=True,
+                text=True,
+                timeout=_VERSION_DETECT_TIMEOUT,
             )
             output = (result.stdout + result.stderr).strip()
             if output:
                 # Return first line (usually contains version)
                 return output.splitlines()[0][:120]
-        except Exception:
+        except (OSError, subprocess.SubprocessError):
             continue
     return ""
 
@@ -227,8 +240,6 @@ _BACKEND_DEPS = {
          "Part of Elmer FEM installation (mesh format conversion)"),
         ("ElmerSolver_mpi", "executable", False,
          "Parallel Elmer solver (requires MPI)"),
-        ("ElmerGUI", "executable", False,
-         "Elmer graphical interface (optional)"),
     ],
     "SU2": [
         ("SU2_CFD", "executable", True,
@@ -509,9 +520,9 @@ def recommend_parallel_settings():
     phys_cores, logical_cores = detect_cpu_cores()
     gpu_count = detect_gpu_count()
 
-    # Leave 1-2 cores for the system
-    of_procs = max(1, phys_cores - 1)
-    elmer_procs = max(1, phys_cores - 1)
+    # Production defaults should use all detected physical cores.
+    of_procs = max(1, phys_cores)
+    elmer_procs = max(1, phys_cores)
 
     return {
         "cpu_physical": phys_cores,

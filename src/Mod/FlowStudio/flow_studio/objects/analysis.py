@@ -42,7 +42,7 @@ class CFDAnalysis(BaseFlowObject):
         super().__init__(obj)
 
         # --- Physics Domain selector ---
-        from flow_studio.physics_domains import available_domains
+        from flow_studio.core.domains import available_domains
         obj.addProperty(
             "App::PropertyEnumeration", "PhysicsDomain", "Analysis",
             "Physics discipline for this analysis"
@@ -108,7 +108,7 @@ class CFDAnalysis(BaseFlowObject):
         """Populate AnalysisType enum from the physics domain."""
         if not hasattr(obj, "AnalysisType"):
             return
-        from flow_studio.physics_domains import get_domain
+        from flow_studio.core.domains import get_domain
         domain = get_domain(domain_key)
         if domain and domain.analysis_types:
             obj.AnalysisType = domain.analysis_types

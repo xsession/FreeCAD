@@ -19,7 +19,7 @@ from flow_studio.enterprise.app.legacy_actions import (
     export_analysis_manifest,
     submit_analysis_to_runtime,
 )
-from flow_studio.workflow_guide import get_active_analysis
+from flow_studio.core.workflow import get_active_analysis
 
 translate = FreeCAD.Qt.translate
 

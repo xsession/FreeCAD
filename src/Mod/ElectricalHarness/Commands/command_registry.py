@@ -219,6 +219,20 @@ class CmdOpenArchitectureDoc(_BaseCommand):
         FreeCADGui.open(os.path.join(module_dir, "docs", "ARCHITECTURE.md"))
 
 
+def _has_command(command_name: str) -> bool:
+    command_api = getattr(FreeCADGui, "Command", None)
+    if command_api is not None:
+        get_command = getattr(command_api, "get", None)
+        if callable(get_command):
+            return bool(get_command(command_name))
+
+    list_commands = getattr(FreeCADGui, "listCommands", None)
+    if callable(list_commands):
+        return command_name in list_commands()
+
+    return False
+
+
 def register_commands() -> None:
     command_specs = {
         "ElectricalHarness_NewProject": CmdNewHarnessProject(),
@@ -231,5 +245,5 @@ def register_commands() -> None:
         "ElectricalHarness_OpenArchitecture": CmdOpenArchitectureDoc(),
     }
     for command_name, command in command_specs.items():
-        if not FreeCADGui.getCommand(command_name):
+        if not _has_command(command_name):
             FreeCADGui.addCommand(command_name, command)

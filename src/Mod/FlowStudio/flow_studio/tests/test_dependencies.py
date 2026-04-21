@@ -197,6 +197,11 @@ class TestCheckBackend(unittest.TestCase):
         self.assertIn("ElmerSolver", req_names)
         self.assertIn("ElmerGrid", req_names)
 
+    def test_elmer_dependency_list_does_not_require_gui(self):
+        from flow_studio.solver_deps import _BACKEND_DEPS
+        dep_names = {name for name, _kind, _required, _hint in _BACKEND_DEPS["Elmer"]}
+        self.assertNotIn("ElmerGUI", dep_names)
+
     @patch("flow_studio.solver_deps.find_executable")
     def test_elmer_missing_grid(self, mock_find):
         from flow_studio.solver_deps import check_backend

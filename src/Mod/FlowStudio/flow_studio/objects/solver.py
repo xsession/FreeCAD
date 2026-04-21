@@ -8,6 +8,37 @@
 from flow_studio.objects.base_object import BaseFlowObject
 
 
+def recommended_parallel_defaults(backend="OpenFOAM"):
+    """Return default parallel settings for a solver backend."""
+    defaults = {
+        "AutoParallel": False,
+        "NumProcessors": 1,
+        "ElmerSolverBinary": "ElmerSolver",
+    }
+
+    try:
+        from flow_studio.runtime.dependencies import recommend_parallel_settings
+
+        settings = recommend_parallel_settings()
+        backend_key = backend if backend in ("OpenFOAM", "Elmer") else "OpenFOAM"
+        backend_settings = settings.get(backend_key, {})
+        num_processors = max(
+            1,
+            int(backend_settings.get("NumProcessors", settings.get("cpu_physical", 1) or 1)),
+        )
+        defaults["AutoParallel"] = True
+        defaults["NumProcessors"] = num_processors
+        defaults["ElmerSolverBinary"] = (
+            "ElmerSolver_mpi"
+            if settings.get("Elmer", {}).get("mpi_available") and num_processors > 1
+            else "ElmerSolver"
+        )
+    except Exception:
+        pass
+
+    return defaults
+
+
 class Solver(BaseFlowObject):
     """CFD Solver configuration – supports multiple backends."""
 
@@ -23,6 +54,7 @@ class Solver(BaseFlowObject):
         )
         obj.SolverBackend = [
             "OpenFOAM",
+            "Elmer",
             "FluidX3D",
             "SU2",
             "Raysect",
@@ -50,6 +82,17 @@ class Solver(BaseFlowObject):
             "potentialFoam",
         ]
         obj.OpenFOAMSolver = "simpleFoam"
+
+        # --- Elmer-specific ---
+        obj.addProperty(
+            "App::PropertyEnumeration", "ElmerSolverBinary", "Elmer",
+            "Elmer solver executable used for CLI execution"
+        )
+        obj.ElmerSolverBinary = [
+            "ElmerSolver",
+            "ElmerSolver_mpi",
+        ]
+        obj.ElmerSolverBinary = "ElmerSolver"
 
         obj.addProperty(
             "App::PropertyInteger", "MaxIterations", "OpenFOAM",
@@ -113,6 +156,11 @@ class Solver(BaseFlowObject):
             "Automatically detect optimal number of processors"
         )
         obj.AutoParallel = False
+
+        parallel_defaults = recommended_parallel_defaults(obj.SolverBackend)
+        obj.NumProcessors = parallel_defaults["NumProcessors"]
+        obj.ElmerSolverBinary = parallel_defaults["ElmerSolverBinary"]
+        obj.AutoParallel = parallel_defaults["AutoParallel"]
 
         # --- FluidX3D-specific ---
         obj.addProperty(
@@ -209,7 +257,7 @@ class Solver(BaseFlowObject):
 
     def onChanged(self, obj, prop):
         """React to property changes."""
-        if prop == "AutoParallel" and hasattr(obj, "AutoParallel"):
+        if prop in ("AutoParallel", "SolverBackend") and hasattr(obj, "AutoParallel"):
             if obj.AutoParallel:
                 self._auto_detect_parallel(obj)
 
@@ -217,17 +265,19 @@ class Solver(BaseFlowObject):
     def _auto_detect_parallel(obj):
         """Auto-detect optimal parallel settings based on hardware."""
         try:
-            from flow_studio.solver_deps import recommend_parallel_settings
-            settings = recommend_parallel_settings()
+            backend = getattr(obj, "SolverBackend", "OpenFOAM")
+            defaults = recommended_parallel_defaults(backend)
 
             if hasattr(obj, "NumProcessors"):
-                backend = getattr(obj, "SolverBackend", "OpenFOAM")
-                if backend == "OpenFOAM":
-                    obj.NumProcessors = settings["OpenFOAM"]["NumProcessors"]
-                elif backend in ("Elmer",):
-                    obj.NumProcessors = settings["Elmer"]["NumProcessors"]
+                obj.NumProcessors = defaults["NumProcessors"]
+
+            if hasattr(obj, "ElmerSolverBinary"):
+                obj.ElmerSolverBinary = defaults["ElmerSolverBinary"]
 
             if hasattr(obj, "FluidX3DMultiGPU"):
+                from flow_studio.runtime.dependencies import recommend_parallel_settings
+
+                settings = recommend_parallel_settings()
                 fx3d = settings.get("FluidX3D", {})
                 obj.FluidX3DMultiGPU = fx3d.get("MultiGPU", False)
                 obj.FluidX3DNumGPUs = max(1, fx3d.get("NumGPUs", 1))

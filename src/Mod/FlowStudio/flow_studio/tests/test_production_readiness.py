@@ -327,12 +327,12 @@ class TestSolverRegistryProduction(unittest.TestCase):
         self.assertIn("Elmer", backends)
 
     def test_get_runner_returns_module_path(self):
-        entry = self.reg.get_runner("OpenFOAM")
+        entry = self.reg._REGISTRY_PATHS.get("OpenFOAM")
         self.assertIsNotNone(entry)
         self.assertIn("openfoam_runner", entry[0])
 
     def test_get_runner_elmer(self):
-        entry = self.reg.get_runner("Elmer")
+        entry = self.reg._REGISTRY_PATHS.get("Elmer")
         self.assertIsNotNone(entry)
         self.assertIn("elmer_runner", entry[0])
 
@@ -346,8 +346,8 @@ class TestSolverRegistryProduction(unittest.TestCase):
         self.assertIn("TestSolver", self.reg.backends_for_domain("CFD"))
 
         # Cleanup: remove the test entry so we don't pollute other tests
-        if "TestSolver" in self.reg._REGISTRY:
-            del self.reg._REGISTRY["TestSolver"]
+        if "TestSolver" in self.reg._REGISTRY_PATHS:
+            del self.reg._REGISTRY_PATHS["TestSolver"]
         if "CFD" in self.reg._DOMAIN_SOLVERS:
             if "TestSolver" in self.reg._DOMAIN_SOLVERS["CFD"]:
                 self.reg._DOMAIN_SOLVERS["CFD"].remove("TestSolver")
@@ -364,13 +364,14 @@ class TestDependencyDetectionProduction(unittest.TestCase):
         from flow_studio import solver_deps
         self.deps = solver_deps
 
-    def test_check_all_returns_all_seven_backends(self):
-        """Production needs all backends checkable."""
+    def test_check_all_returns_all_registered_dependency_groups(self):
+        """Production dependency scan should cover the full registered toolchain set."""
         from unittest.mock import patch
         with patch("shutil.which", return_value=None):
             reports = self.deps.check_all()
         expected = {"OpenFOAM", "FluidX3D", "Elmer", "SU2",
-                    "ParaView", "Meshing", "PostProcessing"}
+                    "ParaView", "Meshing", "PostProcessing", "Raysect",
+                    "Meep", "openEMS", "Optiland"}
         self.assertEqual(set(reports.keys()), expected)
 
     def test_elmer_requires_solver_and_grid(self):
@@ -391,17 +392,22 @@ class TestDependencyDetectionProduction(unittest.TestCase):
         self.assertIn("decomposePar", all_names)
 
     def test_detect_cpu_cores_returns_positive(self):
-        cores = self.deps.detect_cpu_cores()
-        self.assertGreater(cores, 0)
+        physical, logical = self.deps.detect_cpu_cores()
+        self.assertGreater(physical, 0)
+        self.assertGreaterEqual(logical, physical)
 
     def test_recommend_parallel_returns_sane_values(self):
         rec = self.deps.recommend_parallel_settings()
-        self.assertIn("cpu_cores", rec)
-        self.assertIn("recommended_mpi_procs", rec)
-        self.assertGreater(rec["recommended_mpi_procs"], 0)
-        # Should not recommend more procs than cores
-        self.assertLessEqual(rec["recommended_mpi_procs"],
-                             rec["cpu_cores"])
+        self.assertIn("cpu_physical", rec)
+        self.assertIn("cpu_logical", rec)
+        self.assertIn("OpenFOAM", rec)
+        self.assertIn("Elmer", rec)
+        self.assertGreater(rec["OpenFOAM"]["NumProcessors"], 0)
+        self.assertGreater(rec["Elmer"]["NumProcessors"], 0)
+        self.assertEqual(rec["OpenFOAM"]["NumProcessors"],
+                         rec["cpu_physical"])
+        self.assertEqual(rec["Elmer"]["NumProcessors"],
+                         rec["cpu_physical"])
 
 
 # =====================================================================

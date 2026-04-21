@@ -26,6 +26,14 @@ The SIF format reference:
 from collections import OrderedDict
 
 
+def _normalize_key(key):
+    return str(key).replace("_", " ")
+
+
+def _infer_procedure(equation_name):
+    return SifProcedure(str(equation_name), str(equation_name))
+
+
 class SifSection:
     """One named section of a SIF file (e.g., 'Body 1').
 
@@ -114,7 +122,9 @@ class SifBuilder:
         self.body_forces = []
 
     # ---- Header ----
-    def set_header(self, mesh_db=".", mesh_dir="mesh", results_dir=""):
+    def set_header(self, mesh_db=".", mesh_dir="mesh", results_dir="", result_dir=None):
+        if result_dir is not None:
+            results_dir = result_dir
         self.header["Mesh DB"] = f'"{mesh_db}" "{mesh_dir}"'
         self.header["Include Path"] = '""'
         self.header["Results Directory"] = f'"{results_dir}"'
@@ -125,17 +135,33 @@ class SifBuilder:
                        sim_type="Steady State",
                        steady_max_iter=1,
                        output_level=5, **kwargs):
+        steady_state = kwargs.pop("steady_state", None)
+        time_steps = kwargs.pop("time_steps", None)
+        dt = kwargs.pop("dt", None)
+
+        if steady_state is False:
+            sim_type = "Transient"
+        elif steady_state is True:
+            sim_type = "Steady State"
+
         self.simulation["Coordinate System"] = coord_system
         self.simulation["Simulation Type"] = sim_type
         self.simulation["Steady State Max Iterations"] = steady_max_iter
         self.simulation["Max Output Level"] = output_level
+        if time_steps is not None:
+            self.simulation["Timestep Intervals"] = time_steps
+        if dt is not None:
+            self.simulation["Timestep Sizes"] = dt
         for k, v in kwargs.items():
-            self.simulation[k.replace("_", " ")] = v
+            self.simulation[_normalize_key(k)] = v
         return self
 
     # ---- Constants ----
-    def set_constant(self, key, value):
-        self.constants[key] = value
+    def set_constant(self, key=None, value=None, **kwargs):
+        if key is not None:
+            self.constants[_normalize_key(key)] = value
+        for extra_key, extra_value in kwargs.items():
+            self.constants[_normalize_key(extra_key)] = extra_value
         return self
 
     # ---- Bodies ----
@@ -156,15 +182,17 @@ class SifBuilder:
         return sec
 
     # ---- Materials ----
-    def add_material(self, name):
+    def add_material(self, name, **properties):
         idx = len(self.materials) + 1
         sec = SifSection("Material", idx, name)
         sec["Name"] = f'"{name}"'
+        for key, value in properties.items():
+            sec[_normalize_key(key)] = value
         self.materials.append(sec)
         return sec
 
     # ---- Solvers ----
-    def add_solver(self, equation_name, procedure, variable=None,
+    def add_solver(self, equation_name, procedure=None, variable=None,
                    variable_dofs=1, **settings):
         """Add a Solver block.
 
@@ -183,13 +211,15 @@ class SifBuilder:
         """
         idx = len(self.solvers) + 1
         sec = SifSection("Solver", idx)
+        if procedure is None:
+            procedure = _infer_procedure(equation_name)
         sec["Equation"] = f'"{equation_name}"'
         sec["Procedure"] = procedure
         if variable:
             sec["Variable"] = f'"{variable}"'
         sec["Variable DOFs"] = variable_dofs
         for k, v in settings.items():
-            sec[k] = v
+            sec[_normalize_key(k)] = v
         self.solvers.append(sec)
         return sec
 
@@ -213,26 +243,37 @@ class SifBuilder:
         return sec
 
     # ---- Boundary Conditions ----
-    def add_boundary_condition(self, name):
+    def add_boundary_condition(self, name, **values):
         idx = len(self.boundary_conditions) + 1
         sec = SifSection("Boundary Condition", idx, name)
         sec["Name"] = f'"{name}"'
+        for key, value in values.items():
+            sec[_normalize_key(key)] = value
         self.boundary_conditions.append(sec)
         return sec
 
+    def add_bc(self, name, **values):
+        return self.add_boundary_condition(name, **values)
+
     # ---- Initial Conditions ----
-    def add_initial_condition(self, name):
+    def add_initial_condition(self, name=None, **values):
         idx = len(self.initial_conditions) + 1
+        if name is None:
+            name = f"Initial Condition {idx}"
         sec = SifSection("Initial Condition", idx, name)
         sec["Name"] = f'"{name}"'
+        for key, value in values.items():
+            sec[_normalize_key(key)] = value
         self.initial_conditions.append(sec)
         return sec
 
     # ---- Body Forces ----
-    def add_body_force(self, name):
+    def add_body_force(self, name, **values):
         idx = len(self.body_forces) + 1
         sec = SifSection("Body Force", idx, name)
         sec["Name"] = f'"{name}"'
+        for key, value in values.items():
+            sec[_normalize_key(key)] = value
         self.body_forces.append(sec)
         return sec
 
@@ -272,6 +313,8 @@ def _format_kv(key, value):
     else:
         # String – check if already quoted
         s = str(value)
+        if key == "Variable" and len(s) >= 2 and s[0] == '"' and s[-1] == '"':
+            s = s[1:-1]
         return f'{key} = {s}'
 
 
@@ -289,6 +332,8 @@ def _format_single(value):
 
 def _format_float(value):
     """Format float – use scientific notation for very small/large numbers."""
-    if abs(value) < 1e-3 or abs(value) > 1e6:
+    if abs(value) < 1e-4 or abs(value) > 1e9:
         return f"{value:.6e}"
+    if float(value).is_integer():
+        return str(int(value))
     return f"{value:g}"

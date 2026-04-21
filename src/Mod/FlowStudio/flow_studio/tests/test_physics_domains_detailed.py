@@ -206,11 +206,11 @@ class TestThermalDomain(unittest.TestCase):
 class TestDomainRegistration(unittest.TestCase):
     """Test register_domain / get_domain / available_domains / all_domains."""
 
-    def test_all_five_registered(self):
+    def test_all_six_registered(self):
         keys = available_domains()
-        self.assertEqual(len(keys), 5)
+        self.assertEqual(len(keys), 6)
         for k in ("CFD", "Structural", "Electrostatic",
-                   "Electromagnetic", "Thermal"):
+                   "Electromagnetic", "Thermal", "Optical"):
             self.assertIn(k, keys)
 
     def test_get_domain_returns_correct(self):
@@ -238,7 +238,7 @@ class TestDomainRegistration(unittest.TestCase):
 
     def test_all_domains_count(self):
         domains = all_domains()
-        self.assertEqual(len(domains), 5)
+        self.assertEqual(len(domains), 6)
         self.assertIsInstance(domains[0], PhysicsDomain)
 
     def test_register_custom_domain(self):
@@ -328,9 +328,15 @@ class TestCrossDomainConsistency(unittest.TestCase):
         keys = [d.key for d in all_domains()]
         self.assertEqual(len(keys), len(set(keys)), "Duplicate domain keys")
 
-    def test_elmer_in_all_domains(self):
-        """Elmer should be available in every domain."""
+    def test_solver_backends_match_domain_intent(self):
+        """Classical FEM domains use Elmer; optical uses optics backends."""
         for d in all_domains():
+            if d.key == "Optical":
+                self.assertNotIn("Elmer", d.solver_backends)
+                for backend in ("Raysect", "Meep", "openEMS", "Optiland"):
+                    self.assertIn(backend, d.solver_backends)
+                continue
+
             self.assertIn("Elmer", d.solver_backends,
                           f"Domain {d.key} missing Elmer backend")
 

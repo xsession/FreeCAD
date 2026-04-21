@@ -65,7 +65,7 @@ def available_backends():
 def available_backends_installed(extra_paths=None):
     """Return backends whose required dependencies are satisfied.
 
-    Lazily imports :mod:`flow_studio.solver_deps` so this module stays
+    Lazily imports :mod:`flow_studio.runtime.dependencies` so this module stays
     lightweight when dependency checking isn't needed.
 
     Parameters
@@ -79,7 +79,7 @@ def available_backends_installed(extra_paths=None):
         Backend names (e.g. ``["Elmer"]``) that are actually installed.
     """
     try:
-        from flow_studio.solver_deps import check_backend as _check
+        from flow_studio.runtime.dependencies import check_backend as _check
     except ImportError:
         # Fallback: return all registered (can't verify)
         return available_backends()
@@ -121,7 +121,7 @@ def backends_for_domain_installed(domain_key, extra_paths=None):
     """Return installed solver backends for *domain_key*.
 
     Combines :func:`backends_for_domain` with dependency checks from
-    :mod:`flow_studio.solver_deps` to filter out solvers that are
+    :mod:`flow_studio.runtime.dependencies` to filter out solvers that are
     registered but not actually installed on this machine.
 
     Parameters

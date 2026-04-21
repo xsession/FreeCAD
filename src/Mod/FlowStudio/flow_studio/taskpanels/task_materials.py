@@ -7,8 +7,9 @@
 
 from PySide import QtGui
 
-from flow_studio.engineering_database import material_presets
-from flow_studio.engineering_database_editor import show_engineering_database_editor
+from flow_studio.catalog.database import material_presets
+from flow_studio.catalog.editor import show_engineering_database_editor
+from flow_studio.catalog.optics import OPTICAL_MATERIAL_PRESETS
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
 
 
@@ -61,14 +62,7 @@ ELECTROMAGNETIC_PRESETS = {
     "Iron (soft)": {"MaterialName": "Soft Iron", "RelativePermeability": 5000.0, "RelativePermittivity": 1.0, "ElectricConductivity": 1.0e7, "Density": 7870.0},
 }
 
-OPTICAL_PRESETS = {
-    "Vacuum": {"MaterialName": "Vacuum", "RefractiveIndex": 1.0, "AbbeNumber": 0.0, "ExtinctionCoefficient": 0.0, "Transmission": 1.0, "Reflectivity": 0.0, "ReferenceWavelength": 587.6},
-    "Air": {"MaterialName": "Air", "RefractiveIndex": 1.000293, "AbbeNumber": 0.0, "ExtinctionCoefficient": 0.0, "Transmission": 1.0, "Reflectivity": 0.0, "ReferenceWavelength": 587.6},
-    "BK7": {"MaterialName": "BK7", "RefractiveIndex": 1.5168, "AbbeNumber": 64.17, "ExtinctionCoefficient": 0.0, "Transmission": 0.92, "Reflectivity": 0.04, "ReferenceWavelength": 587.6},
-    "Fused Silica": {"MaterialName": "Fused Silica", "RefractiveIndex": 1.4585, "AbbeNumber": 67.82, "ExtinctionCoefficient": 0.0, "Transmission": 0.94, "Reflectivity": 0.035, "ReferenceWavelength": 587.6},
-    "Sapphire": {"MaterialName": "Sapphire", "RefractiveIndex": 1.7682, "AbbeNumber": 72.2, "ExtinctionCoefficient": 0.0, "Transmission": 0.86, "Reflectivity": 0.076, "ReferenceWavelength": 587.6},
-    "Mirror Aluminum": {"MaterialName": "Aluminum Mirror", "RefractiveIndex": 0.65, "AbbeNumber": 0.0, "ExtinctionCoefficient": 5.3, "Transmission": 0.0, "Reflectivity": 0.88, "ReferenceWavelength": 550.0},
-}
+OPTICAL_PRESETS = OPTICAL_MATERIAL_PRESETS
 
 
 class TaskMaterial(FloEFDTaskPanel):
@@ -112,6 +106,14 @@ class TaskMaterial(FloEFDTaskPanel):
         self._add_float_if_present(props, "ReferenceWavelength", "Reference wavelength [nm]", 1.0, 1e6, 3, 1.0)
         self._add_float_if_present(props, "WavelengthMin", "Wavelength min [nm]", 1.0, 1e6, 3, 1.0)
         self._add_float_if_present(props, "WavelengthMax", "Wavelength max [nm]", 1.0, 1e6, 3, 1.0)
+        self._add_float_if_present(props, "AbsorptionLength", "Absorption length [mm]", 0.0, 1e12, 3, 1.0)
+        self._add_float_if_present(props, "SurfaceRoughness", "Surface roughness [um]", 0.0, 1e6, 4, 0.01)
+        self._add_float_if_present(props, "SellmeierB1", "Sellmeier B1 [-]", -1e6, 1e6, 8, 0.001)
+        self._add_float_if_present(props, "SellmeierB2", "Sellmeier B2 [-]", -1e6, 1e6, 8, 0.001)
+        self._add_float_if_present(props, "SellmeierB3", "Sellmeier B3 [-]", -1e6, 1e6, 8, 0.001)
+        self._add_float_if_present(props, "SellmeierC1", "Sellmeier C1 [um^2]", -1e6, 1e6, 8, 0.001)
+        self._add_float_if_present(props, "SellmeierC2", "Sellmeier C2 [um^2]", -1e6, 1e6, 8, 0.001)
+        self._add_float_if_present(props, "SellmeierC3", "Sellmeier C3 [um^2]", -1e6, 1e6, 8, 0.001)
 
         layout.addStretch()
         return widget

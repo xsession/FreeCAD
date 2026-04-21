@@ -245,7 +245,19 @@ if(FREECAD_USE_PCH)
     target_precompile_headers(PartDesignGui PRIVATE
             $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
     )
+
+    if (MSVC)
+        set_source_files_properties(
+            TaskRevolutionParameters.cpp
+            PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE)
+    endif()
 endif(FREECAD_USE_PCH)
+
+if (MSVC)
+    set_source_files_properties(
+        TaskRevolutionParameters.cpp
+        PROPERTIES COMPILE_FLAGS "/Od /Ob0")
+endif()
 
 target_include_directories(
     PartDesignGui

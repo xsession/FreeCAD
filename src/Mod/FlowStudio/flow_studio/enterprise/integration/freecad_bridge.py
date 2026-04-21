@@ -229,6 +229,9 @@ class LegacyAnalysisBridge:
                 return {}
             return {
                 "elmer.primary": {
+                    "solver_binary": str(
+                        _safe_getattr(solver_object, "ElmerSolverBinary", "ElmerSolver")
+                    ),
                     "num_processors": int(_safe_getattr(solver_object, "NumProcessors", 1)),
                     "time_step": float(_safe_getattr(solver_object, "TimeStep", 0.0)),
                     "end_time": float(_safe_getattr(solver_object, "EndTime", 1.0)),

@@ -106,5 +106,32 @@ class TestPackageImports(unittest.TestCase):
         self.assertTrue(hasattr(registry, "get_runner"))
 
 
+class _FakeFeaturePython:
+    def __init__(self):
+        self.PropertiesList = []
+        self.status = {}
+
+    def addProperty(self, _prop_type, name, _group, _doc):
+        if name not in self.PropertiesList:
+            self.PropertiesList.append(name)
+
+    def setPropertyStatus(self, name, status):
+        self.status[name] = status
+
+
+class TestBoundaryConditionBase(unittest.TestCase):
+    """Regression tests for shared boundary-condition object setup."""
+
+    def test_optical_bc_base_adds_bclabel_property(self):
+        from flow_studio.objects.bc_optical import BCOpticalSource
+
+        obj = _FakeFeaturePython()
+        BCOpticalSource(obj)
+
+        self.assertIn("BCLabel", obj.PropertiesList)
+        self.assertEqual(obj.BCLabel, "Optical Source")
+        self.assertEqual(obj.FlowType, "FlowStudio::BCOpticalSource")
+
+
 if __name__ == "__main__":
     unittest.main()

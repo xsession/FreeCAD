@@ -47,8 +47,8 @@ class TestRegistryPaths(unittest.TestCase):
         self.assertEqual(cls, "ElmerRunner")
         self.assertIn("elmer_runner", mod)
 
-    def test_registry_has_three_backends(self):
-        self.assertEqual(len(_REGISTRY_PATHS), 3)
+    def test_registry_has_seven_backends(self):
+        self.assertEqual(len(_REGISTRY_PATHS), 7)
 
     def test_all_entries_are_tuples(self):
         for name, entry in _REGISTRY_PATHS.items():
@@ -70,9 +70,9 @@ class TestRegistryPaths(unittest.TestCase):
 class TestDomainSolvers(unittest.TestCase):
     """Test the _DOMAIN_SOLVERS mapping."""
 
-    def test_all_five_domains_present(self):
+    def test_all_six_domains_present(self):
         for domain in ("CFD", "Structural", "Electrostatic",
-                       "Electromagnetic", "Thermal"):
+                       "Electromagnetic", "Thermal", "Optical"):
             self.assertIn(domain, _DOMAIN_SOLVERS,
                           f"Domain {domain} missing from _DOMAIN_SOLVERS")
 
@@ -82,12 +82,17 @@ class TestDomainSolvers(unittest.TestCase):
         self.assertIn("FluidX3D", _DOMAIN_SOLVERS["CFD"])
         self.assertIn("Elmer", _DOMAIN_SOLVERS["CFD"])
 
-    def test_non_cfd_domains_elmer_only(self):
+    def test_non_cfd_non_optical_domains_elmer_only(self):
         for domain in ("Structural", "Electrostatic",
                        "Electromagnetic", "Thermal"):
             solvers = _DOMAIN_SOLVERS[domain]
             self.assertEqual(solvers, ["Elmer"],
                              f"{domain} should only have Elmer")
+
+    def test_optical_has_four_solvers(self):
+        self.assertEqual(len(_DOMAIN_SOLVERS["Optical"]), 4)
+        for backend in ("Raysect", "Meep", "openEMS", "Optiland"):
+            self.assertIn(backend, _DOMAIN_SOLVERS["Optical"])
 
     def test_all_referenced_backends_exist(self):
         """Every backend name in domain solvers should be in _REGISTRY_PATHS."""

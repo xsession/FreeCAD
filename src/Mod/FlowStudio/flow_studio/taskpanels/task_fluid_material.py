@@ -36,7 +36,7 @@ MATERIALS_DB = {
 }
 
 try:
-    from flow_studio.engineering_database import material_presets as _material_presets
+    from flow_studio.catalog.database import material_presets as _material_presets
     MATERIALS_DB.update(
         {
             name: props
@@ -125,7 +125,7 @@ class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
             self.sp_pr.setValue(m["PrandtlNumber"])
 
     def _open_database(self):
-        from flow_studio.engineering_database_editor import show_engineering_database_editor
+        from flow_studio.catalog.editor import show_engineering_database_editor
         show_engineering_database_editor()
 
     def _store(self):

@@ -7,9 +7,9 @@
 
 import FreeCAD
 import FreeCADGui
-from PySide import QtGui
+from PySide import QtCore, QtGui
 
-from flow_studio.geometry_tools import (
+from flow_studio.tools.geometry import (
     GeometryCheckOptions,
     check_geometry,
     create_or_update_fluid_volume,
@@ -24,6 +24,10 @@ from flow_studio.geometry_tools import (
 
 def _format_volume(value):
     return f"{value:.6g} m^3"
+
+
+_USER_ROLE = QtCore.Qt.UserRole
+_CHECKED_STATE = QtCore.Qt.Checked
 
 
 class _SimpleTaskPanel:
@@ -112,8 +116,8 @@ class TaskCheckGeometry(_SimpleTaskPanel):
         objects = []
         for index in range(self.state_tree.topLevelItemCount()):
             item = self.state_tree.topLevelItem(index)
-            obj_name = item.data(0, 32)
-            if item.checkState(0) == 2 and obj_name:
+            obj_name = item.data(0, _USER_ROLE)
+            if item.checkState(0) == _CHECKED_STATE and obj_name:
                 obj = FreeCAD.ActiveDocument.getObject(obj_name) if FreeCAD.ActiveDocument else None
                 if obj is not None:
                     objects.append(obj)
@@ -123,8 +127,8 @@ class TaskCheckGeometry(_SimpleTaskPanel):
         self.state_tree.clear()
         for obj in iter_geometry_objects():
             item = QtGui.QTreeWidgetItem([getattr(obj, "Label", obj.Name)])
-            item.setData(0, 32, obj.Name)
-            item.setCheckState(0, 2)
+            item.setData(0, _USER_ROLE, obj.Name)
+            item.setCheckState(0, _CHECKED_STATE)
             shape = getattr(obj, "Shape", None)
             try:
                 if shape is not None and shape.Solids:

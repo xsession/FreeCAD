@@ -24,7 +24,7 @@ class TestPhysicsDomains(unittest.TestCase):
         from flow_studio.physics_domains import available_domains
         ids = available_domains()
         for domain in ("CFD", "Structural", "Electrostatic",
-                       "Electromagnetic", "Thermal"):
+                       "Electromagnetic", "Thermal", "Optical"):
             self.assertIn(domain, ids)
 
     def test_domain_has_solver_backends(self):
@@ -52,7 +52,7 @@ class TestPhysicsDomains(unittest.TestCase):
     def test_domain_all(self):
         from flow_studio.physics_domains import all_domains
         domains = all_domains()
-        self.assertEqual(len(domains), 5)
+        self.assertEqual(len(domains), 6)
 
 
 class TestDomainSolverRegistry(unittest.TestCase):

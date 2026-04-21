@@ -9,8 +9,8 @@ import FreeCAD
 import FreeCADGui
 from PySide import QtGui
 
-from flow_studio.engineering_database import fan_presets
-from flow_studio.engineering_database_editor import show_engineering_database_editor
+from flow_studio.catalog.database import fan_presets
+from flow_studio.catalog.editor import show_engineering_database_editor
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
 
 
@@ -172,6 +172,7 @@ class TaskFan(FloEFDTaskPanel):
         fan.addWidget(btn_db)
         self.curve_table = QtGui.QTableWidget(0, 2)
         self.curve_table.setHorizontalHeaderLabels(["Volume flow rate [m^3/s]", "Pressure difference [Pa]"])
+        self.curve_table.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
         self.curve_table.horizontalHeader().setStretchLastSection(True)
         fan.addWidget(self.curve_table)
         self.sp_p = self._spin_float(self.obj.ReferencePressure, 0, 1e9, 2, 100.0)

@@ -19,6 +19,45 @@ SET(FlowStudioPackage_SRCS
     flow_studio/workflow_guide.py
 )
 
+SET(FlowStudioApi_SRCS
+    flow_studio/api/__init__.py
+    flow_studio/api/factories.py
+)
+
+SET(FlowStudioCatalog_SRCS
+    flow_studio/catalog/__init__.py
+    flow_studio/catalog/database.py
+    flow_studio/catalog/editor.py
+    flow_studio/catalog/optics.py
+)
+
+SET(FlowStudioCore_SRCS
+    flow_studio/core/__init__.py
+    flow_studio/core/domains.py
+    flow_studio/core/workflow.py
+)
+
+SET(FlowStudioRuntime_SRCS
+    flow_studio/runtime/__init__.py
+    flow_studio/runtime/dependencies.py
+    flow_studio/runtime/installer.py
+)
+
+SET(FlowStudioTools_SRCS
+    flow_studio/tools/__init__.py
+    flow_studio/tools/geometry.py
+)
+
+SET(FlowStudioUi_SRCS
+    flow_studio/ui/__init__.py
+    flow_studio/ui/layouts.py
+)
+
+SET(FlowStudioWorkflows_SRCS
+    flow_studio/workflows/__init__.py
+    flow_studio/workflows/profiles.py
+)
+
 SET(FlowStudioEnterprise_SRCS
     flow_studio/enterprise/__init__.py
     flow_studio/enterprise/bootstrap.py
@@ -78,6 +117,7 @@ SET(FlowStudioEnterpriseTesting_SRCS
 
 SET(FlowStudioDocs_SRCS
     docs/ARCHITECTURE.md
+    docs/CST_STUDIO_SUITE_LAYOUT_DEEPSEARCH.md
     docs/OPTICAL_SOLVER_DEEPSEARCH.md
 )
 
@@ -208,11 +248,14 @@ SET(FlowStudioTests_SRCS
     flow_studio/tests/test_enterprise_adapter_matrix.py
     flow_studio/tests/test_elmer_sif_detailed.py
     flow_studio/tests/test_mesh_and_materials.py
-    flow_studio/tests/test_multiphysics.py
+        flow_studio/tests/test_multiphysics.py
+        flow_studio/tests/test_elmer_runner_selection.py
     flow_studio/tests/test_objects.py
     flow_studio/tests/test_openfoam.py
     flow_studio/tests/test_physics_domains_detailed.py
     flow_studio/tests/test_registry_detailed.py
+    flow_studio/tests/test_solver_defaults.py
+    flow_studio/tests/test_workflow_profiles.py
 )
 
 SET(FlowStudioIcons_SRCS
@@ -269,6 +312,9 @@ SET(FlowStudioIcons_SRCS
 SET(all_files
     ${FlowStudioBase_SRCS}
     ${FlowStudioPackage_SRCS}
+    ${FlowStudioApi_SRCS}
+    ${FlowStudioCatalog_SRCS}
+    ${FlowStudioCore_SRCS}
     ${FlowStudioEnterprise_SRCS}
     ${FlowStudioEnterpriseAdapters_SRCS}
     ${FlowStudioEnterpriseCore_SRCS}
@@ -280,10 +326,14 @@ SET(all_files
     ${FlowStudioEnterpriseTesting_SRCS}
     ${FlowStudioFeminout_SRCS}
     ${FlowStudioObjects_SRCS}
+    ${FlowStudioRuntime_SRCS}
     ${FlowStudioSolvers_SRCS}
     ${FlowStudioTaskpanels_SRCS}
+    ${FlowStudioTools_SRCS}
+    ${FlowStudioUi_SRCS}
     ${FlowStudioUtils_SRCS}
     ${FlowStudioViewproviders_SRCS}
+    ${FlowStudioWorkflows_SRCS}
     ${FlowStudioTests_SRCS}
     ${FlowStudioDocs_SRCS}
     ${FlowStudioIcons_SRCS}
@@ -297,6 +347,9 @@ fc_copy_sources(FlowStudio "${CMAKE_BINARY_DIR}/Mod/FlowStudio" ${all_files})
 
 INSTALL(FILES ${FlowStudioBase_SRCS} DESTINATION Mod/FlowStudio)
 INSTALL(FILES ${FlowStudioPackage_SRCS} DESTINATION Mod/FlowStudio/flow_studio)
+INSTALL(FILES ${FlowStudioApi_SRCS} DESTINATION Mod/FlowStudio/flow_studio/api)
+INSTALL(FILES ${FlowStudioCatalog_SRCS} DESTINATION Mod/FlowStudio/flow_studio/catalog)
+INSTALL(FILES ${FlowStudioCore_SRCS} DESTINATION Mod/FlowStudio/flow_studio/core)
 INSTALL(FILES ${FlowStudioEnterprise_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise)
 INSTALL(FILES ${FlowStudioEnterpriseAdapters_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/adapters)
 INSTALL(FILES ${FlowStudioEnterpriseCore_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/core)
@@ -308,10 +361,14 @@ INSTALL(FILES ${FlowStudioEnterpriseServices_SRCS} DESTINATION Mod/FlowStudio/fl
 INSTALL(FILES ${FlowStudioEnterpriseTesting_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise/testing)
 INSTALL(FILES ${FlowStudioFeminout_SRCS} DESTINATION Mod/FlowStudio/flow_studio/feminout)
 INSTALL(FILES ${FlowStudioObjects_SRCS} DESTINATION Mod/FlowStudio/flow_studio/objects)
+INSTALL(FILES ${FlowStudioRuntime_SRCS} DESTINATION Mod/FlowStudio/flow_studio/runtime)
 INSTALL(FILES ${FlowStudioSolvers_SRCS} DESTINATION Mod/FlowStudio/flow_studio/solvers)
 INSTALL(FILES ${FlowStudioTaskpanels_SRCS} DESTINATION Mod/FlowStudio/flow_studio/taskpanels)
+INSTALL(FILES ${FlowStudioTools_SRCS} DESTINATION Mod/FlowStudio/flow_studio/tools)
+INSTALL(FILES ${FlowStudioUi_SRCS} DESTINATION Mod/FlowStudio/flow_studio/ui)
 INSTALL(FILES ${FlowStudioUtils_SRCS} DESTINATION Mod/FlowStudio/flow_studio/utils)
 INSTALL(FILES ${FlowStudioViewproviders_SRCS} DESTINATION Mod/FlowStudio/flow_studio/viewproviders)
+INSTALL(FILES ${FlowStudioWorkflows_SRCS} DESTINATION Mod/FlowStudio/flow_studio/workflows)
 INSTALL(FILES ${FlowStudioTests_SRCS} DESTINATION Mod/FlowStudio/flow_studio/tests)
 INSTALL(FILES ${FlowStudioDocs_SRCS} DESTINATION Mod/FlowStudio/docs)
 INSTALL(FILES ${FlowStudioIcons_SRCS} DESTINATION Mod/FlowStudio/Resources/icons)

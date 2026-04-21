@@ -27,10 +27,18 @@ class EngineeringDatabaseDialog(QtGui.QDialog):
         super().__init__(parent)
         self.setWindowTitle("FlowStudio Engineering Database")
         self.resize(1000, 720)
+        self.setAttribute(QtCore.Qt.WA_DeleteOnClose, False)
+        self.setWindowModality(QtCore.Qt.NonModal)
+        self.setWindowFlags(self.windowFlags() | QtCore.Qt.Window)
         self.database = load_database()
         self.current_path: list[str] = []
         self._build_ui()
         self._populate_tree()
+
+    def closeEvent(self, event):
+        global _ENGINEERING_DATABASE_DIALOG
+        _ENGINEERING_DATABASE_DIALOG = None
+        super().closeEvent(event)
 
     def _build_ui(self):
         layout = QtGui.QVBoxLayout(self)
@@ -308,7 +316,51 @@ class EngineeringDatabaseDialog(QtGui.QDialog):
         FreeCAD.Console.PrintMessage(f"FlowStudio: Engineering database reset at {user_database_path()}\n")
 
 
+_ENGINEERING_DATABASE_DIALOG = None
+
+
+def _dialog_parent():
+    try:
+        import FreeCADGui
+
+        main_window = FreeCADGui.getMainWindow()
+        if main_window is not None:
+            return main_window
+    except Exception:
+        pass
+
+    app = QtGui.QApplication.instance()
+    if app is None:
+        return None
+
+    for widget in app.topLevelWidgets():
+        if isinstance(widget, QtGui.QMainWindow):
+            return widget
+
+    return app.activeWindow()
+
+
 def show_engineering_database_editor():
-    dialog = EngineeringDatabaseDialog()
-    dialog.exec_()
+    global _ENGINEERING_DATABASE_DIALOG
+
+    try:
+        dialog_valid = _ENGINEERING_DATABASE_DIALOG is not None and _ENGINEERING_DATABASE_DIALOG.isVisible() is not None
+    except RuntimeError:
+        dialog_valid = False
+
+    if not dialog_valid:
+        _ENGINEERING_DATABASE_DIALOG = EngineeringDatabaseDialog(parent=_dialog_parent())
+
+    dialog = _ENGINEERING_DATABASE_DIALOG
+    dialog.setParent(_dialog_parent())
+    dialog.setWindowFlags(dialog.windowFlags() | QtCore.Qt.Window)
+    dialog.setWindowModality(QtCore.Qt.NonModal)
+    dialog.showNormal()
+    dialog.show()
+    try:
+        dialog.raise_()
+    except AttributeError:
+        dialog.raise()
+    dialog.activateWindow()
+    FreeCAD.Console.PrintMessage("FlowStudio: Engineering database editor opened\n")
     return dialog

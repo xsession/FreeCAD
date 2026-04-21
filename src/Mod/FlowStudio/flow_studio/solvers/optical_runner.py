@@ -86,9 +86,12 @@ class OpticalRunner(BaseSolverRunner):
                 ]))
             elif flow_type == "FlowStudio::OpticalMaterial":
                 manifest["materials"].append(self._props(obj, [
-                    "MaterialName", "MaterialPreset", "RefractiveIndex", "AbbeNumber",
-                    "ExtinctionCoefficient", "Transmission", "Reflectivity",
-                    "ReferenceWavelength", "WavelengthMin", "WavelengthMax",
+                    "MaterialName", "MaterialPreset", "OpticalRole", "DispersionModel",
+                    "RefractiveIndex", "AbbeNumber", "ExtinctionCoefficient",
+                    "Transmission", "Reflectivity", "ReferenceWavelength",
+                    "WavelengthMin", "WavelengthMax", "AbsorptionLength",
+                    "SurfaceRoughness", "SellmeierB1", "SellmeierB2", "SellmeierB3",
+                    "SellmeierC1", "SellmeierC2", "SellmeierC3",
                 ]))
             elif flow_type == "FlowStudio::BCOpticalSource":
                 manifest["sources"].append(self._props(obj, [

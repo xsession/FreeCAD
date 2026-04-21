@@ -14,6 +14,13 @@ from __future__ import annotations
 import json
 from typing import Any, Iterable
 
+from flow_studio.enterprise.adapters import ElmerSolverAdapter, OpenFOAMSolverAdapter
+
+try:
+    from flow_studio.enterprise.adapters import FluidX3DOptionalAdapter
+except Exception:  # pragma: no cover - optional adapter may be unavailable
+    FluidX3DOptionalAdapter = None
+
 
 ADAPTER_MATRIX_CSV_FIELDNAMES = (
     "adapter_id",
@@ -105,3 +112,36 @@ def to_csv_row(adapter: dict[str, Any]) -> dict[str, Any]:
         "feature_flags": json.dumps(adapter.get("feature_flags", {}), sort_keys=True),
         "notes": adapter.get("notes", ""),
     }
+
+
+def build_capability_rows() -> list[dict[str, Any]]:
+    """Build normalized adapter rows for UI display and compatibility tests."""
+
+    adapter_types = [OpenFOAMSolverAdapter, ElmerSolverAdapter]
+    if FluidX3DOptionalAdapter is not None:
+        adapter_types.append(FluidX3DOptionalAdapter)
+
+    rows: list[dict[str, Any]] = []
+    for adapter_type in adapter_types:
+        adapter = adapter_type()
+        metadata = adapter.metadata()
+        capabilities = adapter.capabilities()
+        rows.append(
+            {
+                "adapter_id": metadata.adapter_id,
+                "display_name": metadata.display_name,
+                "family": metadata.family,
+                "version": metadata.version,
+                "commercial_core_safe": metadata.commercial_core_safe,
+                "experimental": metadata.experimental,
+                "supports_gpu": capabilities.supports_gpu,
+                "supports_remote": capabilities.supports_remote,
+                "supports_parallel": capabilities.supports_parallel,
+                "supports_transient": capabilities.supports_transient,
+                "supported_solver_versions": tuple(metadata.supported_solver_versions),
+                "supported_physics": tuple(capabilities.supported_physics),
+                "feature_flags": dict(capabilities.feature_flags),
+                "notes": metadata.notes,
+            }
+        )
+    return rows

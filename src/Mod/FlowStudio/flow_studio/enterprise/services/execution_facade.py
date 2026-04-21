@@ -66,3 +66,29 @@ class LegacyExecutionFacade:
             working_directory=request.working_directory,
             manifest_hash=request.manifest_hash,
         )
+
+
+def submit_legacy_analysis(
+    analysis_object: object,
+    run_id: str,
+    working_directory: str,
+    manifest_hash: str,
+    *,
+    requested_by: str = "local-user",
+    reason: str = "interactive",
+    execution_profile: ExecutionProfile | None = None,
+    job_service: InMemoryJobService | None = None,
+) -> RunRecord:
+    """Compatibility helper mirroring the pre-facade submission entry point."""
+
+    facade = LegacyExecutionFacade(job_service or InMemoryJobService())
+    request = LegacyExecutionRequest(
+        analysis_object=analysis_object,
+        run_id=run_id,
+        working_directory=working_directory,
+        manifest_hash=manifest_hash,
+        requested_by=requested_by,
+        reason=reason,
+        execution_profile=execution_profile,
+    )
+    return facade.submit(request)

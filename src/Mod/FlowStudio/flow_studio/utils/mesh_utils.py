@@ -14,11 +14,37 @@ import os
 import math
 import tempfile
 
+from flow_studio.taskpanels.task_fluid_material import MATERIALS_DB
+
 try:
     import gmsh
     HAS_GMSH = True
 except ImportError:
     HAS_GMSH = False
+
+
+FLUID_MATERIAL_PRESETS = {
+    name: {
+        "density": properties["Density"],
+        "dynamic_viscosity": properties["DynamicViscosity"],
+        "kinematic_viscosity": properties["KinematicViscosity"],
+        "specific_heat": properties["SpecificHeat"],
+        "thermal_conductivity": properties["ThermalConductivity"],
+        "prandtl_number": properties["PrandtlNumber"],
+    }
+    for name, properties in MATERIALS_DB.items()
+    if all(
+        key in properties
+        for key in (
+            "Density",
+            "DynamicViscosity",
+            "KinematicViscosity",
+            "SpecificHeat",
+            "ThermalConductivity",
+            "PrandtlNumber",
+        )
+    )
+}
 
 
 def check_gmsh():
@@ -281,3 +307,16 @@ def estimate_y_plus_height(velocity, length, nu, y_plus_target=1.0):
     if u_tau < 1e-12:
         return 1e-3
     return y_plus_target * nu / u_tau
+
+
+def estimate_first_layer_height(
+    velocity, length, kinematic_viscosity, y_plus_target=1.0
+):
+    """Compatibility wrapper for production-readiness mesh sizing tests."""
+
+    return estimate_y_plus_height(
+        velocity=velocity,
+        length=length,
+        nu=kinematic_viscosity,
+        y_plus_target=y_plus_target,
+    )

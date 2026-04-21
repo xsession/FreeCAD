@@ -25,6 +25,9 @@ from flow_studio.enterprise.core.domain import (
 )
 
 
+from flow_studio.enterprise.core.contracts import SolverAdapter as SolverAdapter
+
+
 class BaseSolverAdapter(ABC):
     """Base class for enterprise solver adapters."""
 

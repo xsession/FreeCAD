@@ -1,0 +1,256 @@
+# ***************************************************************************
+# *   Copyright (c) 2026 FlowStudio contributors                          *
+# *   SPDX-License-Identifier: LGPL-2.1-or-later                          *
+# ***************************************************************************
+
+"""Static regression tests for FlowStudio task-panel wiring.
+
+These tests intentionally inspect source/AST instead of importing task panels,
+so they remain stable in headless CI and still catch UI regressions such as:
+
+- button or signal hookups being removed,
+- editable widgets no longer being persisted in ``_store()``,
+- signal callbacks referencing methods that do not exist,
+- display-only widgets accidentally looking editable when no persistence exists.
+"""
+
+from __future__ import annotations
+
+import ast
+import os
+import unittest
+
+
+TASKPANEL_FILES = {
+    "task_solver.py": [
+        "self.cb_backend.currentTextChanged.connect(self._on_backend_changed)",
+    ],
+    "task_post_pipeline.py": [
+        "btn_load.clicked.connect(self._load_results)",
+    ],
+    "task_mesh_gmsh.py": [
+        "btn_run.clicked.connect(self._run_mesh)",
+    ],
+    "task_measurement_point.py": [
+        "self.chk_line.toggled.connect(grp_line.setEnabled)",
+    ],
+    "task_materials.py": [
+        "self.cb_preset.currentTextChanged.connect(self._on_preset_changed)",
+        "btn_db.clicked.connect(show_engineering_database_editor)",
+    ],
+    "task_fluid_material.py": [
+        "self.cb_preset.currentTextChanged.connect(self._on_preset_changed)",
+        "btn_db.clicked.connect(self._open_database)",
+    ],
+    "task_geometry_tools.py": [
+        "apply_btn.clicked.connect(self._reload_objects)",
+        "self.btn_check.clicked.connect(self._check)",
+        "self.btn_volume.clicked.connect(self._toggle_volume)",
+        "self.btn_leak.clicked.connect(self._open_leak_tracking)",
+        "self.btn_find.clicked.connect(self._find_connection)",
+        "self.btn_use_a.clicked.connect(self._use_selection_a)",
+        "self.btn_use_b.clicked.connect(self._use_selection_b)",
+    ],
+    "task_flowefd_features.py": [
+        "self.btn_use_selection.clicked.connect(self._use_current_selection)",
+        "self.btn_clear_selection.clicked.connect(self._clear_selection)",
+        "self.cb_curve.currentTextChanged.connect(self._on_curve_changed)",
+        "btn_db.clicked.connect(show_engineering_database_editor)",
+        "self.curve_table.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)",
+    ],
+}
+
+ENTERPRISE_FILE = "enterprise/ui/jobs_panel.py"
+ENTERPRISE_SNIPPETS = [
+    "self.table.itemSelectionChanged.connect(self._update_details)",
+    "self.adapter_search.textChanged.connect(self._apply_adapter_filters)",
+    "self.adapter_family_filter.currentIndexChanged.connect(self._apply_adapter_filters)",
+    "self.adapter_capability_filter.currentIndexChanged.connect(self._apply_adapter_filters)",
+    "self.copy_adapter_json_button.clicked.connect(self._copy_adapter_matrix_json)",
+    "self.export_adapter_csv_button.clicked.connect(self._export_adapter_matrix_csv)",
+    "self.refresh_button.clicked.connect(self.refresh)",
+    "self.copy_path_button.clicked.connect(self._copy_selected_path)",
+    "self.bundle_button.clicked.connect(self._export_selected_bundle)",
+    "self.print_button.clicked.connect(self._print_selected_summary)",
+    "self.adapter_table.itemSelectionChanged.connect(self._update_adapter_details)",
+]
+
+PERSISTENCE_EXPECTATIONS = {
+    "task_bc_inlet.py": {
+        "TaskBCInlet": [
+            "cb_type", "sp_ux", "sp_uy", "sp_uz", "chk_normal",
+            "sp_mfr", "sp_vfr", "cb_turb", "sp_ti", "sp_T",
+        ],
+    },
+    "task_bc_open.py": {
+        "TaskBCOpen": ["sp_p", "sp_T", "sp_vx", "sp_vy", "sp_vz"],
+    },
+    "task_bc_outlet.py": {
+        "TaskBCOutlet": ["cb_type", "sp_p", "chk_backflow"],
+    },
+    "task_bc_wall.py": {
+        "TaskBCWall": ["cb_type", "cb_thermal", "sp_temp", "sp_flux", "sp_rough"],
+    },
+    "task_fluid_material.py": {
+        "TaskFluidMaterial": ["cb_preset", "sp_rho", "sp_mu", "sp_nu", "sp_cp", "sp_k", "sp_pr"],
+    },
+    "task_initial_conditions.py": {
+        "TaskInitialConditions": ["sp_ux", "sp_uy", "sp_uz", "sp_p", "sp_T", "sp_k", "sp_omega", "chk_pot"],
+    },
+    "task_materials.py": {
+        "TaskMaterial": ["cb_preset", "le_name"],
+    },
+    "task_measurement_point.py": {
+        "TaskMeasurementPoint": [
+            "le_desc", "sp_px", "sp_py", "sp_pz", "chk_line",
+            "sp_sx", "sp_sy", "sp_sz", "sp_ex", "sp_ey", "sp_ez",
+            "sp_res", "le_fields", "chk_csv", "chk_ts",
+        ],
+    },
+    "task_measurement_surface.py": {
+        "TaskMeasurementSurface": [
+            "le_desc", "cb_type", "sp_ox", "sp_oy", "sp_oz", "cb_normal",
+            "sp_nx", "sp_ny", "sp_nz", "le_isofield", "sp_isoval",
+            "le_fields", "chk_avg", "chk_integ", "chk_mflow", "chk_force",
+            "sp_rpx", "sp_rpy", "sp_rpz", "chk_csv", "chk_vtk", "chk_ts",
+        ],
+    },
+    "task_measurement_volume.py": {
+        "TaskMeasurementVolume": [
+            "le_desc", "cb_type", "sp_bx0", "sp_by0", "sp_bz0", "sp_bx1",
+            "sp_by1", "sp_bz1", "sp_scx", "sp_scy", "sp_scz", "sp_sr",
+            "sp_ccx", "sp_ccy", "sp_ccz", "sp_cax", "sp_cay", "sp_caz",
+            "sp_cr", "sp_ch", "le_thrfield", "sp_thrmin", "sp_thrmax",
+            "le_fields", "chk_avg", "chk_minmax", "chk_integ", "chk_csv", "chk_ts",
+        ],
+    },
+    "task_mesh_gmsh.py": {
+        "TaskMeshGmsh": ["sp_char", "sp_min", "sp_max", "cb_algo", "cb_order", "cb_type", "sp_growth", "sp_gap", "cb_format"],
+    },
+    "task_physics_model.py": {
+        "TaskPhysicsModel": ["cb_flow", "cb_turb", "cb_comp", "cb_time", "chk_gravity", "chk_heat", "chk_buoy", "chk_vof", "chk_scalar"],
+    },
+    "task_post_pipeline.py": {
+        "TaskPostPipeline": ["cb_vis", "cb_field", "chk_auto", "sp_min", "sp_max"],
+    },
+    "task_solver.py": {
+        "TaskSolver": [
+            "cb_backend", "cb_of_solver", "sp_iter", "sp_tol", "sp_nproc",
+            "cb_conv", "cb_elmer_solver", "sp_elmer_nproc", "cb_fx_prec",
+            "sp_fx_res", "sp_fx_steps", "sp_fx_vram", "chk_multigpu", "sp_ngpu",
+        ],
+    },
+    "task_flowefd_features.py": {
+        "TaskVolumeSource": ["cb_type", "sp_q", "sp_m", "chk_goals"],
+        "TaskFan": ["cb_type", "cb_curve", "sp_p", "chk_goals"],
+        "TaskResultPlot": [
+            "cb_kind", "cb_field", "sp_contours", "chk_contours", "chk_isolines",
+            "chk_vectors", "chk_streamlines", "cb_plane", "sp_offset", "chk_cad",
+            "chk_interp", "chk_excel",
+        ],
+        "TaskParticleStudy": [
+            "chk_acc", "chk_ero", "chk_grav", "sp_gx", "sp_gy", "sp_gz",
+            "cb_shape", "sp_d", "cb_color", "sp_len", "sp_time", "sp_max",
+        ],
+    },
+}
+
+
+class TestTaskPanelWiring(unittest.TestCase):
+    """Headless regression tests for signal hookups and widget persistence."""
+
+    @classmethod
+    def setUpClass(cls):
+        root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+        cls.pkg_dir = os.path.join(root_dir, "flow_studio")
+
+    def _read_source(self, rel_path):
+        abs_path = os.path.join(self.pkg_dir, rel_path)
+        with open(abs_path, "r", encoding="utf-8") as handle:
+            return abs_path, handle.read()
+
+    def _class_method_source(self, source, class_name, method_name):
+        tree = ast.parse(source)
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef) and node.name == class_name:
+                for stmt in node.body:
+                    if isinstance(stmt, ast.FunctionDef) and stmt.name == method_name:
+                        return ast.get_source_segment(source, stmt) or ""
+        self.fail(f"Could not find {class_name}.{method_name}")
+
+    def test_expected_signal_connections_exist(self):
+        for rel_path, snippets in TASKPANEL_FILES.items():
+            abs_path, source = self._read_source(os.path.join("taskpanels", rel_path))
+            for snippet in snippets:
+                self.assertIn(snippet, source, f"Missing signal hookup in {abs_path}: {snippet}")
+
+        abs_path, source = self._read_source(ENTERPRISE_FILE)
+        for snippet in ENTERPRISE_SNIPPETS:
+            self.assertIn(snippet, source, f"Missing signal hookup in {abs_path}: {snippet}")
+
+    def test_connected_self_methods_exist(self):
+        files = [os.path.join("taskpanels", name) for name in TASKPANEL_FILES] + [ENTERPRISE_FILE]
+        for rel_path in files:
+            abs_path, source = self._read_source(rel_path)
+            tree = ast.parse(source)
+            for class_node in [node for node in tree.body if isinstance(node, ast.ClassDef)]:
+                methods = {
+                    stmt.name
+                    for stmt in class_node.body
+                    if isinstance(stmt, ast.FunctionDef)
+                }
+                for stmt in ast.walk(class_node):
+                    if not isinstance(stmt, ast.Call):
+                        continue
+                    func = stmt.func
+                    if not isinstance(func, ast.Attribute) or func.attr != "connect":
+                        continue
+                    if not stmt.args:
+                        continue
+                    target = stmt.args[0]
+                    if not isinstance(target, ast.Attribute):
+                        continue
+                    if not isinstance(target.value, ast.Name) or target.value.id != "self":
+                        continue
+                    self.assertIn(
+                        target.attr,
+                        methods,
+                        f"{abs_path}: {class_node.name} connects to missing method self.{target.attr}()",
+                    )
+
+    def test_editable_widgets_are_persisted(self):
+        for rel_path, class_map in PERSISTENCE_EXPECTATIONS.items():
+            abs_path, source = self._read_source(os.path.join("taskpanels", rel_path))
+            for class_name, attrs in class_map.items():
+                store_source = self._class_method_source(source, class_name, "_store")
+                for attr in attrs:
+                    self.assertIn(
+                        f"self.{attr}",
+                        store_source,
+                        f"{abs_path}: {class_name} does not persist widget {attr} in _store()",
+                    )
+
+    def test_dynamic_widget_maps_are_persisted(self):
+        abs_path, source = self._read_source(os.path.join("taskpanels", "task_materials.py"))
+        store_source = self._class_method_source(source, "TaskMaterial", "_store")
+        self.assertIn("for prop, widget in self._widgets.items()", store_source)
+        self.assertIn("setattr(self.obj, prop, widget.value())", store_source)
+
+        abs_path, source = self._read_source(os.path.join("taskpanels", "task_generic_bc.py"))
+        store_source = self._class_method_source(source, "TaskGenericBC", "_store")
+        self.assertIn("for prop, widget in self._widgets.items()", store_source)
+        self.assertIn("widget.isChecked()", store_source)
+        self.assertIn("widget.currentText()", store_source)
+        self.assertIn("widget.value()", store_source)
+
+    def test_taskfan_curve_table_is_display_only(self):
+        abs_path, source = self._read_source(os.path.join("taskpanels", "task_flowefd_features.py"))
+        self.assertIn(
+            "self.curve_table.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)",
+            source,
+            f"{abs_path}: TaskFan curve table should be read-only because it displays preset data only",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

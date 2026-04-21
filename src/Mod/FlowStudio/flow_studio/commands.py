@@ -20,7 +20,7 @@ import FreeCADGui
 
 from flow_studio.enterprise import initialize_workbench
 from flow_studio.enterprise.app.legacy_actions import prepare_runtime_submission
-from flow_studio.workflow_guide import (
+from flow_studio.core.workflow import (
     get_active_analysis,
     has_analysis,
     has_geometry,
@@ -1910,8 +1910,11 @@ class _CmdWorkflowGuide:
         return FreeCAD.ActiveDocument is not None
 
     def Activated(self):
-        from flow_studio.workflow_guide import get_workflow_status
+        from flow_studio.workflow_guide import get_workflow_context, get_workflow_status
+        context = get_workflow_context()
         steps = get_workflow_status()
+        profile = context["profile"]
+        layout_model = context["layout"]
 
         # Print a formatted workflow status report to the console
         FreeCAD.Console.PrintMessage(
@@ -1919,6 +1922,11 @@ class _CmdWorkflowGuide:
             "╔══════════════════════════════════════════════════════════╗\n"
             "║          FlowStudio — Simulation Workflow Guide         ║\n"
             "╚══════════════════════════════════════════════════════════╝\n\n"
+        )
+        FreeCAD.Console.PrintMessage(
+            f"Domain: {profile.label}\n"
+            f"Workspace: {layout_model.name}\n"
+            f"Primary workflows: {', '.join(profile.workflows)}\n\n"
         )
 
         next_step = None
@@ -1963,7 +1971,7 @@ class _CmdWorkflowGuide:
         # If FreeCAD GUI is available, also show the task panel
         if FreeCAD.GuiUp:
             try:
-                panel = _WorkflowGuidePanel(steps)
+                panel = _WorkflowGuidePanel(steps, context)
                 FreeCADGui.Control.showDialog(panel)
             except Exception:
                 pass  # Fall back to console-only output
@@ -1972,16 +1980,20 @@ class _CmdWorkflowGuide:
 class _WorkflowGuidePanel:
     """Task panel displaying the workflow checklist (Qt widget)."""
 
-    def __init__(self, steps):
+    def __init__(self, steps, context):
         from PySide import QtWidgets, QtCore, QtGui
         self.form = QtWidgets.QWidget()
         self.form.setWindowTitle("FlowStudio Workflow Guide")
         layout = QtWidgets.QVBoxLayout(self.form)
+        profile = context["profile"]
+        workspace = context["layout"]
 
         # Header
         header = QtWidgets.QLabel(
-            "<h3>Simulation Workflow</h3>"
-            "<p>Follow these steps in order for a successful simulation. "
+            f"<h3>{profile.label} Workflow</h3>"
+            f"<p><b>Workspace:</b> {workspace.name}<br>"
+            f"<b>Focus:</b> {', '.join(workspace.primary_workflows)}<br>"
+            "Follow these steps in order for a successful simulation. "
             "Greyed-out steps require earlier steps to be completed first.</p>"
         )
         header.setWordWrap(True)
@@ -2125,7 +2137,7 @@ class _CmdEngineeringDatabase:
         return FreeCAD.GuiUp
 
     def Activated(self):
-        from flow_studio.engineering_database_editor import show_engineering_database_editor
+        from flow_studio.catalog.editor import show_engineering_database_editor
         show_engineering_database_editor()
 
 
@@ -2146,6 +2158,10 @@ class _CmdCheckGeometry:
     def Activated(self):
         from flow_studio.taskpanels.task_geometry_tools import TaskCheckGeometry
 
+        try:
+            FreeCADGui.Control.closeDialog()
+        except Exception:
+            pass
         FreeCADGui.Control.showDialog(TaskCheckGeometry())
 
 
@@ -2164,7 +2180,7 @@ class _CmdShowFluidVolume:
         return FreeCAD.ActiveDocument is not None
 
     def Activated(self):
-        from flow_studio.geometry_tools import (
+        from flow_studio.tools.geometry import (
             fluid_volume_is_visible,
             hide_fluid_volume,
             show_fluid_volume,
@@ -2200,6 +2216,10 @@ class _CmdLeakTracking:
     def Activated(self):
         from flow_studio.taskpanels.task_geometry_tools import TaskLeakTracking
 
+        try:
+            FreeCADGui.Control.closeDialog()
+        except Exception:
+            pass
         FreeCADGui.Control.showDialog(TaskLeakTracking())
 
 

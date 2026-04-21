@@ -16,6 +16,13 @@ class BaseBoundaryCondition(BaseFlowObject):
     def __init__(self, obj):
         super().__init__(obj)
 
+        if "BCLabel" not in getattr(obj, "PropertiesList", []):
+            obj.addProperty(
+                "App::PropertyString", "BCLabel", "Boundary",
+                "Human-readable boundary condition label"
+            )
+            obj.BCLabel = "Boundary Condition"
+
         self.add_reference_property(
             obj,
             "Boundary",

@@ -3,7 +3,7 @@
 # *   SPDX-License-Identifier: LGPL-2.1-or-later                          *
 # ***************************************************************************
 
-"""Workflow Guide – enforces the step-by-step simulation workflow.
+"""Workflow Guide – enforces domain-aware simulation workflows.
 
 Modelled after CfdOF's approach: each simulation must follow a defined
 sequence of steps.  This module provides:
@@ -11,19 +11,21 @@ sequence of steps.  This module provides:
   - Helper predicates used by command ``IsActive()`` guards
   - ``WorkflowChecker`` – pre-run validation akin to CfdOF's dirty-flag checks
 
-Workflow steps (applicable to every physics domain):
-  1. Create Analysis   – container + auto-created physics/material/solver
-  2. Import/Create Geometry – a Part::Feature shape in the document
-  3. Configure Physics  – double-click the PhysicsModel child
-  4. Assign Material    – configure fluid/solid/dielectric properties
-  5. Set Boundary Conditions – at least one BC on a face
-  6. Generate Mesh      – create and run the mesher
-  7. Set Initial Conditions – optional but recommended
-  8. Run Solver         – write case + execute
-  9. Post-process       – visualize results
+The status engine stays generic, while step names, hints, and workspace focus
+come from domain profiles. This keeps workflow guidance aligned with the active
+physics domain without cloning the validation logic per workbench area.
 """
 
-import FreeCAD
+try:
+    import FreeCAD
+except Exception:  # pragma: no cover - keeps pure-Python imports working
+    class _FreeCADStub:
+        ActiveDocument = None
+
+    FreeCAD = _FreeCADStub()
+
+from flow_studio.ui.layouts import get_workspace_layout
+from flow_studio.workflows.profiles import get_workflow_profile
 
 # FlowType strings used to identify objects inside analysis groups
 _PHYSICS_TYPES = {
@@ -32,6 +34,7 @@ _PHYSICS_TYPES = {
     "FlowStudio::ElectrostaticPhysicsModel",
     "FlowStudio::ElectromagneticPhysicsModel",
     "FlowStudio::ThermalPhysicsModel",
+    "FlowStudio::OpticalPhysicsModel",
 }
 
 _MATERIAL_TYPES = {
@@ -40,6 +43,7 @@ _MATERIAL_TYPES = {
     "FlowStudio::ElectrostaticMaterial",
     "FlowStudio::ElectromagneticMaterial",
     "FlowStudio::ThermalMaterial",
+    "FlowStudio::OpticalMaterial",
 }
 
 _BC_TYPES = {
@@ -59,6 +63,9 @@ _BC_TYPES = {
     "FlowStudio::BCHeatFlux",
     "FlowStudio::BCConvection",
     "FlowStudio::BCRadiation",
+    "FlowStudio::BCOpticalSource",
+    "FlowStudio::BCOpticalDetector",
+    "FlowStudio::BCOpticalBoundary",
 }
 
 _MESH_TYPES = {
@@ -87,6 +94,7 @@ _ANALYSIS_TYPES = {
     "FlowStudio::ElectrostaticAnalysis",
     "FlowStudio::ElectromagneticAnalysis",
     "FlowStudio::ThermalAnalysis",
+    "FlowStudio::OpticalAnalysis",
 }
 
 
@@ -259,108 +267,104 @@ class WorkflowStep:
         self.hint = hint
 
 
+def get_active_domain_key(analysis=None):
+    """Return the FlowStudio domain key for the active analysis."""
+    if analysis is None:
+        analysis = get_active_analysis()
+    if analysis is None:
+        return "CFD"
+    return getattr(analysis, "PhysicsDomain", "CFD") or "CFD"
+
+
+def get_workflow_context(analysis=None):
+    """Return the active domain profile and workspace layout."""
+    if analysis is None:
+        analysis = get_active_analysis()
+    domain_key = get_active_domain_key(analysis)
+    return {
+        "analysis": analysis,
+        "domain_key": domain_key,
+        "profile": get_workflow_profile(domain_key),
+        "layout": get_workspace_layout(domain_key),
+    }
+
+
+def _build_status_map(analysis):
+    mesh_exists = has_mesh()
+    mesh_done = has_mesh_completed()
+    run_done = False
+    results_done = False
+    if analysis is not None:
+        case_dir = getattr(analysis, "CaseDir", "")
+        if case_dir:
+            import os
+            run_done = os.path.isdir(os.path.join(case_dir, "postProcessing")) or \
+                os.path.isdir(os.path.join(case_dir, "processor0"))
+        results_done = _has_type(analysis, _POST_TYPES)
+
+    return {
+        "analysis": {
+            "complete": analysis is not None,
+            "active": True,
+        },
+        "geometry": {
+            "complete": has_geometry(),
+            "active": analysis is not None,
+        },
+        "physics": {
+            "complete": has_physics_model(),
+            "active": analysis is not None,
+        },
+        "materials": {
+            "complete": has_material(),
+            "active": analysis is not None,
+        },
+        "boundaries": {
+            "complete": has_boundary_conditions(),
+            "active": analysis is not None and has_physics_model(),
+        },
+        "mesh": {
+            "complete": mesh_done,
+            "active": analysis is not None and has_geometry(),
+        },
+        "study_controls": {
+            "complete": has_initial_conditions(),
+            "active": analysis is not None,
+        },
+        "optical_controls": {
+            "complete": get_physics_model(analysis) is not None and get_solver(analysis) is not None,
+            "active": analysis is not None and get_active_domain_key(analysis) == "Optical",
+        },
+        "run": {
+            "complete": run_done,
+            "active": analysis is not None and has_physics_model() and has_material() and has_boundary_conditions() and (mesh_done or not mesh_exists),
+        },
+        "results": {
+            "complete": results_done,
+            "active": run_done,
+        },
+    }
+
+
 def get_workflow_status():
     """Return a list of ``WorkflowStep`` describing current progress.
 
     This is the single source of truth for the UI workflow guide panel.
     """
-    analysis = get_active_analysis()
-
-    step1_ok = analysis is not None
-    step2_ok = has_geometry()
-    step3_ok = has_physics_model()
-    step4_ok = has_material()
-    step5_ok = has_boundary_conditions()
-    step6_ok = has_mesh()
-    step6b_ok = has_mesh_completed()
-    step7_ok = has_initial_conditions()
-    step8_ok = False  # solver ran successfully – checked via results
-    step9_ok = False
-
-    # Check if solver results exist
-    if analysis is not None:
-        case_dir = getattr(analysis, "CaseDir", "")
-        if case_dir:
-            import os
-            # A simple heuristic: if postProcessing or log.* exists, solver ran
-            step8_ok = os.path.isdir(os.path.join(case_dir, "postProcessing")) or \
-                       os.path.isdir(os.path.join(case_dir, "processor0"))
-        step9_ok = _has_type(analysis, _POST_TYPES)
-
-    steps = [
-        WorkflowStep(
-            1, "Create Analysis",
-            "Create a simulation analysis container. This automatically adds "
-            "physics model, material, initial conditions, and solver objects.",
-            step1_ok, True,
-            "FlowStudio_Analysis",
-            "Use FlowStudio → New Analysis → [domain]" if not step1_ok else ""
-        ),
-        WorkflowStep(
-            2, "Import / Create Geometry",
-            "Add or import a CAD geometry (Part::Feature) into the document. "
-            "This is the shape that will be meshed for simulation.",
-            step2_ok, step1_ok,
-            "",
-            "Use Part workbench or File → Import to add geometry" if not step2_ok else ""
-        ),
-        WorkflowStep(
-            3, "Configure Physics Model",
-            "Double-click the PhysicsModel to set flow regime (steady/transient), "
-            "turbulence model, heat transfer, compressibility, etc.",
-            step3_ok, step1_ok,
-            "FlowStudio_PhysicsModel",
-            "Double-click PhysicsModel in the model tree" if not step3_ok else ""
-        ),
-        WorkflowStep(
-            4, "Assign Material Properties",
-            "Double-click the Material object to set density, viscosity, "
-            "conductivity, and other material-specific properties.",
-            step4_ok, step1_ok,
-            "FlowStudio_FluidMaterial",
-            "Double-click the material object in the model tree" if not step4_ok else ""
-        ),
-        WorkflowStep(
-            5, "Define Boundary Conditions",
-            "Add boundary conditions (Wall, Inlet, Outlet, etc.) and assign "
-            "them to geometry faces. At least one BC is required.",
-            step5_ok, step1_ok and step3_ok,
-            "FlowStudio_BC_Inlet",
-            "Add at least Inlet + Outlet BCs via FlowStudio → CFD → Inlet/Outlet" if not step5_ok else ""
-        ),
-        WorkflowStep(
-            6, "Generate Mesh",
-            "Create a mesh object, link it to the geometry, and run the mesher. "
-            "Check mesh quality before proceeding to the solver.",
-            step6b_ok, step1_ok and step2_ok,
-            "FlowStudio_MeshGmsh",
-            "Add mesh via FlowStudio → Mesh → CFD Mesh, then run the mesher" if not step6b_ok else ""
-        ),
-        WorkflowStep(
-            7, "Set Initial Conditions",
-            "Configure initial field values (velocity, pressure, temperature). "
-            "Good initial conditions improve solver convergence.",
-            step7_ok, step1_ok,
-            "FlowStudio_InitialConditions",
-            "Double-click InitialConditions in the model tree" if not step7_ok else ""
-        ),
-        WorkflowStep(
-            8, "Run Solver",
-            "Write case files and launch the solver. The system will check that "
-            "all prerequisites are satisfied before running.",
-            step8_ok, step1_ok and step3_ok and step4_ok and step5_ok and step6b_ok,
-            "FlowStudio_RunSolver",
-            "Use FlowStudio → Solve → Run Solver" if not step8_ok else ""
-        ),
-        WorkflowStep(
-            9, "Post-process Results",
-            "Create post-processing pipelines to visualize velocity, pressure, "
-            "temperature, or other result fields.",
-            step9_ok, step8_ok,
-            "FlowStudio_PostPipeline",
-            "Add a Post Pipeline via FlowStudio → Post-Processing" if not step9_ok else ""
-        ),
-    ]
+    context = get_workflow_context()
+    status_map = _build_status_map(context["analysis"])
+    steps = []
+    for step_profile in context["profile"].steps:
+        status = status_map[step_profile.status_key]
+        steps.append(WorkflowStep(
+            step_profile.number,
+            step_profile.name,
+            step_profile.description,
+            status["complete"],
+            status["active"],
+            step_profile.command_name,
+            "" if status["complete"] else step_profile.hint,
+        ))
     return steps
 
 

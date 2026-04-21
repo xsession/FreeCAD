@@ -5,6 +5,11 @@
 
 """OpticalMaterial - refractive, absorptive, and reflective material data."""
 
+from flow_studio.catalog.optics import (
+    DEFAULT_OPTICAL_PRESET,
+    get_optical_material_preset,
+    get_optical_material_preset_names,
+)
 from flow_studio.objects.base_object import BaseFlowObject
 
 
@@ -23,20 +28,33 @@ class OpticalMaterial(BaseFlowObject):
         )
 
         obj.addProperty("App::PropertyString", "MaterialName", "Material", "Material name")
-        obj.MaterialName = "BK7"
+        obj.MaterialName = DEFAULT_OPTICAL_PRESET
 
         obj.addProperty("App::PropertyEnumeration", "MaterialPreset", "Material", "Optical material preset")
-        obj.MaterialPreset = [
-            "Custom",
+        obj.MaterialPreset = get_optical_material_preset_names()
+        obj.MaterialPreset = DEFAULT_OPTICAL_PRESET
+
+        obj.addProperty("App::PropertyEnumeration", "OpticalRole", "Material", "Optical role in the study")
+        obj.OpticalRole = [
+            "Glass",
+            "Crystal",
+            "Polymer",
+            "Mirror",
+            "Coating",
+            "Absorber",
+            "Gas",
             "Vacuum",
-            "Air",
-            "BK7",
-            "Fused Silica",
-            "Sapphire",
-            "Polycarbonate",
-            "Mirror Aluminum",
         ]
-        obj.MaterialPreset = "BK7"
+        obj.OpticalRole = "Glass"
+
+        obj.addProperty("App::PropertyEnumeration", "DispersionModel", "Optical", "Dispersion model used by optical solvers")
+        obj.DispersionModel = [
+            "Constant Index",
+            "Abbe Approximation",
+            "Sellmeier",
+            "Metal / Complex Index",
+        ]
+        obj.DispersionModel = "Sellmeier"
 
         obj.addProperty("App::PropertyFloat", "RefractiveIndex", "Optical", "Refractive index n at reference wavelength")
         obj.RefractiveIndex = 1.5168
@@ -61,4 +79,45 @@ class OpticalMaterial(BaseFlowObject):
 
         obj.addProperty("App::PropertyFloat", "WavelengthMax", "Optical", "Valid wavelength maximum [nm]")
         obj.WavelengthMax = 780.0
+
+        obj.addProperty("App::PropertyFloat", "AbsorptionLength", "Optical", "Absorption length [mm]")
+        obj.AbsorptionLength = 1000.0
+
+        obj.addProperty("App::PropertyFloat", "SurfaceRoughness", "Optical", "Surface roughness [um]")
+        obj.SurfaceRoughness = 0.01
+
+        obj.addProperty("App::PropertyFloat", "SellmeierB1", "Dispersion", "Sellmeier coefficient B1")
+        obj.SellmeierB1 = 0.0
+
+        obj.addProperty("App::PropertyFloat", "SellmeierB2", "Dispersion", "Sellmeier coefficient B2")
+        obj.SellmeierB2 = 0.0
+
+        obj.addProperty("App::PropertyFloat", "SellmeierB3", "Dispersion", "Sellmeier coefficient B3")
+        obj.SellmeierB3 = 0.0
+
+        obj.addProperty("App::PropertyFloat", "SellmeierC1", "Dispersion", "Sellmeier coefficient C1 [um^2]")
+        obj.SellmeierC1 = 0.0
+
+        obj.addProperty("App::PropertyFloat", "SellmeierC2", "Dispersion", "Sellmeier coefficient C2 [um^2]")
+        obj.SellmeierC2 = 0.0
+
+        obj.addProperty("App::PropertyFloat", "SellmeierC3", "Dispersion", "Sellmeier coefficient C3 [um^2]")
+        obj.SellmeierC3 = 0.0
+
+        self._apply_preset(obj, DEFAULT_OPTICAL_PRESET)
+
+    def onChanged(self, obj, prop):
+        if prop == "MaterialPreset":
+            self._apply_preset(obj, getattr(obj, "MaterialPreset", "Custom"))
+
+    def _apply_preset(self, obj, preset_name):
+        if preset_name == "Custom":
+            return
+        preset = get_optical_material_preset(preset_name)
+        for key, value in preset.items():
+            if key in getattr(obj, "PropertiesList", []):
+                try:
+                    setattr(obj, key, value)
+                except Exception:
+                    continue
 

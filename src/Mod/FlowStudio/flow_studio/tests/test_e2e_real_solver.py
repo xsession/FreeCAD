@@ -720,16 +720,17 @@ class E2ERealSolverTests:
 
             solver = makeSolver(self.doc)
 
-            # Initially 1 processor
-            assert solver.NumProcessors == 1
+            # Defaults should already use all detected physical cores.
+            phys_cores, _ = detect_cpu_cores()
+            assert solver.NumProcessors == phys_cores
+            assert solver.AutoParallel is True
 
             # Enable auto-parallel
             solver.AutoParallel = True
 
             # After enabling AutoParallel, NumProcessors should be updated
             # (based on hardware detection)
-            phys_cores, _ = detect_cpu_cores()
-            expected = max(1, phys_cores - 1)
+            expected = max(1, phys_cores)
 
             # The onChanged handler should have updated it
             actual = solver.NumProcessors

@@ -19,7 +19,7 @@ class TaskSolver(BaseTaskPanel):
 
         # Backend
         self.cb_backend = self._combo(
-            ["OpenFOAM", "FluidX3D", "SU2"], self.obj.SolverBackend
+            ["OpenFOAM", "Elmer", "FluidX3D", "SU2"], self.obj.SolverBackend
         )
         self._add_row(layout, "Solver Backend:", self.cb_backend)
         self.cb_backend.currentTextChanged.connect(self._on_backend_changed)
@@ -50,6 +50,25 @@ class TaskSolver(BaseTaskPanel):
         self._add_row(of_layout, "Convection Scheme:", self.cb_conv)
         of_layout.addStretch()
         self.stack.addWidget(of_page)
+
+        # Elmer page
+        elmer_page = QtGui.QWidget()
+        elmer_layout = QtGui.QVBoxLayout(elmer_page)
+        self.cb_elmer_solver = self._combo(
+            ["ElmerSolver", "ElmerSolver_mpi"],
+            getattr(self.obj, "ElmerSolverBinary", "ElmerSolver"),
+        )
+        self._add_row(elmer_layout, "Executable:", self.cb_elmer_solver)
+        self.sp_elmer_nproc = self._spin_int(self.obj.NumProcessors, 1, 1024)
+        self._add_row(elmer_layout, "Num. Processors:", self.sp_elmer_nproc)
+        elmer_layout.addWidget(
+            QtGui.QLabel(
+                "FlowStudio runs Elmer through the CLI solver binary only. "
+                "ElmerGUI is not used for execution."
+            )
+        )
+        elmer_layout.addStretch()
+        self.stack.addWidget(elmer_page)
 
         # FluidX3D page
         fx_page = QtGui.QWidget()
@@ -85,7 +104,7 @@ class TaskSolver(BaseTaskPanel):
         return widget
 
     def _on_backend_changed(self, text):
-        idx = {"OpenFOAM": 0, "FluidX3D": 1, "SU2": 2}.get(text, 0)
+        idx = {"OpenFOAM": 0, "Elmer": 1, "FluidX3D": 2, "SU2": 3}.get(text, 0)
         self.stack.setCurrentIndex(idx)
 
     def _store(self):
@@ -96,6 +115,10 @@ class TaskSolver(BaseTaskPanel):
         self.obj.ConvergenceTolerance = self.sp_tol.value()
         self.obj.NumProcessors = self.sp_nproc.value()
         self.obj.ConvectionScheme = self.cb_conv.currentText()
+        # Elmer
+        self.obj.ElmerSolverBinary = self.cb_elmer_solver.currentText()
+        if self.cb_backend.currentText() == "Elmer":
+            self.obj.NumProcessors = self.sp_elmer_nproc.value()
         # FluidX3D
         self.obj.FluidX3DPrecision = self.cb_fx_prec.currentText()
         self.obj.FluidX3DResolution = self.sp_fx_res.value()

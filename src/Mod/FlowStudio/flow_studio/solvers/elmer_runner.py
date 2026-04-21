@@ -99,6 +99,15 @@ class ElmerRunner(BaseSolverRunner):
             return max(1, getattr(solver, "NumProcessors", 1))
         return 1
 
+    def _get_solver_binary(self):
+        """Return the preferred Elmer solver executable name."""
+        solver = self._child_of_type("FlowStudio::Solver")
+        if solver is not None:
+            preferred = getattr(solver, "ElmerSolverBinary", "ElmerSolver")
+            if preferred in ("ElmerSolver", "ElmerSolver_mpi"):
+                return preferred
+        return "ElmerSolver"
+
     def _partition_mesh(self, num_procs):
         """Partition mesh for parallel run using ElmerGrid."""
         mesh_dir = os.path.join(self.case_dir, "mesh")
@@ -144,7 +153,8 @@ class ElmerRunner(BaseSolverRunner):
     def run(self):
         """Launch ElmerSolver (serial or parallel via MPI)."""
         num_procs = self._get_num_processors()
-        is_parallel = num_procs > 1
+        preferred_solver = self._get_solver_binary()
+        is_parallel = num_procs > 1 and preferred_solver == "ElmerSolver_mpi"
 
         if is_parallel:
             FreeCAD.Console.PrintMessage(
@@ -154,15 +164,18 @@ class ElmerRunner(BaseSolverRunner):
             # Partition mesh for parallel execution
             self._partition_mesh(num_procs)
         else:
+            if preferred_solver == "ElmerSolver_mpi" and num_procs <= 1:
+                FreeCAD.Console.PrintWarning(
+                    "FlowStudio [Elmer]: ElmerSolver_mpi requested with one processor; "
+                    "using ElmerSolver instead.\n"
+                )
             FreeCAD.Console.PrintMessage(
                 "FlowStudio [Elmer]: Launching ElmerSolver...\n"
             )
 
         if is_parallel:
-            # Use ElmerSolver_mpi for parallel runs
-            exe = shutil.which("ElmerSolver_mpi")
+            exe = shutil.which(preferred_solver)
             if exe is None:
-                # Fall back to regular ElmerSolver if _mpi variant not found
                 FreeCAD.Console.PrintWarning(
                     "FlowStudio [Elmer]: ElmerSolver_mpi not found, "
                     "falling back to serial ElmerSolver.\n"

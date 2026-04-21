@@ -92,6 +92,31 @@ def test_project_manifest_serializes_to_json():
     assert '"solver_family": "elmer"' in serialized
 
 
+def test_legacy_analysis_bridge_includes_elmer_solver_binary_extension():
+    analysis = SimpleNamespace(
+        Name="A3",
+        Label="A3",
+        PhysicsDomain="Thermal",
+        AnalysisType="Transient Heat Transfer",
+        SolverBackend="Elmer",
+        Group=[
+            _make_child(
+                "FlowStudio::Solver",
+                SolverBackend="Elmer",
+                ElmerSolverBinary="ElmerSolver",
+                NumProcessors=3,
+                TimeStep=0.01,
+                EndTime=2.0,
+            ),
+        ],
+    )
+
+    study = LegacyAnalysisBridge(analysis).to_study_definition()
+
+    assert study.solver_family == "elmer"
+    assert study.adapter_extensions["elmer.primary"]["solver_binary"] == "ElmerSolver"
+
+
 def test_legacy_analysis_bridge_prefers_solver_object_backend():
     analysis = SimpleNamespace(
         Name="A2",
