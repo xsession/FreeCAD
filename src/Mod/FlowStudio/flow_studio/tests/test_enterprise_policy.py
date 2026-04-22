@@ -22,6 +22,7 @@ def test_plugin_api_version_is_declared():
 def test_compatibility_matrix_contains_core_adapters():
     assert "openfoam.primary" in COMPATIBILITY_MATRIX
     assert "elmer.primary" in COMPATIBILITY_MATRIX
+    assert "geant4.primary" in COMPATIBILITY_MATRIX
 
 
 def test_fluidx3d_policy_enforces_non_commercial_flag():

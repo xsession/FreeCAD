@@ -15,5 +15,4 @@ class VPGenericBC(BaseFlowVP):
 
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_generic_bc import TaskGenericBC
-        FreeCADGui.Control.showDialog(TaskGenericBC(vobj.Object))
-        return True
+        return self.show_task_panel(TaskGenericBC, vobj.Object)

@@ -68,6 +68,50 @@ OPTICAL_PRESETS = OPTICAL_MATERIAL_PRESETS
 class TaskMaterial(FloEFDTaskPanel):
     """One material editor that adapts to available object properties."""
 
+    SUMMARY_DETAIL = (
+        "Assign a preset and edit the domain-specific material properties applied to {label}."
+    )
+
+    def _build_task_summary(self):
+        return self._title(), self.SUMMARY_DETAIL.format(
+            label=getattr(self.obj, "Label", getattr(self.obj, "Name", "Object"))
+        )
+
+    def _build_task_validation(self):
+        if not self._refs():
+            return (
+                "incomplete",
+                "Assign material targets",
+                "Select one or more parts or regions so this material applies to geometry.",
+            )
+
+        if not str(getattr(self.obj, "MaterialName", "") or "").strip():
+            return (
+                "incomplete",
+                "Material name required",
+                "Enter a material name or choose a preset before continuing.",
+            )
+
+        positive_required = (
+            ("Density", "Density must be positive"),
+            ("YoungsModulus", "Young's modulus must be positive"),
+            ("ThermalConductivity", "Thermal conductivity must be positive"),
+            ("SpecificHeat", "Specific heat must be positive"),
+            ("RelativePermittivity", "Relative permittivity must be positive"),
+            ("RelativePermeability", "Relative permeability must be positive"),
+            ("RefractiveIndex", "Refractive index must be positive"),
+        )
+        properties = getattr(self.obj, "PropertiesList", [])
+        for prop, title in positive_required:
+            if prop in properties and float(getattr(self.obj, prop, 0.0)) <= 0.0:
+                return (
+                    "warning",
+                    title,
+                    f"Set a positive {prop} value or choose a preset that provides a valid material property.",
+                )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)

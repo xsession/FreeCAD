@@ -369,7 +369,7 @@ class TestDependencyDetectionProduction(unittest.TestCase):
         from unittest.mock import patch
         with patch("shutil.which", return_value=None):
             reports = self.deps.check_all()
-        expected = {"OpenFOAM", "FluidX3D", "Elmer", "SU2",
+        expected = {"OpenFOAM", "FluidX3D", "Elmer", "Geant4", "SU2",
                     "ParaView", "Meshing", "PostProcessing", "Raysect",
                     "Meep", "openEMS", "Optiland"}
         self.assertEqual(set(reports.keys()), expected)

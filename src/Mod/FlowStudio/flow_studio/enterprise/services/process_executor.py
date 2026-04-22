@@ -68,13 +68,14 @@ class LocalProcessExecutor:
             )
 
         run_command = (resolved,) + command[1:]
+        timeout_seconds = prepared_case.max_runtime_seconds or self._timeout_seconds
         try:
             completed = subprocess.run(
                 run_command,
                 cwd=prepared_case.case_directory if os.path.isdir(prepared_case.case_directory) else None,
                 capture_output=True,
                 text=True,
-                timeout=self._timeout_seconds,
+                timeout=timeout_seconds,
             )
         except subprocess.TimeoutExpired as exc:
             return ProcessExecutionResult(
@@ -82,7 +83,7 @@ class LocalProcessExecutor:
                 execution_mode="subprocess",
                 return_code=124,
                 stdout=exc.stdout or "",
-                stderr=exc.stderr or f"Execution timed out after {self._timeout_seconds} seconds.",
+                stderr=exc.stderr or f"Execution timed out after {timeout_seconds} seconds.",
             )
         except OSError as exc:
             return ProcessExecutionResult(

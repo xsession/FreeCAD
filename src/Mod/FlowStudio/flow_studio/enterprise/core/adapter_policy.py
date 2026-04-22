@@ -59,6 +59,15 @@ COMPATIBILITY_MATRIX: Mapping[str, AdapterCompatibility] = {
         solver_versions=("9.0", "9.1"),
         notes="Primary multiphysics backend.",
     ),
+    "geant4.primary": AdapterCompatibility(
+        adapter_id="geant4.primary",
+        flow_studio_min="1.0.0",
+        flow_studio_max="1.x",
+        host_freecad_min="0.21",
+        host_freecad_max="1.99",
+        solver_versions=("11.4", "11.4.1"),
+        notes="Primary particle transport and radiation backend.",
+    ),
     "fluidx3d.optional": AdapterCompatibility(
         adapter_id="fluidx3d.optional",
         flow_studio_min="1.0.0",

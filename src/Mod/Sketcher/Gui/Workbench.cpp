@@ -28,6 +28,7 @@
 #include <Base/Console.h>
 #include <Gui/Application.h>
 #include <Gui/Document.h>
+#include <Gui/RibbonBar.h>
 #include <Gui/WorkbenchManager.h>
 #include <Mod/Sketcher/App/Constraint.h>
 
@@ -57,6 +58,29 @@ Workbench::Workbench()
 
 Workbench::~Workbench()
 {}
+
+namespace
+{
+QStringList toolbarCommands(const Gui::ToolBarItem& toolbar)
+{
+    QStringList commands;
+    for (Gui::ToolBarItem* item : toolbar.getItems()) {
+        commands.append(QString::fromStdString(item->command()));
+    }
+    return commands;
+}
+
+void registerSketchContextualPanel(const QString& panelName,
+                                   int order,
+                                   const QStringList& commands)
+{
+    Gui::RibbonBar::registerContextualRibbonPanel(
+        QStringLiteral("RibbonContext::Sketch::%1::Types=Sketch::Color=#d96e2b::Order=%2")
+            .arg(panelName)
+            .arg(order),
+        commands);
+}
+}  // namespace
 
 Gui::MenuItem* Workbench::setupMenuBar() const
 {
@@ -141,6 +165,31 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
         = new Gui::ToolBarItem(root, Gui::ToolBarItem::DefaultVisibility::Unavailable);
     visual->setCommand("Visual Helpers");
     addSketcherWorkbenchVisual(*visual);
+
+    Gui::ToolBarItem sketcherContext;
+    addSketcherWorkbenchSketchEditModeActions(sketcherContext);
+    registerSketchContextualPanel(QStringLiteral("Sketch"), 10, toolbarCommands(sketcherContext));
+
+    Gui::ToolBarItem geometryContext;
+    addSketcherWorkbenchGeometries(geometryContext);
+    registerSketchContextualPanel(QStringLiteral("Geometry"), 20, toolbarCommands(geometryContext));
+
+    Gui::ToolBarItem constraintsContext;
+    addSketcherWorkbenchConstraints(constraintsContext);
+    registerSketchContextualPanel(
+        QStringLiteral("Constraints"), 30, toolbarCommands(constraintsContext));
+
+    Gui::ToolBarItem toolsContext;
+    addSketcherWorkbenchTools(toolsContext);
+    registerSketchContextualPanel(QStringLiteral("Tools"), 40, toolbarCommands(toolsContext));
+
+    Gui::ToolBarItem bsplineContext;
+    addSketcherWorkbenchBSplines(bsplineContext);
+    registerSketchContextualPanel(QStringLiteral("B-Spline"), 50, toolbarCommands(bsplineContext));
+
+    Gui::ToolBarItem visualContext;
+    addSketcherWorkbenchVisual(visualContext);
+    registerSketchContextualPanel(QStringLiteral("Visual"), 60, toolbarCommands(visualContext));
 
     return root;
 }

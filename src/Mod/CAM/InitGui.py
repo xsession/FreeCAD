@@ -23,6 +23,7 @@
 # *                                                                         *
 # ***************************************************************************
 import FreeCAD
+from RibbonMetadata import build_ribbon_toolbar_name
 
 if FreeCAD.GuiUp:
     import FreeCADGui
@@ -120,6 +121,9 @@ class CAMWorkbench(Workbench):
             PathPreferencesPathDressup.DressupPreferencesPage,
             QT_TRANSLATE_NOOP("QObject", "CAM"),
         )
+
+        main_window_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
+        ribbon_enabled = bool(main_window_prefs.GetBool("UseRibbonBar", False))
 
         Path.GuiInit.Startup()
 
@@ -258,23 +262,45 @@ class CAMWorkbench(Workbench):
                 if not Path.Preferences.suppressOpenCamLibWarning():
                     FreeCAD.Console.PrintError("OpenCamLib is not working!\n")
 
-        self.appendToolbar(
-            QT_TRANSLATE_NOOP("Workbench", "Project Setup"),
-            projcmdlist + postcmdgroup,
-        )
-        self.appendToolbar(
-            QT_TRANSLATE_NOOP("Workbench", "Tool Commands"),
-            simcmdgroup + toolcmdlist,
-        )
-        self.appendToolbar(
-            QT_TRANSLATE_NOOP("Workbench", "New Operations"),
-            twodopcmdlist + drillingcmdgroup + engravecmdgroup + threedcmdgroup,
-        )
-        self.appendToolbar(
-            QT_TRANSLATE_NOOP("Workbench", "Path Modification"), modcmdlist + dressupcmdgroup
-        )
-        if extracmdlist:
-            self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Helpful Tools"), extracmdlist)
+        if ribbon_enabled:
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Manufacturing", "Job Setup", "Home", order=10),
+                projcmdlist + postcmdgroup,
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Manufacturing", "Tools & Simulation", "Home", order=20),
+                simcmdgroup + toolcmdlist,
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Manufacturing", "Operations", "Home", order=30),
+                twodopcmdlist + drillingcmdgroup + engravecmdgroup + threedcmdgroup,
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Manufacturing", "Path Modification", order=40),
+                modcmdlist + dressupcmdgroup,
+            )
+            if extracmdlist:
+                self.appendToolbar(
+                    build_ribbon_toolbar_name("Tools", "Helpful Tools", order=10), extracmdlist
+                )
+        else:
+            self.appendToolbar(
+                QT_TRANSLATE_NOOP("Workbench", "Project Setup"),
+                projcmdlist + postcmdgroup,
+            )
+            self.appendToolbar(
+                QT_TRANSLATE_NOOP("Workbench", "Tool Commands"),
+                simcmdgroup + toolcmdlist,
+            )
+            self.appendToolbar(
+                QT_TRANSLATE_NOOP("Workbench", "New Operations"),
+                twodopcmdlist + drillingcmdgroup + engravecmdgroup + threedcmdgroup,
+            )
+            self.appendToolbar(
+                QT_TRANSLATE_NOOP("Workbench", "Path Modification"), modcmdlist + dressupcmdgroup
+            )
+            if extracmdlist:
+                self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Helpful Tools"), extracmdlist)
 
         self.appendMenu(
             [QT_TRANSLATE_NOOP("Workbench", "&CAM")],

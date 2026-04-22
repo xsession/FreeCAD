@@ -107,6 +107,13 @@ def test_legacy_analysis_bridge_includes_elmer_solver_binary_extension():
                 NumProcessors=3,
                 TimeStep=0.01,
                 EndTime=2.0,
+                MultiSolverEnabled=True,
+                MultiSolverBackends=["Elmer", "OpenFOAM"],
+                SoftRuntimeWarningSeconds=20,
+                MaxRuntimeSeconds=60,
+                StallTimeoutSeconds=30,
+                MinProgressPercent=5.0,
+                AbortOnThreshold=True,
             ),
         ],
     )
@@ -115,6 +122,34 @@ def test_legacy_analysis_bridge_includes_elmer_solver_binary_extension():
 
     assert study.solver_family == "elmer"
     assert study.adapter_extensions["elmer.primary"]["solver_binary"] == "ElmerSolver"
+    assert study.parameters["multi_solver_enabled"] is True
+    assert study.parameters["multi_solver_backends"] == "Elmer,OpenFOAM"
+    assert study.parameters["max_runtime_seconds"] == 60
+
+
+def test_legacy_analysis_bridge_honors_solver_backend_override():
+    analysis = SimpleNamespace(
+        Name="A5",
+        Label="A5",
+        PhysicsDomain="CFD",
+        AnalysisType="General",
+        SolverBackend="OpenFOAM",
+        Group=[
+            _make_child(
+                "FlowStudio::Solver",
+                SolverBackend="OpenFOAM",
+                OpenFOAMSolver="simpleFoam",
+                ElmerSolverBinary="ElmerSolver_mpi",
+                NumProcessors=8,
+            ),
+        ],
+    )
+
+    study = LegacyAnalysisBridge(analysis, solver_backend_override="Elmer").to_study_definition()
+
+    assert study.solver_family == "elmer"
+    assert study.parameters["selected_solver_backend"] == "Elmer"
+    assert study.adapter_extensions["elmer.primary"]["solver_binary"] == "ElmerSolver_mpi"
 
 
 def test_legacy_analysis_bridge_prefers_solver_object_backend():
@@ -139,3 +174,47 @@ def test_legacy_analysis_bridge_prefers_solver_object_backend():
 
     assert study.solver_family == "fluidx3d"
     assert study.adapter_extensions["fluidx3d.optional"]["resolution"] == 512
+
+
+def test_legacy_analysis_bridge_maps_geant4_extensions():
+    source_part = SimpleNamespace(Name="BeamBody")
+    analysis = SimpleNamespace(
+        Name="A4",
+        Label="A4",
+        PhysicsDomain="Optical",
+        AnalysisType="Non-Sequential Ray Trace",
+        SolverBackend="Geant4",
+        Group=[
+            _make_child(
+                "FlowStudio::Solver",
+                SolverBackend="Geant4",
+                Geant4Executable="/opt/geant4/bin/exampleB1",
+                Geant4PhysicsList="QGSP_BERT",
+                Geant4EventCount=2500,
+                Geant4Threads=6,
+                Geant4MacroName="beam.mac",
+                Geant4EnableVisualization=True,
+            ),
+            _make_child(
+                "FlowStudio::BCGeant4Source",
+                Name="BeamSource",
+                Label="Beam Source",
+                SourceType="Beam",
+                ParticleType="proton",
+                EnergyMeV=5.0,
+                BeamRadius=2.0,
+                DirectionX=0.0,
+                DirectionY=0.0,
+                DirectionZ=1.0,
+                Events=2500,
+                References=[(source_part, "Face1")],
+            ),
+        ],
+    )
+
+    study = LegacyAnalysisBridge(analysis).to_study_definition()
+
+    assert study.solver_family == "geant4"
+    assert study.adapter_extensions["geant4.primary"]["physics_list"] == "QGSP_BERT"
+    assert study.adapter_extensions["geant4.primary"]["event_count"] == 2500
+    assert study.adapter_extensions["geant4.primary"]["sources"][0]["particle_type"] == "proton"

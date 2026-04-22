@@ -68,6 +68,7 @@ SET(FlowStudioEnterpriseAdapters_SRCS
     flow_studio/enterprise/adapters/base.py
     flow_studio/enterprise/adapters/elmer.py
     flow_studio/enterprise/adapters/fluidx3d.py
+    flow_studio/enterprise/adapters/geant4.py
     flow_studio/enterprise/adapters/openfoam.py
 )
 
@@ -130,6 +131,7 @@ SET(FlowStudioObjects_SRCS
     flow_studio/objects/__init__.py
     flow_studio/objects/analysis.py
     flow_studio/objects/base_bc.py
+    flow_studio/objects/bc_geant4.py
     flow_studio/objects/base_object.py
     flow_studio/objects/bc_electromagnetic.py
     flow_studio/objects/bc_electrostatic.py
@@ -148,6 +150,8 @@ SET(FlowStudioObjects_SRCS
     flow_studio/objects/electrostatic_physics_model.py
     flow_studio/objects/fluid_material.py
     flow_studio/objects/flowefd_features.py
+    flow_studio/objects/geant4_result.py
+    flow_studio/objects/geant4_result_components.py
     flow_studio/objects/initial_conditions.py
     flow_studio/objects/measurement_point.py
     flow_studio/objects/measurement_surface.py
@@ -171,6 +175,8 @@ SET(FlowStudioSolvers_SRCS
     flow_studio/solvers/elmer_runner.py
     flow_studio/solvers/elmer_sif.py
     flow_studio/solvers/fluidx3d_runner.py
+    flow_studio/solvers/geant4_runner.py
+    flow_studio/solvers/geant4_support.py
     flow_studio/solvers/openfoam_runner.py
     flow_studio/solvers/optical_runner.py
     flow_studio/solvers/registry.py
@@ -185,6 +191,8 @@ SET(FlowStudioTaskpanels_SRCS
     flow_studio/taskpanels/task_bc_wall.py
     flow_studio/taskpanels/task_fluid_material.py
     flow_studio/taskpanels/task_flowefd_features.py
+    flow_studio/taskpanels/task_geant4_result.py
+    flow_studio/taskpanels/task_geant4_result_component.py
     flow_studio/taskpanels/task_geometry_tools.py
     flow_studio/taskpanels/task_generic_bc.py
     flow_studio/taskpanels/task_initial_conditions.py
@@ -217,6 +225,8 @@ SET(FlowStudioViewproviders_SRCS
     flow_studio/viewproviders/vp_boundary_layer.py
     flow_studio/viewproviders/vp_fluid_material.py
     flow_studio/viewproviders/vp_flowefd_feature.py
+    flow_studio/viewproviders/vp_geant4_result.py
+    flow_studio/viewproviders/vp_geant4_result_component.py
     flow_studio/viewproviders/vp_generic_bc.py
     flow_studio/viewproviders/vp_initial_conditions.py
     flow_studio/viewproviders/vp_material.py
@@ -246,7 +256,9 @@ SET(FlowStudioTests_SRCS
     flow_studio/tests/test_enterprise_remote.py
     flow_studio/tests/test_enterprise_bootstrap.py
     flow_studio/tests/test_enterprise_adapter_matrix.py
+    flow_studio/tests/test_enterprise_geant4_adapter.py
     flow_studio/tests/test_elmer_sif_detailed.py
+    flow_studio/tests/test_geant4_runner.py
     flow_studio/tests/test_mesh_and_materials.py
         flow_studio/tests/test_multiphysics.py
         flow_studio/tests/test_elmer_runner_selection.py

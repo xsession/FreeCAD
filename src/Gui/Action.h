@@ -215,7 +215,12 @@ public:
     void slotActivateWorkbench(const char*);
 
     QList<QAction*> getEnabledWbActions() const;
+    QList<QAction*> getPrimaryWbActions() const;
+    QList<QAction*> getOverflowWbActions() const;
     QList<QAction*> getDisabledWbActions() const;
+
+    bool isFavoriteWorkbench(const QString& wbName) const;
+    void setWorkbenchFavorite(const QString& wbName, bool favorite);
 
 Q_SIGNALS:
     void workbenchListRefreshed(QList<QAction*>);

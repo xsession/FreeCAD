@@ -222,6 +222,22 @@ class TestCheckBackend(unittest.TestCase):
         report = check_backend("FluidX3D")
         self.assertFalse(report.available)
 
+    @patch.dict("flow_studio.solver_deps.os.environ", {"Geant4_DIR": "/opt/geant4/lib/cmake/Geant4"}, clear=False)
+    @patch("flow_studio.solver_deps.find_executable", return_value=(None, ""))
+    def test_geant4_found_via_environment_marker(self, mock_find):
+        from flow_studio.solver_deps import check_backend
+        report = check_backend("Geant4")
+        self.assertTrue(report.available)
+        dep_names = {d.name for d in report.deps}
+        self.assertIn("Geant4_DIR", dep_names)
+
+    @patch.dict("flow_studio.solver_deps.os.environ", {}, clear=True)
+    @patch("flow_studio.solver_deps.find_executable", return_value=(None, ""))
+    def test_geant4_missing_without_environment_or_tools(self, mock_find):
+        from flow_studio.solver_deps import check_backend
+        report = check_backend("Geant4")
+        self.assertFalse(report.available)
+
     def test_unknown_backend(self):
         from flow_studio.solver_deps import check_backend
         report = check_backend("NonExistentSolver")
@@ -257,6 +273,7 @@ class TestCheckAll(unittest.TestCase):
         self.assertIn("OpenFOAM", reports)
         self.assertIn("FluidX3D", reports)
         self.assertIn("Elmer", reports)
+        self.assertIn("Geant4", reports)
         self.assertIn("Meshing", reports)
         self.assertIn("PostProcessing", reports)
 

@@ -26,6 +26,8 @@
 
 #include <vector>
 #include <optional>
+#include <QFrame>
+#include <QLabel>
 #include <QScrollArea>
 #include <QStackedWidget>
 
@@ -33,7 +35,6 @@
 #include <Gui/QSint/include/QSint>
 #include <Gui/Selection/Selection.h>
 #include "TaskWatcher.h"
-
 
 namespace App
 {
@@ -127,10 +128,20 @@ class GuiExport TaskPanel: public QWidget
 public:
     explicit TaskPanel(QWidget* parent = nullptr);
     ~TaskPanel() override;
+    void setSummary(const QString& title, const QString& detail = {});
+    void clearSummary();
+    void setValidation(const QString& level, const QString& title, const QString& detail = {});
+    void clearValidation();
 
 public:
     QVBoxLayout* mainLayout;
     QScrollArea* scrollArea;
+    ::QFrame* summaryFrame;
+    ::QLabel* summaryTitleLabel;
+    ::QLabel* summaryDetailLabel;
+    ::QFrame* validationFrame;
+    ::QLabel* validationTitleLabel;
+    ::QLabel* validationDetailLabel;
     QVBoxLayout* contextualPanelsLayout;
     QVBoxLayout* dialogLayout;
     QList<QWidget*> contextualPanels;

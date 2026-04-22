@@ -206,6 +206,40 @@ class TaskFan(FloEFDTaskPanel):
 
 
 class TaskResultPlot(FloEFDTaskPanel):
+    SUMMARY_TITLE = "Result Plot"
+    SUMMARY_DETAIL = (
+        "Define how {label} should visualize a result field across the selected geometry or seed locations."
+    )
+
+    def _build_task_validation(self):
+        if not self._refs():
+            return (
+                "incomplete",
+                "Assign plot targets",
+                "Select faces, parts, or seed locations before creating a result plot.",
+            )
+
+        if not self.cb_field.currentText().strip():
+            return (
+                "incomplete",
+                "Result field required",
+                "Choose the field this result plot should visualize.",
+            )
+
+        if not any((
+            self.chk_contours.isChecked(),
+            self.chk_isolines.isChecked(),
+            self.chk_vectors.isChecked(),
+            self.chk_streamlines.isChecked(),
+        )):
+            return (
+                "warning",
+                "Enable a display mode",
+                "Turn on at least one display style such as contours, isolines, vectors, or streamlines.",
+            )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -260,6 +294,45 @@ class TaskResultPlot(FloEFDTaskPanel):
 
 
 class TaskParticleStudy(FloEFDTaskPanel):
+    SUMMARY_TITLE = "Particle Study"
+    SUMMARY_DETAIL = (
+        "Configure how {label} seeds, colors, and limits particle trajectories from the selected injections."
+    )
+
+    reference_property = "Injections"
+
+    def _build_task_validation(self):
+        if not self._refs():
+            return (
+                "incomplete",
+                "Assign particle injections",
+                "Select one or more injection faces, edges, or seed regions before configuring a particle study.",
+            )
+
+        gravity = (self.sp_gx.value(), self.sp_gy.value(), self.sp_gz.value())
+        if self.chk_grav.isChecked() and gravity == (0.0, 0.0, 0.0):
+            return (
+                "warning",
+                "Gravity vector is zero",
+                "Use a non-zero gravity vector or disable gravity for this particle study.",
+            )
+
+        if self.sp_d.value() <= 0.0:
+            return (
+                "warning",
+                "Particle diameter required",
+                "Enter a positive particle diameter before tracing particles.",
+            )
+
+        if self.sp_len.value() <= 0.0 or self.sp_time.value() <= 0.0:
+            return (
+                "warning",
+                "Tracking limits required",
+                "Set positive tracking length and time limits before running the particle study.",
+            )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)

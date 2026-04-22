@@ -10,5 +10,4 @@ class VPMeshGmsh(BaseFlowVP):
     icon_name = "FlowStudioMesh.svg"
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_mesh_gmsh import TaskMeshGmsh
-        FreeCADGui.Control.showDialog(TaskMeshGmsh(vobj.Object))
-        return True
+        return self.show_task_panel(TaskMeshGmsh, vobj.Object)

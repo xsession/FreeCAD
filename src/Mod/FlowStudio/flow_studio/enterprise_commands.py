@@ -17,7 +17,7 @@ from flow_studio.enterprise import initialize_workbench
 from flow_studio.enterprise.app.legacy_actions import (
     export_fcstd_sidecar,
     export_analysis_manifest,
-    submit_analysis_to_runtime,
+    submit_analysis_to_runtime_batch,
 )
 from flow_studio.core.workflow import get_active_analysis
 
@@ -155,7 +155,7 @@ class _CmdSubmitEnterpriseRun:
         working_directory = _default_output_dir(analysis)
 
         try:
-            record, manifest_hash = submit_analysis_to_runtime(
+            submissions = submit_analysis_to_runtime_batch(
                 runtime=runtime,
                 analysis_object=analysis,
                 project_id=_project_id(),
@@ -180,16 +180,23 @@ class _CmdSubmitEnterpriseRun:
             )
             return
 
-        message = (
-            f"Run submitted.\n\n"
-            f"Run ID: {record.run_id}\n"
-            f"State: {record.state.value}\n"
-            f"Adapter: {record.adapter_id}\n"
-            f"Target: {record.target_ref or record.target or 'local'}\n"
-            f"Execution Mode: {record.execution_mode or 'unknown'}\n"
-            f"Manifest: {manifest_hash}\n"
-            f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
-        )
+        if len(submissions) == 1:
+            _, record, manifest_hash = submissions[0]
+            message = (
+                f"Run submitted.\n\n"
+                f"Run ID: {record.run_id}\n"
+                f"State: {record.state.value}\n"
+                f"Adapter: {record.adapter_id}\n"
+                f"Target: {record.target_ref or record.target or 'local'}\n"
+                f"Execution Mode: {record.execution_mode or 'unknown'}\n"
+                f"Manifest: {manifest_hash}\n"
+                f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
+            )
+        else:
+            message = "Multi-solver runs submitted.\n\n" + "\n".join(
+                f"{backend}: {record.run_id} | {record.state.value} | {record.adapter_id} | {record.target_ref or record.target or 'local'}"
+                for backend, record, _manifest_hash in submissions
+            )
         FreeCAD.Console.PrintMessage(f"FlowStudio: {message}\n")
         _show_info(translate("FlowStudio", "Enterprise Run Submitted"), message)
 
@@ -227,7 +234,7 @@ class _CmdSubmitEnterpriseRemoteRun:
         working_directory = _default_output_dir(analysis)
 
         try:
-            record, manifest_hash = submit_analysis_to_runtime(
+            submissions = submit_analysis_to_runtime_batch(
                 runtime=runtime,
                 analysis_object=analysis,
                 project_id=_project_id(),
@@ -254,17 +261,24 @@ class _CmdSubmitEnterpriseRemoteRun:
             )
             return
 
-        message = (
-            f"Remote run submitted.\n\n"
-            f"Run ID: {record.run_id}\n"
-            f"State: {record.state.value}\n"
-            f"Adapter: {record.adapter_id}\n"
-            f"Target: {record.target_ref or profile.name}\n"
-            f"Remote Run ID: {record.remote_run_id or 'n/a'}\n"
-            f"Execution Mode: {record.execution_mode or 'unknown'}\n"
-            f"Manifest: {manifest_hash}\n"
-            f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
-        )
+        if len(submissions) == 1:
+            _, record, manifest_hash = submissions[0]
+            message = (
+                f"Remote run submitted.\n\n"
+                f"Run ID: {record.run_id}\n"
+                f"State: {record.state.value}\n"
+                f"Adapter: {record.adapter_id}\n"
+                f"Target: {record.target_ref or profile.name}\n"
+                f"Remote Run ID: {record.remote_run_id or 'n/a'}\n"
+                f"Execution Mode: {record.execution_mode or 'unknown'}\n"
+                f"Manifest: {manifest_hash}\n"
+                f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
+            )
+        else:
+            message = "Remote multi-solver runs submitted.\n\n" + "\n".join(
+                f"{backend}: {record.run_id} | {record.state.value} | {record.adapter_id} | {record.target_ref or profile.name} | {record.remote_run_id or 'n/a'}"
+                for backend, record, _manifest_hash in submissions
+            )
         FreeCAD.Console.PrintMessage(f"FlowStudio: {message}\n")
         _show_info(translate("FlowStudio", "Enterprise Remote Run Submitted"), message)
 

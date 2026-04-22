@@ -75,6 +75,7 @@ class TestSolverRegistry(unittest.TestCase):
         backends = available_backends()
         self.assertIn("OpenFOAM", backends)
         self.assertIn("FluidX3D", backends)
+        self.assertIn("Geant4", backends)
 
     def test_get_runner_openfoam(self):
         from flow_studio.solvers.registry import _REGISTRY_PATHS

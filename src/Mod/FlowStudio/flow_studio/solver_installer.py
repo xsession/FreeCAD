@@ -50,6 +50,14 @@ def _default_install_root():
 
 # Download URLs and metadata (updated periodically)
 _SOLVER_DOWNLOADS = {
+    "Geant4": {
+        "all": {
+            "install_method": "manual",
+            "docs_url": "https://geant4.web.cern.ch/docs/getting-started",
+            "download_url": "https://geant4.web.cern.ch/download",
+            "version": "11.4.1",
+        },
+    },
     "Elmer": {
         "Windows": {
             "url": "https://github.com/ElmerCSC/elmerfem/releases/download/release-9.0/ElmerFEM-Release9.0-Windows-AMD64.zip",
@@ -349,6 +357,36 @@ class SolverInstaller:
             print(f"  [X] Elmer installation verification failed")
             return False
 
+    # ----- Geant4 -----
+    def install_geant4(self, force=False):
+        """Detect or guide installation of Geant4."""
+        print("=" * 60)
+        print("Installing Geant4...")
+        print("=" * 60)
+
+        if not force:
+            report = check_backend("Geant4", self.all_bin_dirs())
+            if report.available:
+                detected_path = ""
+                for dep in report.deps:
+                    if dep.found and dep.path:
+                        detected_path = dep.path
+                        break
+                print(f"  Geant4 already detected: {detected_path or 'environment markers found'}")
+                self._mark_installed("Geant4", {
+                    "path": detected_path,
+                    "version": _SOLVER_DOWNLOADS["Geant4"]["all"].get("version", ""),
+                    "bin_dir": os.path.dirname(detected_path) if detected_path else "",
+                })
+                return True
+
+        info = _SOLVER_DOWNLOADS["Geant4"]["all"]
+        print("  Automatic Geant4 installation is not implemented.")
+        print(f"  Get started: {info['docs_url']}")
+        print(f"  Downloads:   {info['download_url']}")
+        print("  After installation, point FlowStudio to your compiled Geant4 application executable.")
+        return False
+
     # ----- ParaView -----
     def install_paraview(self, force=False):
         """Download and install ParaView."""
@@ -594,6 +632,7 @@ class SolverInstaller:
         installers = [
             ("GMSH", self.install_gmsh),
             ("Elmer", self.install_elmer),
+            ("Geant4", self.install_geant4),
             ("OpenFOAM", self.install_openfoam),
             ("FluidX3D", self.install_fluidx3d),
             ("ParaView", self.install_paraview),
@@ -641,6 +680,7 @@ class SolverInstaller:
         # Try to install
         installer_map = {
             "Elmer": self.install_elmer,
+            "Geant4": self.install_geant4,
             "OpenFOAM": self.install_openfoam,
             "FluidX3D": self.install_fluidx3d,
             "ParaView": self.install_paraview,

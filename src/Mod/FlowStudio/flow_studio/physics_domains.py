@@ -194,7 +194,8 @@ OPTICAL = PhysicsDomain(
     key="Optical",
     label="Optical / Photonics",
     description="Geometrical optics, illumination, lens/source/detector setup, "
-                "and wave-optics photonics through open-source backends.",
+                "wave-optics photonics, and radiation transport scaffolding through "
+                "open-source backends.",
     icon="FlowStudioElectromagnetic.svg",
     analysis_types=[
         "Sequential Ray Trace",
@@ -207,8 +208,11 @@ OPTICAL = PhysicsDomain(
         "FlowStudio::BCOpticalSource",
         "FlowStudio::BCOpticalDetector",
         "FlowStudio::BCOpticalBoundary",
+        "FlowStudio::BCGeant4Source",
+        "FlowStudio::BCGeant4Detector",
+        "FlowStudio::BCGeant4Scoring",
     ],
-    solver_backends=["Raysect", "Meep", "openEMS", "Optiland"],
+    solver_backends=["Raysect", "Meep", "openEMS", "Optiland", "Geant4"],
     material_type="FlowStudio::OpticalMaterial",
     physics_model_type="FlowStudio::OpticalPhysicsModel",
 )

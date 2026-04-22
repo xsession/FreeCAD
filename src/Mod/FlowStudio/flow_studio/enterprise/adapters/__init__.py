@@ -7,6 +7,7 @@
 
 from .base import BaseSolverAdapter
 from .elmer import ElmerSolverAdapter
+from .geant4 import Geant4SolverAdapter
 from .openfoam import OpenFOAMSolverAdapter
 
 try:
@@ -18,5 +19,6 @@ __all__ = [
     "BaseSolverAdapter",
     "ElmerSolverAdapter",
     "FluidX3DOptionalAdapter",
+    "Geant4SolverAdapter",
     "OpenFOAMSolverAdapter",
 ]

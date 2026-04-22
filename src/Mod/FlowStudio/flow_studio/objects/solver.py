@@ -57,6 +57,7 @@ class Solver(BaseFlowObject):
             "Elmer",
             "FluidX3D",
             "SU2",
+            "Geant4",
             "Raysect",
             "Meep",
             "openEMS",
@@ -157,10 +158,52 @@ class Solver(BaseFlowObject):
         )
         obj.AutoParallel = False
 
+        obj.addProperty(
+            "App::PropertyBool", "MultiSolverEnabled", "Parallel",
+            "Submit the same model to multiple enterprise solver backends in parallel"
+        )
+        obj.MultiSolverEnabled = False
+
+        obj.addProperty(
+            "App::PropertyStringList", "MultiSolverBackends", "Parallel",
+            "Selected enterprise backends for multi-solver submissions"
+        )
+        obj.MultiSolverBackends = ["OpenFOAM", "Elmer"]
+
         parallel_defaults = recommended_parallel_defaults(obj.SolverBackend)
         obj.NumProcessors = parallel_defaults["NumProcessors"]
         obj.ElmerSolverBinary = parallel_defaults["ElmerSolverBinary"]
         obj.AutoParallel = parallel_defaults["AutoParallel"]
+
+        obj.addProperty(
+            "App::PropertyInteger", "SoftRuntimeWarningSeconds", "Runtime Thresholds",
+            "Emit a runtime warning after this many seconds (0 disables)"
+        )
+        obj.SoftRuntimeWarningSeconds = 0
+
+        obj.addProperty(
+            "App::PropertyInteger", "MaxRuntimeSeconds", "Runtime Thresholds",
+            "Stop the solver after this many wall-clock seconds (0 disables)"
+        )
+        obj.MaxRuntimeSeconds = 0
+
+        obj.addProperty(
+            "App::PropertyInteger", "StallTimeoutSeconds", "Runtime Thresholds",
+            "Stop the solver if no meaningful progress is observed within this many seconds (0 disables)"
+        )
+        obj.StallTimeoutSeconds = 0
+
+        obj.addProperty(
+            "App::PropertyFloat", "MinProgressPercent", "Runtime Thresholds",
+            "Minimum expected progress percentage within a stall window"
+        )
+        obj.MinProgressPercent = 0.0
+
+        obj.addProperty(
+            "App::PropertyBool", "AbortOnThreshold", "Runtime Thresholds",
+            "Abort the run when a runtime threshold is exceeded"
+        )
+        obj.AbortOnThreshold = True
 
         # --- FluidX3D-specific ---
         obj.addProperty(
@@ -216,6 +259,37 @@ class Solver(BaseFlowObject):
         )
         obj.FluidX3DNumGPUs = 1
 
+        # --- Geant4-specific ---
+        obj.addProperty(
+            "App::PropertyString", "Geant4PhysicsList", "Geant4",
+            "Reference physics list used by the generated Geant4 run scaffold"
+        )
+        obj.Geant4PhysicsList = "FTFP_BERT"
+
+        obj.addProperty(
+            "App::PropertyInteger", "Geant4EventCount", "Geant4",
+            "Number of primary events to simulate"
+        )
+        obj.Geant4EventCount = 1000
+
+        obj.addProperty(
+            "App::PropertyInteger", "Geant4Threads", "Geant4",
+            "Number of Geant4 worker threads for MT-enabled applications"
+        )
+        obj.Geant4Threads = 1
+
+        obj.addProperty(
+            "App::PropertyString", "Geant4MacroName", "Geant4",
+            "Primary Geant4 macro file written into the case directory"
+        )
+        obj.Geant4MacroName = "run.mac"
+
+        obj.addProperty(
+            "App::PropertyBool", "Geant4EnableVisualization", "Geant4",
+            "Emit visualization commands in the generated Geant4 macro"
+        )
+        obj.Geant4EnableVisualization = False
+
         # Transient settings
         obj.addProperty(
             "App::PropertyFloat", "TimeStep", "Transient",
@@ -253,6 +327,10 @@ class Solver(BaseFlowObject):
         obj.addProperty(
             "App::PropertyPath", "SU2Executable", "Paths",
             "Path to SU2_CFD executable"
+        )
+        obj.addProperty(
+            "App::PropertyPath", "Geant4Executable", "Paths",
+            "Path to the compiled Geant4 application executable"
         )
 
     def onChanged(self, obj, prop):

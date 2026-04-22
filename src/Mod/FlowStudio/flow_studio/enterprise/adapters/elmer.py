@@ -78,6 +78,7 @@ class ElmerSolverAdapter(BaseSolverAdapter):
             case_directory=case_directory,
             launch_command=(solver_binary, "case.sif"),
             artifact_manifest=artifact_manifest,
+            max_runtime_seconds=context.request.runtime_thresholds.max_wall_time_seconds,
         )
 
     def collect_results(self, handle: JobHandle) -> ResultSet:

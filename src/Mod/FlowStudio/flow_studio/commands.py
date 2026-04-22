@@ -19,7 +19,7 @@ import FreeCAD
 import FreeCADGui
 
 from flow_studio.enterprise import initialize_workbench
-from flow_studio.enterprise.app.legacy_actions import prepare_runtime_submission
+from flow_studio.enterprise.app.legacy_actions import prepare_runtime_submissions
 from flow_studio.core.workflow import (
     get_active_analysis,
     has_analysis,
@@ -818,7 +818,7 @@ class _CmdRunSolver:
         run_id = f"{analysis.Name}-{_timestamp_slug()}"
 
         try:
-            adapter_id, _, request, manifest_hash = prepare_runtime_submission(
+            submissions = prepare_runtime_submissions(
                 runtime=runtime,
                 analysis_object=analysis,
                 project_id=_project_id(),
@@ -833,15 +833,34 @@ class _CmdRunSolver:
             )
             return False
 
-        if adapter_id not in runtime.job_service.adapter_ids():
+        is_multi_solver = len(submissions) > 1
+        unavailable_adapters = [
+            adapter_id for _, adapter_id, _, _, _ in submissions
+            if adapter_id not in runtime.job_service.adapter_ids()
+        ]
+        if unavailable_adapters:
+            if is_multi_solver:
+                message = (
+                    "Enterprise multi-solver submission requires registered adapters for all selected backends. Missing: "
+                    + ", ".join(unavailable_adapters)
+                )
+                FreeCAD.Console.PrintError(f"FlowStudio: {message}\n")
+                _show_info_dialog(translate("FlowStudio", "Enterprise Run Failed"), message)
+                return True
             FreeCAD.Console.PrintMessage(
-                f"FlowStudio: Backend for adapter '{adapter_id}' is not yet handled by the enterprise runtime; using legacy runner.\n"
+                f"FlowStudio: Backend for adapter '{unavailable_adapters[0]}' is not yet handled by the enterprise runtime; using legacy runner.\n"
             )
             return False
 
         try:
-            record = runtime.legacy_execution.submit(request)
+            records = runtime.legacy_execution.submit_many(tuple(item[3] for item in submissions))
         except Exception as exc:
+            if is_multi_solver:
+                FreeCAD.Console.PrintError(
+                    f"FlowStudio: Enterprise multi-solver submission failed: {exc}\n"
+                )
+                _show_info_dialog(translate("FlowStudio", "Enterprise Run Failed"), str(exc))
+                return True
             FreeCAD.Console.PrintWarning(
                 f"FlowStudio: Enterprise submission failed; falling back to legacy runner: {exc}\n"
             )
@@ -856,15 +875,23 @@ class _CmdRunSolver:
         except AttributeError:
             pass
 
-        message = (
-            f"Enterprise run submitted.\n\n"
-            f"Run ID: {record.run_id}\n"
-            f"State: {record.state.value}\n"
-            f"Adapter: {record.adapter_id}\n"
-            f"Execution Mode: {record.execution_mode or 'unknown'}\n"
-            f"Manifest: {manifest_hash}\n"
-            f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
-        )
+        if len(records) == 1:
+            record = records[0]
+            manifest_hash = submissions[0][4]
+            message = (
+                f"Enterprise run submitted.\n\n"
+                f"Run ID: {record.run_id}\n"
+                f"State: {record.state.value}\n"
+                f"Adapter: {record.adapter_id}\n"
+                f"Execution Mode: {record.execution_mode or 'unknown'}\n"
+                f"Manifest: {manifest_hash}\n"
+                f"Run Directory: {runtime.job_service.run_directory(record.run_id) or working_directory}"
+            )
+        else:
+            message = "Enterprise multi-solver runs submitted.\n\n" + "\n".join(
+                f"{submissions[index][0]}: {record.run_id} | {record.state.value} | {record.adapter_id} | {runtime.job_service.run_directory(record.run_id) or working_directory}"
+                for index, record in enumerate(records)
+            )
         FreeCAD.Console.PrintMessage(f"FlowStudio: {message}\n")
         _show_info_dialog(translate("FlowStudio", "Enterprise Run Submitted"), message)
         return True
@@ -1492,6 +1519,72 @@ class _CmdBCOpticalBoundary:
         _open_task_panel(obj)
 
 
+class _CmdBCGeant4Source:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostStreamlines.svg"),
+            "MenuText": translate("FlowStudio", "Geant4 Source"),
+            "ToolTip": translate("FlowStudio", "Add a Geant4 primary particle source for beam, point, surface, or volume emission"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Geant4 Source")
+        from flow_studio.ObjectsFlowStudio import makeBCGeant4Source
+        obj = makeBCGeant4Source()
+        _assign_current_selection(obj, "FlowStudio Geant4 Source")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdBCGeant4Detector:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostProbe.svg"),
+            "MenuText": translate("FlowStudio", "Geant4 Detector"),
+            "ToolTip": translate("FlowStudio", "Add a Geant4 sensitive detector, calorimeter, tracker, or dose plane"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Geant4 Detector")
+        from flow_studio.ObjectsFlowStudio import makeBCGeant4Detector
+        obj = makeBCGeant4Detector()
+        _assign_current_selection(obj, "FlowStudio Geant4 Detector")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdBCGeant4Scoring:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPostContour.svg"),
+            "MenuText": translate("FlowStudio", "Geant4 Scoring"),
+            "ToolTip": translate("FlowStudio", "Add a Geant4 scoring request for dose, energy deposition, flux, track length, or cell hits"),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Geant4 Scoring")
+        from flow_studio.ObjectsFlowStudio import makeBCGeant4Scoring
+        obj = makeBCGeant4Scoring()
+        _assign_current_selection(obj, "FlowStudio Geant4 Scoring")
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
 # ======================================================================
 #  POST-PROCESSING commands
 # ======================================================================
@@ -1517,6 +1610,68 @@ class _CmdPostPipeline:
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+
+
+class _CmdGeant4Result:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPost.svg"),
+            "MenuText": translate("FlowStudio", "Geant4 Result"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a native Geant4 result container for imported artifact metadata"
+            ),
+        }
+
+    def IsActive(self):
+        return _get_active_analysis() is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Add Geant4 Result")
+        from flow_studio.ObjectsFlowStudio import makeGeant4Result
+        obj = makeGeant4Result()
+        _add_to_analysis(obj)
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdImportGeant4Result:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioPost.svg"),
+            "MenuText": translate("FlowStudio", "Import Geant4 Result"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Import a saved FlowStudio Geant4 result summary JSON into a native Geant4 result object"
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None or FreeCAD.GuiUp
+
+    def Activated(self):
+        if not FreeCAD.GuiUp:
+            FreeCAD.Console.PrintWarning(
+                "FlowStudio: Geant4 summary import requires the GUI file picker.\n"
+            )
+            return
+        from PySide import QtWidgets
+
+        selected_path, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            None,
+            translate("FlowStudio", "Import Geant4 Result Summary"),
+            os.path.expanduser("~"),
+            translate("FlowStudio", "Geant4 Result Summary (*geant4_result_summary.json *.json)"),
+        )
+        if not selected_path:
+            return
+
+        from flow_studio.feminout.importFlowStudio import open_geant4_summary
+
+        analysis = _get_active_analysis()
+        obj = open_geant4_summary(selected_path, doc=FreeCAD.ActiveDocument, analysis=analysis)
+        _open_task_panel(obj)
 
 
 class _CmdPostContour:
@@ -2287,6 +2442,9 @@ FreeCADGui.addCommand("FlowStudio_OpticalPhysics", _CmdOpticalPhysics())
 FreeCADGui.addCommand("FlowStudio_BC_OpticalSource", _CmdBCOpticalSource())
 FreeCADGui.addCommand("FlowStudio_BC_OpticalDetector", _CmdBCOpticalDetector())
 FreeCADGui.addCommand("FlowStudio_BC_OpticalBoundary", _CmdBCOpticalBoundary())
+FreeCADGui.addCommand("FlowStudio_BC_Geant4Source", _CmdBCGeant4Source())
+FreeCADGui.addCommand("FlowStudio_BC_Geant4Detector", _CmdBCGeant4Detector())
+FreeCADGui.addCommand("FlowStudio_BC_Geant4Scoring", _CmdBCGeant4Scoring())
 
 # --- Mesh ---
 FreeCADGui.addCommand("FlowStudio_MeshGmsh", _CmdMeshGmsh())
@@ -2300,6 +2458,8 @@ FreeCADGui.addCommand("FlowStudio_RunSolver", _CmdRunSolver())
 
 # --- Post-processing ---
 FreeCADGui.addCommand("FlowStudio_PostPipeline", _CmdPostPipeline())
+FreeCADGui.addCommand("FlowStudio_Geant4Result", _CmdGeant4Result())
+FreeCADGui.addCommand("FlowStudio_ImportGeant4Result", _CmdImportGeant4Result())
 FreeCADGui.addCommand("FlowStudio_PostContour", _CmdPostContour())
 FreeCADGui.addCommand("FlowStudio_PostStreamlines", _CmdPostStreamlines())
 FreeCADGui.addCommand("FlowStudio_PostProbe", _CmdPostProbe())

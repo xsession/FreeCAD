@@ -360,7 +360,9 @@ def show_engineering_database_editor():
     try:
         dialog.raise_()
     except AttributeError:
-        dialog.raise()
+        raise_method = getattr(dialog, "raise", None)
+        if callable(raise_method):
+            raise_method()
     dialog.activateWindow()
     FreeCAD.Console.PrintMessage("FlowStudio: Engineering database editor opened\n")
     return dialog

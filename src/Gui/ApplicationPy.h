@@ -106,6 +106,8 @@ public:
 
     static PyObject* sAddWbManipulator         (PyObject *self,PyObject *args);
     static PyObject* sRemoveWbManipulator      (PyObject *self,PyObject *args);
+    static PyObject* sRegisterContextualRibbonPanel (PyObject *self,PyObject *args);
+    static PyObject* sUnregisterContextualRibbonPanel (PyObject *self,PyObject *args);
 
     static PyObject* sListUserEditModes        (PyObject *self,PyObject *args);
     static PyObject* sGetUserEditMode          (PyObject *self,PyObject *args);

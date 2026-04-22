@@ -28,7 +28,7 @@ class PostPipeline(BaseFlowObject):
             "App::PropertyEnumeration", "ResultFormat", "PostProcessing",
             "Format of results to load"
         )
-        obj.ResultFormat = ["OpenFOAM", "VTK", "FluidX3D-VTK"]
+        obj.ResultFormat = ["OpenFOAM", "VTK", "FluidX3D-VTK", "Geant4-JSON", "Geant4-CSV", "Geant4-TXT"]
         obj.ResultFormat = "OpenFOAM"
 
         obj.addProperty(

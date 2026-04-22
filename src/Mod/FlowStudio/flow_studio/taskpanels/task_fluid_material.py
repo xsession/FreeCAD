@@ -67,6 +67,42 @@ except ImportError:
 
 class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
 
+    SUMMARY_TITLE = "Fluid Material"
+    SUMMARY_DETAIL = (
+        "Assign a fluid preset or custom transport properties for {label}."
+    )
+
+    def _build_task_validation(self):
+        if not self._refs():
+            return (
+                "incomplete",
+                "Assign fluid regions",
+                "Select one or more fluid regions so this material assignment applies to geometry.",
+            )
+
+        if float(getattr(self.obj, "Density", 0.0)) <= 0.0:
+            return (
+                "incomplete",
+                "Fluid density required",
+                "Enter a positive density before solving with this fluid material.",
+            )
+
+        if float(getattr(self.obj, "DynamicViscosity", 0.0)) <= 0.0:
+            return (
+                "incomplete",
+                "Dynamic viscosity required",
+                "Enter a positive dynamic viscosity for this fluid material.",
+            )
+
+        if float(getattr(self.obj, "SpecificHeat", 0.0)) <= 0.0:
+            return (
+                "warning",
+                "Specific heat should be positive",
+                "Use a positive specific heat so thermal solves have a valid fluid heat capacity.",
+            )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -74,7 +110,8 @@ class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
         layout.addWidget(QtGui.QLabel("<b>Fluid Material Properties</b>"))
         self._add_selection_section(layout, "Assigned Fluid Region")
 
-        # Preset selector
+        material = self._section(layout, "Material")
+
         presets = [
             "Custom", "Air (20°C, 1atm)", "Water (20°C)",
             "Oil (SAE 30)", "Glycerin", "Mercury", "R134a",
@@ -85,31 +122,31 @@ class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
             presets.remove("Custom")
         presets.insert(0, "Custom")
         self.cb_preset = self._combo(presets, self.obj.Preset)
-        self._add_row(layout, "Preset:", self.cb_preset)
+        self._add_row(material, "Preset:", self.cb_preset)
         self.cb_preset.currentTextChanged.connect(self._on_preset_changed)
 
         btn_db = QtGui.QPushButton("Engineering Database...")
         btn_db.clicked.connect(self._open_database)
-        layout.addWidget(btn_db)
+        material.addWidget(btn_db)
 
-        # Properties
+        properties = self._section(layout, "Properties")
         self.sp_rho = self._spin_float(self.obj.Density, 0.001, 20000, 4, 0.1)
-        self._add_row(layout, "Density [kg/m³]:", self.sp_rho)
+        self._add_row(properties, "Density [kg/m³]:", self.sp_rho)
 
         self.sp_mu = self._spin_float(self.obj.DynamicViscosity, 1e-9, 100, 8, 1e-6)
-        self._add_row(layout, "Dynamic Viscosity [Pa·s]:", self.sp_mu)
+        self._add_row(properties, "Dynamic Viscosity [Pa·s]:", self.sp_mu)
 
         self.sp_nu = self._spin_float(self.obj.KinematicViscosity, 1e-9, 1, 8, 1e-7)
-        self._add_row(layout, "Kinematic Viscosity [m²/s]:", self.sp_nu)
+        self._add_row(properties, "Kinematic Viscosity [m²/s]:", self.sp_nu)
 
         self.sp_cp = self._spin_float(self.obj.SpecificHeat, 1, 50000, 1, 10)
-        self._add_row(layout, "Specific Heat [J/(kg·K)]:", self.sp_cp)
+        self._add_row(properties, "Specific Heat [J/(kg·K)]:", self.sp_cp)
 
         self.sp_k = self._spin_float(self.obj.ThermalConductivity, 0, 500, 4, 0.01)
-        self._add_row(layout, "Thermal Conductivity [W/(m·K)]:", self.sp_k)
+        self._add_row(properties, "Thermal Conductivity [W/(m·K)]:", self.sp_k)
 
         self.sp_pr = self._spin_float(self.obj.PrandtlNumber, 0.001, 100000, 3, 0.01)
-        self._add_row(layout, "Prandtl Number:", self.sp_pr)
+        self._add_row(properties, "Prandtl Number:", self.sp_pr)
 
         layout.addStretch()
         return widget

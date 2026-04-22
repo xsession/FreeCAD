@@ -16,6 +16,16 @@ the forces that drove it, the alternatives considered, and the outcome.
 | [ADR-0006](ADR-0006-plugin-api-v2.md) | Plugin API v2 lifecycle manager | Accepted |
 | [ADR-0007](ADR-0007-pdm-provider-abc.md) | PDM provider Python ABC layer | Accepted |
 
+## Architecture Notes
+
+| Document | Purpose |
+|----------|---------|
+| [frontend-shell-ux-plan.md](frontend-shell-ux-plan.md) | Shell UX direction for ribbon, workbench chooser, and task panels |
+| [freecad-visual-environment-deepsearch.md](freecad-visual-environment-deepsearch.md) | Human-centered visual-environment research synthesis for mechanical engineers |
+| [freecad-visual-environment-implementation-plan.md](freecad-visual-environment-implementation-plan.md) | Phased rollout plan for applying the visual-environment model to the current frontend |
+| [freecad-visual-environment-backlog.md](freecad-visual-environment-backlog.md) | Concrete backlog and milestone structure for implementation |
+| [freecad-visual-environment-p0-roadmap.md](freecad-visual-environment-p0-roadmap.md) | Sprint-ready roadmap for the first implementation slice |
+
 ## Template
 
 New ADRs should be created with the filename pattern

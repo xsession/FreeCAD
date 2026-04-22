@@ -47,8 +47,14 @@ class TestRegistryPaths(unittest.TestCase):
         self.assertEqual(cls, "ElmerRunner")
         self.assertIn("elmer_runner", mod)
 
-    def test_registry_has_seven_backends(self):
-        self.assertEqual(len(_REGISTRY_PATHS), 7)
+    def test_geant4_registered(self):
+        self.assertIn("Geant4", _REGISTRY_PATHS)
+        mod, cls = _REGISTRY_PATHS["Geant4"]
+        self.assertEqual(cls, "Geant4Runner")
+        self.assertIn("geant4_runner", mod)
+
+    def test_registry_has_eight_backends(self):
+        self.assertEqual(len(_REGISTRY_PATHS), 8)
 
     def test_all_entries_are_tuples(self):
         for name, entry in _REGISTRY_PATHS.items():
@@ -90,8 +96,8 @@ class TestDomainSolvers(unittest.TestCase):
                              f"{domain} should only have Elmer")
 
     def test_optical_has_four_solvers(self):
-        self.assertEqual(len(_DOMAIN_SOLVERS["Optical"]), 4)
-        for backend in ("Raysect", "Meep", "openEMS", "Optiland"):
+        self.assertEqual(len(_DOMAIN_SOLVERS["Optical"]), 5)
+        for backend in ("Raysect", "Meep", "openEMS", "Optiland", "Geant4"):
             self.assertIn(backend, _DOMAIN_SOLVERS["Optical"])
 
     def test_all_referenced_backends_exist(self):
@@ -127,6 +133,9 @@ class TestAvailableBackends(unittest.TestCase):
         backends = available_backends()
         backends.append("FakeBackend")
         self.assertNotIn("FakeBackend", available_backends())
+
+    def test_contains_geant4(self):
+        self.assertIn("Geant4", available_backends())
 
 
 # ======================================================================

@@ -891,10 +891,18 @@ void View3DInventorViewer::aboutToDestroyGLContext()
 
 void View3DInventorViewer::setDocument(Gui::Document* pcDocument)
 {
+    disconnectDocumentStateSignals();
+
     // write the document the viewer belongs to the selection node
     guiDocument = pcDocument;
     selectionRoot->pcDocument = pcDocument;
     inventorSelection->setDocument(pcDocument);
+    viewportStateRecomputing = false;
+
+    if (guiDocument) {
+        connectDocumentStateSignals();
+    }
+    updateViewportStateBadge();
 
     if (pcDocument) {
         const auto& sels
@@ -909,6 +917,123 @@ void View3DInventorViewer::setDocument(Gui::Document* pcDocument)
 Document* View3DInventorViewer::getDocument()
 {
     return guiDocument;
+}
+
+void View3DInventorViewer::disconnectDocumentStateSignals()
+{
+    viewportTouchedConnection.disconnect();
+    viewportBeforeRecomputeConnection.disconnect();
+    viewportRecomputedConnection.disconnect();
+    viewportSkipRecomputeConnection.disconnect();
+    viewportUndoConnection.disconnect();
+    viewportRedoConnection.disconnect();
+    viewportFinishSaveConnection.disconnect();
+}
+
+void View3DInventorViewer::connectDocumentStateSignals()
+{
+    if (!guiDocument || !guiDocument->getDocument()) {
+        return;
+    }
+
+    auto* document = guiDocument->getDocument();
+    viewportTouchedConnection = document->signalTouchedObject.connect([this](const App::DocumentObject&) {
+        viewportStateRecomputing = false;
+        updateViewportStateBadge();
+    });
+    viewportBeforeRecomputeConnection = document->signalBeforeRecompute.connect([this](const App::Document&) {
+        viewportStateRecomputing = true;
+        updateViewportStateBadge();
+    });
+    viewportRecomputedConnection = document->signalRecomputed.connect(
+        [this](const App::Document&, const std::vector<App::DocumentObject*>&) {
+            viewportStateRecomputing = false;
+            updateViewportStateBadge();
+        }
+    );
+    viewportSkipRecomputeConnection = document->signalSkipRecompute.connect(
+        [this](const App::Document&, const std::vector<App::DocumentObject*>&) {
+            viewportStateRecomputing = false;
+            updateViewportStateBadge();
+        }
+    );
+    viewportUndoConnection = document->signalUndo.connect([this](const App::Document&) {
+        viewportStateRecomputing = false;
+        updateViewportStateBadge();
+    });
+    viewportRedoConnection = document->signalRedo.connect([this](const App::Document&) {
+        viewportStateRecomputing = false;
+        updateViewportStateBadge();
+    });
+    viewportFinishSaveConnection = document->signalFinishSave.connect(
+        [this](const App::Document&, const std::string&) {
+            viewportStateRecomputing = false;
+            updateViewportStateBadge();
+        }
+    );
+}
+
+void View3DInventorViewer::updateViewportStateBadge()
+{
+    if (!guiDocument || !guiDocument->getDocument()) {
+        if (viewportStateBadge) {
+            viewportStateBadge->hide();
+        }
+        return;
+    }
+
+    if (!viewportStateBadge) {
+        viewportStateBadge = new QLabel(this);
+        viewportStateBadge->setAttribute(Qt::WA_TransparentForMouseEvents);
+    }
+
+    auto* document = guiDocument->getDocument();
+    QString label = tr("Ready");
+    QString detail = tr("Model is up to date.");
+    QString style = QStringLiteral(
+        "color: #344054; background: rgba(255, 255, 255, 0.92);"
+        "border: 1px solid rgba(52, 64, 84, 0.20); border-radius: 6px; padding: 4px 8px;"
+    );
+
+    if (viewportStateRecomputing) {
+        label = tr("Recomputing");
+        detail = tr("Updating model dependencies and viewer state.");
+        style = QStringLiteral(
+            "color: #175cd3; background: rgba(239, 248, 255, 0.96);"
+            "border: 1px solid rgba(23, 92, 211, 0.28); border-radius: 6px; padding: 4px 8px;"
+        );
+    }
+    else if (document->isTouched()) {
+        if (document->testStatus(App::Document::SkipRecompute)) {
+            label = tr("Skip Recompute");
+            detail = tr("Document has touched objects while recomputes are paused.");
+            style = QStringLiteral(
+                "color: #8a2c0d; background: rgba(255, 244, 229, 0.97);"
+                "border: 1px solid rgba(181, 71, 8, 0.30); border-radius: 6px; padding: 4px 8px;"
+            );
+        }
+        else {
+            label = tr("Recompute Pending");
+            detail = tr("Model changes are waiting to be recomputed.");
+            style = QStringLiteral(
+                "color: #8a2c0d; background: rgba(255, 250, 235, 0.97);"
+                "border: 1px solid rgba(181, 71, 8, 0.30); border-radius: 6px; padding: 4px 8px;"
+            );
+        }
+    }
+    else if (guiDocument->isModified()) {
+        label = tr("Modified");
+        detail = tr("Document has unsaved changes.");
+        style = QStringLiteral(
+            "color: #475467; background: rgba(249, 250, 251, 0.96);"
+            "border: 1px solid rgba(71, 84, 103, 0.20); border-radius: 6px; padding: 4px 8px;"
+        );
+    }
+
+    viewportStateBadge->setStyleSheet(style);
+    viewportStateBadge->setText(QStringLiteral("%1  %2").arg(label, detail));
+    viewportStateBadge->adjustSize();
+    viewportStateBadge->show();
 }
 
 
@@ -2824,7 +2949,19 @@ void View3DInventorViewer::renderScene()
             "User parameter:BaseApp/MainWindow/DockWindows/OverlayLeft"
         );
         int xOffset = hGrpOverlayL->GetASCII("Widgets", "").empty() ? 10 : fpsCounter->width() + 20;
-        fpsCounter->move(xOffset, height() - fpsCounter->height() - 5);
+        int statusHeight = 0;
+        if (viewportStateBadge && viewportStateBadge->isVisible()) {
+            statusHeight = viewportStateBadge->height() + 6;
+        }
+        fpsCounter->move(xOffset, height() - fpsCounter->height() - statusHeight - 5);
+    }
+
+    if (viewportStateBadge && viewportStateBadge->isVisible()) {
+        ParameterGrp::handle hGrpOverlayL = App::GetApplication().GetParameterGroupByPath(
+            "User parameter:BaseApp/MainWindow/DockWindows/OverlayLeft"
+        );
+        int xOffset = hGrpOverlayL->GetASCII("Widgets", "").empty() ? 10 : 10;
+        viewportStateBadge->move(xOffset, height() - viewportStateBadge->height() - 5);
     }
 
     // Workaround for inconsistent QT behavior related to handling custom OpenGL widgets that

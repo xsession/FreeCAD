@@ -140,6 +140,17 @@ class ExecutionProfile:
 
 
 @dataclass(frozen=True)
+class RuntimeThresholdPolicy:
+    """Optional runtime thresholds used to bound solver execution."""
+
+    soft_wall_time_seconds: int | None = None
+    max_wall_time_seconds: int | None = None
+    stall_time_seconds: int | None = None
+    min_progress_percent: float | None = None
+    abort_on_threshold: bool = True
+
+
+@dataclass(frozen=True)
 class RunRequest:
     """A request to execute a study with a selected profile."""
 
@@ -148,6 +159,7 @@ class RunRequest:
     execution_profile: ExecutionProfile
     requested_by: str = "local-user"
     reason: str = "interactive"
+    runtime_thresholds: RuntimeThresholdPolicy = field(default_factory=RuntimeThresholdPolicy)
 
 
 @dataclass(frozen=True)
@@ -169,6 +181,7 @@ class PreparedCase:
     case_directory: str
     launch_command: Sequence[str]
     artifact_manifest: Mapping[str, str]
+    max_runtime_seconds: int | None = None
 
 
 @dataclass(frozen=True)

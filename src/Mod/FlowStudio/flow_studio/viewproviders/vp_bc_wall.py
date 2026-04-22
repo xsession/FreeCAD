@@ -10,5 +10,4 @@ class VPBCWall(BaseFlowVP):
     icon_name = "FlowStudioWall.svg"
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_bc_wall import TaskBCWall
-        FreeCADGui.Control.showDialog(TaskBCWall(vobj.Object))
-        return True
+        return self.show_task_panel(TaskBCWall, vobj.Object)

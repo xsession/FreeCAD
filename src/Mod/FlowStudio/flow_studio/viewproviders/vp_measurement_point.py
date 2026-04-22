@@ -12,5 +12,4 @@ class VPMeasurementPoint(BaseFlowVP):
 
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_measurement_point import TaskMeasurementPoint
-        FreeCADGui.Control.showDialog(TaskMeasurementPoint(vobj.Object))
-        return True
+        return self.show_task_panel(TaskMeasurementPoint, vobj.Object)

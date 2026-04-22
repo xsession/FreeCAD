@@ -26,6 +26,8 @@
 #include <QApplication>
 #include <QCursor>
 #include <QDockWidget>
+#include <QFrame>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
 #include <QPushButton>
@@ -235,16 +237,74 @@ TaskPanel::TaskPanel(QWidget* parent)
 {
     mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
+    mainLayout->setSpacing(6);
     this->setLayout(mainLayout);
     scrollArea = new QScrollArea(this);
 
+    summaryFrame = new QFrame(this);
+    summaryFrame->setFrameShape(QFrame::StyledPanel);
+    summaryFrame->setObjectName(QStringLiteral("taskViewSummary"));
+    summaryFrame->setVisible(false);
+
+    auto* summaryLayout = new QVBoxLayout(summaryFrame);
+    summaryLayout->setContentsMargins(10, 8, 10, 8);
+    summaryLayout->setSpacing(2);
+
+    summaryTitleLabel = new QLabel(summaryFrame);
+    QFont summaryTitleFont = summaryTitleLabel->font();
+    summaryTitleFont.setBold(true);
+    summaryTitleLabel->setFont(summaryTitleFont);
+    summaryTitleLabel->setWordWrap(true);
+    summaryLayout->addWidget(summaryTitleLabel);
+
+    summaryDetailLabel = new QLabel(summaryFrame);
+    summaryDetailLabel->setWordWrap(true);
+    summaryDetailLabel->setObjectName(QStringLiteral("taskViewSummaryDetail"));
+    summaryLayout->addWidget(summaryDetailLabel);
+
+    summaryFrame->setStyleSheet(QStringLiteral(
+        "QFrame#taskViewSummary {"
+        "  border: 1px solid palette(mid);"
+        "  border-radius: 6px;"
+        "  background: palette(base);"
+        "}"
+        "QLabel#taskViewSummaryDetail {"
+        "  color: palette(mid);"
+        "}"
+    ));
+    mainLayout->addWidget(summaryFrame);
+
+    validationFrame = new QFrame(this);
+    validationFrame->setFrameShape(QFrame::StyledPanel);
+    validationFrame->setObjectName(QStringLiteral("taskViewValidation"));
+    validationFrame->setVisible(false);
+
+    auto* validationLayout = new QVBoxLayout(validationFrame);
+    validationLayout->setContentsMargins(10, 8, 10, 8);
+    validationLayout->setSpacing(2);
+
+    validationTitleLabel = new QLabel(validationFrame);
+    QFont validationTitleFont = validationTitleLabel->font();
+    validationTitleFont.setBold(true);
+    validationTitleLabel->setFont(validationTitleFont);
+    validationTitleLabel->setWordWrap(true);
+    validationLayout->addWidget(validationTitleLabel);
+
+    validationDetailLabel = new QLabel(validationFrame);
+    validationDetailLabel->setWordWrap(true);
+    validationDetailLabel->setObjectName(QStringLiteral("taskViewValidationDetail"));
+    validationLayout->addWidget(validationDetailLabel);
+
+    mainLayout->addWidget(validationFrame);
+
     contextualPanelsLayout = new QVBoxLayout();
     contextualPanelsLayout->setContentsMargins(0, 0, 0, 0);
+    contextualPanelsLayout->setSpacing(6);
     mainLayout->addLayout(contextualPanelsLayout);
 
     dialogLayout = new QVBoxLayout();
     dialogLayout->setContentsMargins(0, 0, 0, 0);
-    dialogLayout->setSpacing(0);
+    dialogLayout->setSpacing(6);
     mainLayout->addLayout(dialogLayout, 1);
 
     actionPanel = new QSint::ActionPanel(scrollArea);
@@ -267,6 +327,82 @@ TaskPanel::~TaskPanel()
     for (QWidget* panel : contextualPanels) {
         delete panel;
     }
+}
+
+void TaskPanel::setSummary(const QString& title, const QString& detail)
+{
+    if (title.trimmed().isEmpty() && detail.trimmed().isEmpty()) {
+        clearSummary();
+        return;
+    }
+
+    summaryTitleLabel->setText(title.trimmed());
+    summaryDetailLabel->setVisible(!detail.trimmed().isEmpty());
+    summaryDetailLabel->setText(detail.trimmed());
+    summaryFrame->setVisible(true);
+}
+
+void TaskPanel::clearSummary()
+{
+    summaryTitleLabel->clear();
+    summaryDetailLabel->clear();
+    summaryDetailLabel->setVisible(false);
+    summaryFrame->setVisible(false);
+}
+
+void TaskPanel::setValidation(const QString& level, const QString& title, const QString& detail)
+{
+    const QString trimmedLevel = level.trimmed().toLower();
+    const QString trimmedTitle = title.trimmed();
+    const QString trimmedDetail = detail.trimmed();
+    if (trimmedLevel.isEmpty() && trimmedTitle.isEmpty() && trimmedDetail.isEmpty()) {
+        clearValidation();
+        return;
+    }
+
+    QString borderColor = QStringLiteral("palette(mid)");
+    QString backgroundColor = QStringLiteral("palette(base)");
+    QString detailColor = QStringLiteral("palette(text)");
+
+    if (trimmedLevel == QStringLiteral("error")) {
+        borderColor = QStringLiteral("#b42318");
+        backgroundColor = QStringLiteral("#fef3f2");
+        detailColor = QStringLiteral("#7a271a");
+    }
+    else if (trimmedLevel == QStringLiteral("warning") || trimmedLevel == QStringLiteral("incomplete")) {
+        borderColor = QStringLiteral("#b54708");
+        backgroundColor = QStringLiteral("#fffaeb");
+        detailColor = QStringLiteral("#7a2e0e");
+    }
+    else if (trimmedLevel == QStringLiteral("info")) {
+        borderColor = QStringLiteral("#175cd3");
+        backgroundColor = QStringLiteral("#eff8ff");
+        detailColor = QStringLiteral("#1849a9");
+    }
+
+    validationFrame->setStyleSheet(QStringLiteral(
+        "QFrame#taskViewValidation {"
+        "  border: 1px solid %1;"
+        "  border-radius: 6px;"
+        "  background: %2;"
+        "}"
+        "QLabel#taskViewValidationDetail {"
+        "  color: %3;"
+        "}"
+    ).arg(borderColor, backgroundColor, detailColor));
+
+    validationTitleLabel->setText(trimmedTitle);
+    validationDetailLabel->setVisible(!trimmedDetail.isEmpty());
+    validationDetailLabel->setText(trimmedDetail);
+    validationFrame->setVisible(true);
+}
+
+void TaskPanel::clearValidation()
+{
+    validationTitleLabel->clear();
+    validationDetailLabel->clear();
+    validationDetailLabel->setVisible(false);
+    validationFrame->setVisible(false);
 }
 
 //**************************************************************************
@@ -611,6 +747,47 @@ bool TaskView::showDialog(TaskDialog* dlg, App::Document* doc)
     dlg->modifyStandardButtons(outInfo.ActiveCtrl->buttonBox);
 
     outInfo.taskPanel = new TaskPanel(this);
+
+    QString summaryTitle = dlg->property("taskview_summary_title").toString().trimmed();
+    QString summaryDetail = dlg->property("taskview_summary_detail").toString().trimmed();
+    QString validationLevel = dlg->property("taskview_validation_level").toString().trimmed();
+    QString validationTitle = dlg->property("taskview_validation_title").toString().trimmed();
+    QString validationDetail = dlg->property("taskview_validation_detail").toString().trimmed();
+
+    if (summaryTitle.isEmpty()) {
+        summaryTitle = tr("Task in progress");
+    }
+
+    if (summaryDetail.isEmpty()) {
+        if (!dlg->getDocumentName().empty()) {
+            summaryDetail = tr("Editing settings for document \"%1\". Review inputs, then confirm or cancel.")
+                                .arg(QString::fromStdString(dlg->getDocumentName()));
+        }
+        else {
+            summaryDetail = tr("Review inputs, then confirm or cancel.");
+        }
+    }
+
+    outInfo.taskPanel->setSummary(summaryTitle, summaryDetail);
+
+    if (!validationLevel.isEmpty() || !validationTitle.isEmpty() || !validationDetail.isEmpty()) {
+        if (validationTitle.isEmpty()) {
+            if (validationLevel == QStringLiteral("error")) {
+                validationTitle = tr("Action required");
+            }
+            else if (validationLevel == QStringLiteral("warning")) {
+                validationTitle = tr("Warning");
+            }
+            else if (validationLevel == QStringLiteral("incomplete")) {
+                validationTitle = tr("Setup incomplete");
+            }
+            else {
+                validationTitle = tr("Status");
+            }
+        }
+        outInfo.taskPanel->setValidation(validationLevel, validationTitle, validationDetail);
+    }
+
     if (dlg->buttonPosition() == TaskDialog::North) {
         // Add button box to the top of the main layout
         outInfo.taskPanel->dialogLayout->insertWidget(0, outInfo.ActiveCtrl);

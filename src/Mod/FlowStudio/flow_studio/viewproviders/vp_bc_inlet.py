@@ -10,5 +10,4 @@ class VPBCInlet(BaseFlowVP):
     icon_name = "FlowStudioInlet.svg"
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_bc_inlet import TaskBCInlet
-        FreeCADGui.Control.showDialog(TaskBCInlet(vobj.Object))
-        return True
+        return self.show_task_panel(TaskBCInlet, vobj.Object)

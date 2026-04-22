@@ -12,5 +12,4 @@ class VPMeasurementVolume(BaseFlowVP):
 
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_measurement_volume import TaskMeasurementVolume
-        FreeCADGui.Control.showDialog(TaskMeasurementVolume(vobj.Object))
-        return True
+        return self.show_task_panel(TaskMeasurementVolume, vobj.Object)

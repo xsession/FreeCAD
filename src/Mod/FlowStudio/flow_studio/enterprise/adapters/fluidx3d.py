@@ -89,6 +89,7 @@ class FluidX3DOptionalAdapter(BaseSolverAdapter):
             artifact_manifest={
                 "setup.cpp": setup_path,
             },
+            max_runtime_seconds=context.request.runtime_thresholds.max_wall_time_seconds,
         )
 
     def collect_results(self, handle: JobHandle) -> ResultSet:

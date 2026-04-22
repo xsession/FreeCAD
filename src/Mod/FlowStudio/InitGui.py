@@ -14,6 +14,11 @@ Inspired by FloEFD's user-friendly workflow:
 import os
 import FreeCAD
 import FreeCADGui
+from RibbonMetadata import (
+    build_contextual_ribbon_toolbar_name,
+    build_ribbon_toolbar_name,
+    register_contextual_ribbon_panel,
+)
 
 initialize_workbench = lambda: None  # noqa: E731
 is_enterprise_enabled = lambda *_args, **_kwargs: False  # noqa: E731
@@ -99,6 +104,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     POST_COMMANDS = [
         "FlowStudio_PostPipeline",
+        "FlowStudio_Geant4Result",
+        "FlowStudio_ImportGeant4Result",
         "FlowStudio_PostContour",
         "FlowStudio_PostStreamlines",
         "FlowStudio_PostProbe",
@@ -110,6 +117,34 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_PointParameters",
         "FlowStudio_ParticleStudy",
         "FlowStudio_GenerateParaviewScript",
+    ]
+
+    ELECTROSTATIC_COMMANDS = [
+        "FlowStudio_ElectrostaticMaterial",
+        "FlowStudio_ElectrostaticPhysics",
+        "FlowStudio_BC_ElectricPotential",
+        "FlowStudio_BC_SurfaceCharge",
+        "FlowStudio_BC_ElectricFlux",
+    ]
+
+    ELECTROMAGNETIC_COMMANDS = [
+        "FlowStudio_ElectromagneticMaterial",
+        "FlowStudio_ElectromagneticPhysics",
+        "FlowStudio_BC_MagneticPotential",
+        "FlowStudio_BC_CurrentDensity",
+        "FlowStudio_BC_MagneticFluxDensity",
+        "FlowStudio_BC_FarFieldEM",
+    ]
+
+    OPTICAL_COMMANDS = [
+        "FlowStudio_OpticalMaterial",
+        "FlowStudio_OpticalPhysics",
+        "FlowStudio_BC_OpticalSource",
+        "FlowStudio_BC_OpticalDetector",
+        "FlowStudio_BC_OpticalBoundary",
+        "FlowStudio_BC_Geant4Source",
+        "FlowStudio_BC_Geant4Detector",
+        "FlowStudio_BC_Geant4Scoring",
     ]
 
     PHYSICS_COMMANDS = [
@@ -131,6 +166,9 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_BC_OpticalSource",
         "FlowStudio_BC_OpticalDetector",
         "FlowStudio_BC_OpticalBoundary",
+        "FlowStudio_BC_Geant4Source",
+        "FlowStudio_BC_Geant4Detector",
+        "FlowStudio_BC_Geant4Scoring",
     ]
 
     ENTERPRISE_COMMANDS = [
@@ -199,9 +237,16 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
             )
 
         if ribbon_enabled:
-            self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
             self.appendToolbar(
-                "FlowStudio Setup Core",
+                build_ribbon_toolbar_name(
+                    "Setup", "Analysis", "Home", order=10, home_priority="primary"
+                ),
+                self.ANALYSIS_COMMANDS,
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name(
+                    "Setup", "Setup", "Home", order=20, home_priority="primary"
+                ),
                 [
                     "FlowStudio_PhysicsModel",
                     "FlowStudio_FluidMaterial",
@@ -209,9 +254,11 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "FlowStudio_InitialConditions",
                 ],
             )
-            self.appendToolbar("FlowStudio Geometry Tools", self.GEOMETRY_COMMANDS)
             self.appendToolbar(
-                "FlowStudio BC Core",
+                build_ribbon_toolbar_name("Inspect", "Geometry", order=10), self.GEOMETRY_COMMANDS
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Setup", "Boundary Conditions", order=30),
                 [
                     "FlowStudio_BC_Inlet",
                     "FlowStudio_BC_Outlet",
@@ -223,7 +270,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 ],
             )
             self.appendToolbar(
-                "FlowStudio Meshing",
+                build_ribbon_toolbar_name("Setup", "Mesh", order=40),
                 [
                     "FlowStudio_MeshGmsh",
                     "FlowStudio_MeshRegion",
@@ -231,14 +278,16 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 ],
             )
             self.appendToolbar(
-                "FlowStudio Solve",
+                build_ribbon_toolbar_name(
+                    "Solve", "Solve", "Home", order=10, home_priority="secondary"
+                ),
                 [
                     "FlowStudio_SolverSettings",
                     "FlowStudio_RunSolver",
                 ],
             )
             self.appendToolbar(
-                "FlowStudio Results",
+                build_ribbon_toolbar_name("Results", "Post-Processing", order=10),
                 [
                     "FlowStudio_SurfacePlot",
                     "FlowStudio_CutPlot",
@@ -248,39 +297,135 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "FlowStudio_ParticleStudy",
                 ],
             )
-            self.appendToolbar(
-                "FlowStudio Electrostatic",
-                [
-                    "FlowStudio_ElectrostaticMaterial",
-                    "FlowStudio_ElectrostaticPhysics",
-                    "FlowStudio_BC_ElectricPotential",
-                    "FlowStudio_BC_SurfaceCharge",
-                    "FlowStudio_BC_ElectricFlux",
-                ],
-            )
-            self.appendToolbar(
-                "FlowStudio Electromagnetic",
-                [
-                    "FlowStudio_ElectromagneticMaterial",
-                    "FlowStudio_ElectromagneticPhysics",
-                    "FlowStudio_BC_MagneticPotential",
-                    "FlowStudio_BC_CurrentDensity",
-                    "FlowStudio_BC_MagneticFluxDensity",
-                    "FlowStudio_BC_FarFieldEM",
-                ],
-            )
-            self.appendToolbar(
-                "FlowStudio Optical",
-                [
-                    "FlowStudio_OpticalMaterial",
-                    "FlowStudio_OpticalPhysics",
-                    "FlowStudio_BC_OpticalSource",
-                    "FlowStudio_BC_OpticalDetector",
-                    "FlowStudio_BC_OpticalBoundary",
-                ],
-            )
             if enterprise_enabled:
-                self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
+                self.appendToolbar(
+                    build_ribbon_toolbar_name("Solve", "Enterprise", order=20),
+                    self.ENTERPRISE_COMMANDS,
+                )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Simulation",
+                    "Setup",
+                    "Flow",
+                    "CFD",
+                    "Fem",
+                    "Electro",
+                    "Optical",
+                    "Thermal",
+                    "Structural",
+                    workbench="FlowStudio",
+                    color="#008b8b",
+                    order=10,
+                ),
+                [
+                    "FlowStudio_Analysis",
+                    "FlowStudio_PhysicsModel",
+                    "FlowStudio_FluidMaterial",
+                    "FlowStudio_InitialConditions",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Simulation",
+                    "Boundary Conditions",
+                    "Flow",
+                    "CFD",
+                    "Fem",
+                    "Electro",
+                    "Optical",
+                    "Thermal",
+                    "Structural",
+                    workbench="FlowStudio",
+                    color="#008b8b",
+                    order=20,
+                ),
+                [
+                    "FlowStudio_BC_Inlet",
+                    "FlowStudio_BC_Outlet",
+                    "FlowStudio_BC_Wall",
+                    "FlowStudio_BC_OpenBoundary",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Simulation",
+                    "Mesh & Solve",
+                    "Flow",
+                    "CFD",
+                    "Fem",
+                    "Electro",
+                    "Optical",
+                    "Thermal",
+                    "Structural",
+                    workbench="FlowStudio",
+                    color="#008b8b",
+                    order=30,
+                ),
+                [
+                    "FlowStudio_MeshGmsh",
+                    "FlowStudio_MeshRegion",
+                    "FlowStudio_SolverSettings",
+                    "FlowStudio_RunSolver",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Simulation",
+                    "Results",
+                    "Flow",
+                    "CFD",
+                    "Fem",
+                    "Electro",
+                    "Optical",
+                    "Thermal",
+                    "Structural",
+                    workbench="FlowStudio",
+                    color="#008b8b",
+                    order=40,
+                ),
+                [
+                    "FlowStudio_SurfacePlot",
+                    "FlowStudio_CutPlot",
+                    "FlowStudio_FlowTrajectories",
+                    "FlowStudio_PointParameters",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Electrostatic",
+                    "Electrostatic Setup",
+                    "Electrostatic",
+                    "Electric",
+                    workbench="FlowStudio",
+                    color="#1f6feb",
+                    order=10,
+                ),
+                self.ELECTROSTATIC_COMMANDS,
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Electromagnetic",
+                    "Electromagnetic Setup",
+                    "Electromagnetic",
+                    "Magnetic",
+                    workbench="FlowStudio",
+                    color="#0e7490",
+                    order=10,
+                ),
+                self.ELECTROMAGNETIC_COMMANDS,
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Optical",
+                    "Optical & Geant4",
+                    "Optical",
+                    "Geant4",
+                    workbench="FlowStudio",
+                    color="#7c3aed",
+                    order=10,
+                ),
+                self.OPTICAL_COMMANDS,
+            )
         else:
             self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
             self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)

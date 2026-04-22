@@ -63,6 +63,7 @@ TASKPANEL_FILES = {
 ENTERPRISE_FILE = "enterprise/ui/jobs_panel.py"
 ENTERPRISE_SNIPPETS = [
     "self.table.itemSelectionChanged.connect(self._update_details)",
+    "self.table.itemDoubleClicked.connect(self._open_selected_result)",
     "self.adapter_search.textChanged.connect(self._apply_adapter_filters)",
     "self.adapter_family_filter.currentIndexChanged.connect(self._apply_adapter_filters)",
     "self.adapter_capability_filter.currentIndexChanged.connect(self._apply_adapter_filters)",
@@ -71,6 +72,7 @@ ENTERPRISE_SNIPPETS = [
     "self.refresh_button.clicked.connect(self.refresh)",
     "self.copy_path_button.clicked.connect(self._copy_selected_path)",
     "self.bundle_button.clicked.connect(self._export_selected_bundle)",
+    "self.import_geant4_button.clicked.connect(self._import_selected_geant4_result)",
     "self.print_button.clicked.connect(self._print_selected_summary)",
     "self.adapter_table.itemSelectionChanged.connect(self._update_adapter_details)",
 ]
@@ -86,10 +88,10 @@ PERSISTENCE_EXPECTATIONS = {
         "TaskBCOpen": ["sp_p", "sp_T", "sp_vx", "sp_vy", "sp_vz"],
     },
     "task_bc_outlet.py": {
-        "TaskBCOutlet": ["cb_type", "sp_p", "chk_backflow"],
+        "TaskBCOutlet": ["cb_type", "sp_p", "sp_mfr", "chk_backflow"],
     },
     "task_bc_wall.py": {
-        "TaskBCWall": ["cb_type", "cb_thermal", "sp_temp", "sp_flux", "sp_rough"],
+        "TaskBCWall": ["cb_type", "cb_thermal", "sp_temp", "sp_flux", "sp_htc", "sp_rough"],
     },
     "task_fluid_material.py": {
         "TaskFluidMaterial": ["cb_preset", "sp_rho", "sp_mu", "sp_nu", "sp_cp", "sp_k", "sp_pr"],
@@ -138,6 +140,10 @@ PERSISTENCE_EXPECTATIONS = {
             "cb_backend", "cb_of_solver", "sp_iter", "sp_tol", "sp_nproc",
             "cb_conv", "cb_elmer_solver", "sp_elmer_nproc", "cb_fx_prec",
             "sp_fx_res", "sp_fx_steps", "sp_fx_vram", "chk_multigpu", "sp_ngpu",
+            "chk_multi_solver", "chk_multi_openfoam", "chk_multi_elmer",
+            "chk_multi_fluidx3d", "chk_multi_geant4", "sp_runtime_soft",
+            "sp_runtime_max", "sp_runtime_stall", "sp_runtime_progress",
+            "chk_abort_threshold",
         ],
     },
     "task_flowefd_features.py": {
@@ -188,6 +194,31 @@ class TestTaskPanelWiring(unittest.TestCase):
         for snippet in ENTERPRISE_SNIPPETS:
             self.assertIn(snippet, source, f"Missing signal hookup in {abs_path}: {snippet}")
 
+    def test_geant4_result_command_is_exposed_in_post_processing_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn(
+            '"FlowStudio_Geant4Result"',
+            initgui_source,
+            f"Missing Geant4 result command in post-processing surfaces: {initgui_path}",
+        )
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_Geant4Result", _CmdGeant4Result())',
+            commands_source,
+            f"Missing Geant4 result command registration: {commands_path}",
+        )
+        self.assertIn(
+            '"FlowStudio_ImportGeant4Result"',
+            initgui_source,
+            f"Missing Geant4 import command in post-processing surfaces: {initgui_path}",
+        )
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ImportGeant4Result", _CmdImportGeant4Result())',
+            commands_source,
+            f"Missing Geant4 import command registration: {commands_path}",
+        )
+
     def test_connected_self_methods_exist(self):
         files = [os.path.join("taskpanels", name) for name in TASKPANEL_FILES] + [ENTERPRISE_FILE]
         for rel_path in files:
@@ -229,6 +260,16 @@ class TestTaskPanelWiring(unittest.TestCase):
                         store_source,
                         f"{abs_path}: {class_name} does not persist widget {attr} in _store()",
                     )
+
+    def test_enterprise_jobs_panel_publishes_taskview_metadata(self):
+        abs_path, source = self._read_source("enterprise/ui/jobs_panel.py")
+
+        self.assertIn('self._publish_taskview_property("taskview_summary_title", summary_title)', source, abs_path)
+        self.assertIn('self._publish_taskview_property("taskview_validation_level", validation_level)', source, abs_path)
+        self.assertIn('self._set_taskview_metadata(', source, abs_path)
+        self.assertIn('"Enterprise Jobs"', source, abs_path)
+        self.assertIn('"No persisted enterprise runs"', source, abs_path)
+        self.assertIn('"Native Geant4 result available"', source, abs_path)
 
     def test_dynamic_widget_maps_are_persisted(self):
         abs_path, source = self._read_source(os.path.join("taskpanels", "task_materials.py"))

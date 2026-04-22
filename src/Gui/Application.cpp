@@ -2784,7 +2784,7 @@ void Application::setStyleSheet(const QString& qssFile, bool tiledBackground)
             // Limitation: it doesn't work if the .qss file on purpose sets the same color as
             // for normal text. In this case the default link color is used.
             {
-                QLabel l1, l2;
+                ::QLabel l1, l2;
                 l2.setProperty("haslink", QByteArray("true"));
 
                 l1.show();

@@ -23,8 +23,13 @@ def test_adapter_capability_matrix_contains_core_adapters():
 
     assert "openfoam.primary" in adapter_ids
     assert "elmer.primary" in adapter_ids
+    assert "geant4.primary" in adapter_ids
 
     openfoam_row = next(row for row in matrix if row["adapter_id"] == "openfoam.primary")
     assert openfoam_row["commercial_core_safe"] is True
     assert openfoam_row["supports_parallel"] is True
     assert isinstance(openfoam_row["feature_flags"], dict)
+
+    geant4_row = next(row for row in matrix if row["adapter_id"] == "geant4.primary")
+    assert geant4_row["commercial_core_safe"] is True
+    assert geant4_row["feature_flags"]["macro_generation"] is True

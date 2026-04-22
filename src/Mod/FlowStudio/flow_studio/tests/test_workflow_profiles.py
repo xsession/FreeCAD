@@ -22,6 +22,7 @@ class TestWorkflowProfiles(unittest.TestCase):
         self.assertEqual(profile.label, "Optical / Photonics")
         self.assertEqual(len(profile.steps), 9)
         self.assertEqual(profile.steps[4].name, "Define Sources, Detectors, and Boundaries")
+        self.assertIn("Radiation transport", profile.workflows)
 
     def test_cfd_layout_exists(self):
         from flow_studio.ui.layouts import get_workspace_layout

@@ -66,6 +66,9 @@ _BC_TYPES = {
     "FlowStudio::BCOpticalSource",
     "FlowStudio::BCOpticalDetector",
     "FlowStudio::BCOpticalBoundary",
+    "FlowStudio::BCGeant4Source",
+    "FlowStudio::BCGeant4Detector",
+    "FlowStudio::BCGeant4Scoring",
 }
 
 _MESH_TYPES = {

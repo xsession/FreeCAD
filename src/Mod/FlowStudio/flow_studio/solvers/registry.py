@@ -14,6 +14,7 @@ _REGISTRY_PATHS = {
     "OpenFOAM": ("flow_studio.solvers.openfoam_runner", "OpenFOAMRunner"),
     "FluidX3D": ("flow_studio.solvers.fluidx3d_runner", "FluidX3DRunner"),
     "Elmer": ("flow_studio.solvers.elmer_runner", "ElmerRunner"),
+    "Geant4": ("flow_studio.solvers.geant4_runner", "Geant4Runner"),
     "Raysect": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
     "Meep": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
     "openEMS": ("flow_studio.solvers.optical_runner", "OpticalRunner"),
@@ -27,7 +28,7 @@ _DOMAIN_SOLVERS = {
     "Electrostatic": ["Elmer"],
     "Electromagnetic": ["Elmer"],
     "Thermal": ["Elmer"],
-    "Optical": ["Raysect", "Meep", "openEMS", "Optiland"],
+    "Optical": ["Raysect", "Meep", "openEMS", "Optiland", "Geant4"],
 }
 
 
@@ -88,6 +89,7 @@ def available_backends_installed(extra_paths=None):
         "OpenFOAM": "OpenFOAM",
         "FluidX3D": "FluidX3D",
         "Elmer":    "Elmer",
+        "Geant4":   "Geant4",
         "Raysect":  "Raysect",
         "Meep":     "Meep",
         "openEMS":  "openEMS",

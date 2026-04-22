@@ -32,7 +32,7 @@
 #include <QToolBar>
 #include <QToolButton>
 #include <QToolTip>
-#include <QRegularExpression>
+#include <QStringList>
 
 #include <Base/Exception.h>
 #include <Base/Interpreter.h>
@@ -62,6 +62,154 @@
 using namespace Gui;
 using namespace Gui::Dialog;
 namespace sp = std::placeholders;
+
+namespace {
+constexpr auto WorkbenchPreferencesPath = "User parameter:BaseApp/Preferences/Workbenches";
+constexpr auto FavoriteWorkbenchesKey = "FavoriteWorkbenchList";
+constexpr auto RecentWorkbenchesKey = "RecentWorkbenchList";
+constexpr int MaxPrimaryWorkbenchTabs = 6;
+constexpr int MaxRecentWorkbenches = 8;
+
+ParameterGrp::handle workbenchPreferences()
+{
+    return App::GetApplication().GetParameterGroupByPath(WorkbenchPreferencesPath);
+}
+
+QStringList readWorkbenchListPreference(const char* key)
+{
+    auto prefValue = QString::fromUtf8(workbenchPreferences()->GetASCII(key, "").c_str());
+    auto values = prefValue.split(u'|', Qt::SkipEmptyParts);
+
+    QStringList cleanedValues;
+    for (const auto& value : values) {
+        if (!cleanedValues.contains(value)) {
+            cleanedValues.push_back(value);
+        }
+    }
+
+    return cleanedValues;
+}
+
+void writeWorkbenchListPreference(const char* key, const QStringList& values)
+{
+    workbenchPreferences()->SetASCII(key, values.join(u'|').toUtf8().constData());
+}
+
+QStringList filterKnownWorkbenchNames(const QStringList& names)
+{
+    auto knownWorkbenchNames = Application::Instance->workbenches();
+    QStringList filteredNames;
+
+    for (const auto& name : names) {
+        if (knownWorkbenchNames.contains(name) && !filteredNames.contains(name)) {
+            filteredNames.push_back(name);
+        }
+    }
+
+    return filteredNames;
+}
+
+QStringList readFavoriteWorkbenchNames()
+{
+    return filterKnownWorkbenchNames(readWorkbenchListPreference(FavoriteWorkbenchesKey));
+}
+
+QStringList readRecentWorkbenchNames()
+{
+    return filterKnownWorkbenchNames(readWorkbenchListPreference(RecentWorkbenchesKey));
+}
+
+void writeFavoriteWorkbenchNames(const QStringList& names)
+{
+    writeWorkbenchListPreference(FavoriteWorkbenchesKey, filterKnownWorkbenchNames(names));
+}
+
+bool updateRecentWorkbenchNames(const QString& wbName)
+{
+    if (wbName.isEmpty()) {
+        return false;
+    }
+
+    auto recentWorkbenchNames = readRecentWorkbenchNames();
+    recentWorkbenchNames.removeAll(wbName);
+    recentWorkbenchNames.push_front(wbName);
+
+    while (recentWorkbenchNames.size() > MaxRecentWorkbenches) {
+        recentWorkbenchNames.removeLast();
+    }
+
+    auto normalizedWorkbenchNames = filterKnownWorkbenchNames(recentWorkbenchNames);
+    auto previousWorkbenchNames = readRecentWorkbenchNames();
+    if (normalizedWorkbenchNames == previousWorkbenchNames) {
+        return false;
+    }
+
+    writeWorkbenchListPreference(RecentWorkbenchesKey, normalizedWorkbenchNames);
+    return true;
+}
+
+QList<QAction*> orderWorkbenchActions(const QList<QAction*>& actions, const QStringList& preferredNames)
+{
+    QList<QAction*> orderedActions;
+
+    for (const auto& preferredName : preferredNames) {
+        for (auto* action : actions) {
+            if (action->objectName() == preferredName && !orderedActions.contains(action)) {
+                orderedActions.push_back(action);
+                break;
+            }
+        }
+    }
+
+    for (auto* action : actions) {
+        if (!orderedActions.contains(action)) {
+            orderedActions.push_back(action);
+        }
+    }
+
+    return orderedActions;
+}
+
+QString workbenchPurpose(const QString& wbName)
+{
+    static const QMap<QString, QString> purposes {
+        {QStringLiteral("StartWorkbench"), QObject::tr("Open recent work, create documents, and get back into active projects.")},
+        {QStringLiteral("PartDesignWorkbench"), QObject::tr("Build parametric mechanical parts from sketches and ordered features.")},
+        {QStringLiteral("SketcherWorkbench"), QObject::tr("Create and constrain 2D profiles used by parametric feature workflows.")},
+        {QStringLiteral("AssemblyWorkbench"), QObject::tr("Assemble components, define joints, and inspect mechanical relationships.")},
+        {QStringLiteral("TechDrawWorkbench"), QObject::tr("Create manufacturing drawings, views, dimensions, and documentation sheets.")},
+        {QStringLiteral("FlowStudioWorkbench"), QObject::tr("Set up simulation studies, run solvers, and inspect engineering results.")},
+        {QStringLiteral("FemWorkbench"), QObject::tr("Prepare finite-element studies, solve analyses, and review structural or thermal results.")},
+        {QStringLiteral("CAMWorkbench"), QObject::tr("Prepare machining jobs, tools, and operations for manufacturing workflows.")},
+        {QStringLiteral("PathWorkbench"), QObject::tr("Prepare machining jobs, tools, and operations for manufacturing workflows.")},
+        {QStringLiteral("PartWorkbench"), QObject::tr("Create and inspect precise solid geometry operations outside ordered feature history.")},
+        {QStringLiteral("DraftWorkbench"), QObject::tr("Create drafting geometry, annotations, and utility construction objects.")},
+        {QStringLiteral("MeshWorkbench"), QObject::tr("Inspect, convert, and repair mesh geometry for downstream workflows.")},
+    };
+
+    return purposes.value(wbName);
+}
+
+QString composeWorkbenchToolTip(const QString& wbName, const QString& originalTip)
+{
+    const QString purpose = workbenchPurpose(wbName).trimmed();
+    const QString trimmedTip = originalTip.trimmed();
+
+    if (purpose.isEmpty()) {
+        return trimmedTip;
+    }
+
+    if (trimmedTip.isEmpty()) {
+        return purpose;
+    }
+
+    if (trimmedTip.contains(purpose, Qt::CaseInsensitive)) {
+        return trimmedTip;
+    }
+
+    return trimmedTip + QLatin1String("\n\n") + purpose;
+}
+}
 
 /**
  * Constructs an action called \a name with parent \a parent. It also stores a pointer
@@ -722,7 +870,7 @@ void WorkbenchGroup::refreshWorkbenchList()
     for (const auto& wbName : enabledWbNames) {
         QString name = Application::Instance->workbenchMenuText(wbName);
         QPixmap px = Application::Instance->workbenchIcon(wbName);
-        QString tip = Application::Instance->workbenchToolTip(wbName);
+        QString tip = composeWorkbenchToolTip(wbName, Application::Instance->workbenchToolTip(wbName));
 
         QAction* action = getOrCreateAction(wbName);
 
@@ -734,6 +882,7 @@ void WorkbenchGroup::refreshWorkbenchList()
         action->setObjectName(wbName);
         action->setIcon(px);
         action->setToolTip(tip);
+        action->setProperty("workbenchPurpose", workbenchPurpose(wbName));
         action->setStatusTip(tr("Selects the '%1' workbench").arg(name));
         if (index < 9) {
             action->setShortcut(QKeySequence(QStringLiteral("W,%1").arg(index + 1)));
@@ -750,7 +899,7 @@ void WorkbenchGroup::refreshWorkbenchList()
     for (const auto& wbName : disabledWbNames) {
         QString name = Application::Instance->workbenchMenuText(wbName);
         QPixmap px = Application::Instance->workbenchIcon(wbName);
-        QString tip = Application::Instance->workbenchToolTip(wbName);
+        QString tip = composeWorkbenchToolTip(wbName, Application::Instance->workbenchToolTip(wbName));
 
         QAction* action = getOrCreateAction(wbName);
 
@@ -762,6 +911,7 @@ void WorkbenchGroup::refreshWorkbenchList()
         action->setObjectName(wbName);
         action->setIcon(px);
         action->setToolTip(tip);
+        action->setProperty("workbenchPurpose", workbenchPurpose(wbName));
         action->setStatusTip(tr("Select the '%1' workbench").arg(name));
         if (wbName.toStdString() == activeWbName) {
             action->setChecked(true);
@@ -769,6 +919,17 @@ void WorkbenchGroup::refreshWorkbenchList()
         disabledWbsActions.push_back(action);
         index++;
     }
+
+    enabledWbsActions = orderWorkbenchActions(enabledWbsActions, readFavoriteWorkbenchNames());
+
+    auto favoriteWorkbenchNames = readFavoriteWorkbenchNames();
+    QStringList remainingRecentNames;
+    for (const auto& recentName : readRecentWorkbenchNames()) {
+        if (!favoriteWorkbenchNames.contains(recentName)) {
+            remainingRecentNames.push_back(recentName);
+        }
+    }
+    enabledWbsActions = orderWorkbenchActions(enabledWbsActions, remainingRecentNames);
 
     // Signal to the widgets (WorkbenchComboBox & menu) to update the wb list
     workbenchListRefreshed(enabledWbsActions);
@@ -795,6 +956,10 @@ void WorkbenchGroup::onWorkbenchActivated(const QString& name)
             break;
         }
     }
+
+    if (updateRecentWorkbenchNames(name)) {
+        refreshWorkbenchList();
+    }
 }
 
 QList<QAction*> WorkbenchGroup::getEnabledWbActions() const
@@ -802,9 +967,73 @@ QList<QAction*> WorkbenchGroup::getEnabledWbActions() const
     return enabledWbsActions;
 }
 
+QList<QAction*> WorkbenchGroup::getPrimaryWbActions() const
+{
+    QList<QAction*> primaryActions;
+    auto favoriteWorkbenchNames = readFavoriteWorkbenchNames();
+
+    for (const auto& favoriteName : favoriteWorkbenchNames) {
+        for (auto* action : enabledWbsActions) {
+            if (action->objectName() == favoriteName && !primaryActions.contains(action)) {
+                primaryActions.push_back(action);
+                if (primaryActions.size() >= MaxPrimaryWorkbenchTabs) {
+                    return primaryActions;
+                }
+                break;
+            }
+        }
+    }
+
+    if (primaryActions.isEmpty()) {
+        for (auto* action : enabledWbsActions) {
+            primaryActions.push_back(action);
+            if (primaryActions.size() >= MaxPrimaryWorkbenchTabs) {
+                break;
+            }
+        }
+    }
+
+    return primaryActions;
+}
+
+QList<QAction*> WorkbenchGroup::getOverflowWbActions() const
+{
+    QList<QAction*> overflowActions;
+    auto primaryActions = getPrimaryWbActions();
+
+    for (auto* action : enabledWbsActions) {
+        if (!primaryActions.contains(action)) {
+            overflowActions.push_back(action);
+        }
+    }
+
+    return overflowActions;
+}
+
 QList<QAction*> WorkbenchGroup::getDisabledWbActions() const
 {
     return disabledWbsActions;
+}
+
+bool WorkbenchGroup::isFavoriteWorkbench(const QString& wbName) const
+{
+    return readFavoriteWorkbenchNames().contains(wbName);
+}
+
+void WorkbenchGroup::setWorkbenchFavorite(const QString& wbName, bool favorite)
+{
+    auto favoriteWorkbenchNames = readFavoriteWorkbenchNames();
+
+    if (favorite) {
+        favoriteWorkbenchNames.removeAll(wbName);
+        favoriteWorkbenchNames.push_back(wbName);
+    }
+    else {
+        favoriteWorkbenchNames.removeAll(wbName);
+    }
+
+    writeFavoriteWorkbenchNames(favoriteWorkbenchNames);
+    refreshWorkbenchList();
 }
 
 // --------------------------------------------------------------------

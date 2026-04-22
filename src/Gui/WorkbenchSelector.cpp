@@ -23,12 +23,14 @@
 #include <QAbstractItemView>
 #include <QActionGroup>
 #include <QApplication>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QScreen>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QLayout>
 #include <QTimer>
+#include <QWidgetAction>
 
 
 #include "Base/Tools.h"
@@ -43,6 +45,40 @@
 
 using namespace Gui;
 
+namespace {
+QString normalizeWorkbenchSearchText(const QString& text)
+{
+    return text.simplified().toLower();
+}
+
+bool actionMatchesWorkbenchFilter(QAction* action, const QString& filter)
+{
+    if (!action) {
+        return false;
+    }
+
+    const QString needle = normalizeWorkbenchSearchText(filter);
+    if (needle.isEmpty()) {
+        return true;
+    }
+
+    const QString haystack = normalizeWorkbenchSearchText(
+        action->text() + QLatin1Char(' ')
+        + action->toolTip() + QLatin1Char(' ')
+        + action->statusTip() + QLatin1Char(' ')
+        + action->objectName() + QLatin1Char(' ')
+        + action->property("workbenchPurpose").toString());
+    return haystack.contains(needle);
+}
+
+void applyWorkbenchMenuFilter(const QList<QAction*>& actions, const QString& filter)
+{
+    for (auto* action : actions) {
+        action->setVisible(actionMatchesWorkbenchFilter(action, filter));
+    }
+}
+}
+
 WorkbenchComboBox::WorkbenchComboBox(WorkbenchGroup* aGroup, QWidget* parent)
     : QComboBox(parent)
 {
@@ -53,10 +89,12 @@ WorkbenchComboBox::WorkbenchComboBox(WorkbenchGroup* aGroup, QWidget* parent)
     refreshList(aGroup->getEnabledWbActions());
     connect(aGroup, &WorkbenchGroup::workbenchListRefreshed, this, &WorkbenchComboBox::refreshList);
     connect(aGroup->groupAction(), &QActionGroup::triggered, this, [this, aGroup](QAction* action) {
-        setCurrentIndex(aGroup->actions().indexOf(action));
+        setCurrentIndex(displayedActions.indexOf(action));
     });
-    connect(this, qOverload<int>(&WorkbenchComboBox::activated), aGroup, [aGroup](int index) {
-        aGroup->actions()[index]->trigger();
+    connect(this, qOverload<int>(&WorkbenchComboBox::activated), aGroup, [this](int index) {
+        if (index >= 0 && index < displayedActions.size()) {
+            displayedActions[index]->trigger();
+        }
     });
 }
 
@@ -74,6 +112,7 @@ void WorkbenchComboBox::showPopup()
 
 void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
 {
+    displayedActions = actionList;
     clear();
 
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
@@ -82,7 +121,7 @@ void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
 
     auto itemStyle = static_cast<WorkbenchItemStyle>(hGrp->GetInt("WorkbenchSelectorItem", 0));
 
-    for (QAction* action : actionList) {
+    for (QAction* action : displayedActions) {
         QIcon icon = action->icon();
 
         if (icon.isNull() || itemStyle == WorkbenchItemStyle::TextOnly) {
@@ -94,6 +133,9 @@ void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
         else {
             addItem(icon, action->text());
         }
+
+        setItemData(count() - 1, action->toolTip(), Qt::ToolTipRole);
+        setItemData(count() - 1, action->objectName(), Qt::UserRole);
 
         if (action->isChecked()) {
             this->setCurrentIndex(this->count() - 1);
@@ -247,7 +289,11 @@ void WorkbenchTabWidget::updateLayout()
 
 void WorkbenchTabWidget::handleWorkbenchSelection(QAction* selectedWorkbenchAction)
 {
-    if (wbActionGroup->getDisabledWbActions().contains(selectedWorkbenchAction)) {
+    if (!actionToTabIndex.contains(selectedWorkbenchAction)
+        && temporaryWorkbenchAction != selectedWorkbenchAction) {
+        setTemporaryWorkbenchTab(selectedWorkbenchAction);
+    }
+    else if (wbActionGroup->getDisabledWbActions().contains(selectedWorkbenchAction)) {
         if (temporaryWorkbenchAction == selectedWorkbenchAction) {
             return;
         }
@@ -265,6 +311,8 @@ void WorkbenchTabWidget::setTemporaryWorkbenchTab(QAction* workbenchActivateActi
     auto temporaryTabIndex = temporaryWorkbenchTabIndex();
 
     if (temporaryWorkbenchAction) {
+        actionToTabIndex.erase(temporaryWorkbenchAction);
+        tabIndexToAction.erase(temporaryTabIndex);
         temporaryWorkbenchAction = nullptr;
         tabBar->removeTab(temporaryTabIndex);
     }
@@ -320,7 +368,7 @@ void WorkbenchTabWidget::updateWorkbenchList()
         tabBar->removeTab(i);
     }
 
-    for (QAction* action : wbActionGroup->getEnabledWbActions()) {
+    for (QAction* action : wbActionGroup->getPrimaryWbActions()) {
         addWorkbenchTab(action);
     }
 
@@ -414,6 +462,26 @@ void WorkbenchTabWidget::buildPrefMenu()
 
     menu->clear();
 
+    auto* searchAction = new QWidgetAction(menu);
+    auto* searchEdit = new QLineEdit(menu);
+    searchEdit->setPlaceholderText(tr("Find workbench"));
+    searchEdit->setClearButtonEnabled(true);
+    searchAction->setDefaultWidget(searchEdit);
+    menu->addAction(searchAction);
+    menu->addSeparator();
+
+    QList<QAction*> filterableActions;
+
+    const auto overflowActions = wbActionGroup->getOverflowWbActions();
+    if (!overflowActions.isEmpty()) {
+        for (auto* action : overflowActions) {
+            menu->addAction(action);
+            filterableActions.push_back(action);
+        }
+
+        menu->addSeparator();
+    }
+
     // Add disabled workbenches, sorted alphabetically.
     for (auto action : wbActionGroup->getDisabledWbActions()) {
         if (action->text() == QStringLiteral("<none>")) {
@@ -421,6 +489,21 @@ void WorkbenchTabWidget::buildPrefMenu()
         }
 
         menu->addAction(action);
+        filterableActions.push_back(action);
+    }
+
+    menu->addSeparator();
+
+    auto favoritesMenu = menu->addMenu(tr("Pinned Workbenches"));
+    for (auto* action : wbActionGroup->getEnabledWbActions()) {
+        auto* favoriteAction = favoritesMenu->addAction(action->icon(), action->text());
+        favoriteAction->setCheckable(true);
+        favoriteAction->setChecked(wbActionGroup->isFavoriteWorkbench(action->objectName()));
+        favoriteAction->setToolTip(action->toolTip());
+
+        connect(favoriteAction, &QAction::toggled, this, [this, action](bool checked) {
+            wbActionGroup->setWorkbenchFavorite(action->objectName(), checked);
+        });
     }
 
     menu->addSeparator();
@@ -430,6 +513,15 @@ void WorkbenchTabWidget::buildPrefMenu()
         Gui::Dialog::DlgPreferencesImp cDlg(getMainWindow());
         cDlg.activateGroupPage(QStringLiteral("Workbenches"), 0);
         cDlg.exec();
+    });
+
+    connect(searchEdit, &QLineEdit::textChanged, menu, [filterableActions](const QString& text) {
+        applyWorkbenchMenuFilter(filterableActions, text);
+    });
+    connect(menu, &QMenu::aboutToShow, searchEdit, [searchEdit]() {
+        searchEdit->clear();
+        searchEdit->setFocus();
+        searchEdit->selectAll();
     });
 }
 

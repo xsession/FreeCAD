@@ -34,6 +34,12 @@ class TestPhysicsDomains(unittest.TestCase):
         self.assertIn("FluidX3D", cfd.solver_backends)
         self.assertIn("Elmer", cfd.solver_backends)
 
+    def test_optical_domain_includes_geant4(self):
+        from flow_studio.physics_domains import get_domain
+        optical = get_domain("Optical")
+        self.assertIn("Geant4", optical.solver_backends)
+        self.assertIn("FlowStudio::BCGeant4Source", optical.bc_types)
+
     def test_structural_uses_elmer(self):
         from flow_studio.physics_domains import get_domain
         s = get_domain("Structural")
@@ -69,6 +75,11 @@ class TestDomainSolverRegistry(unittest.TestCase):
         from flow_studio.solvers.registry import backends_for_domain
         backends = backends_for_domain("Structural")
         self.assertIn("Elmer", backends)
+
+    def test_available_backends_for_optical(self):
+        from flow_studio.solvers.registry import backends_for_domain
+        backends = backends_for_domain("Optical")
+        self.assertIn("Geant4", backends)
 
     def test_domain_solver_entries(self):
         from flow_studio.solvers.registry import _DOMAIN_SOLVERS

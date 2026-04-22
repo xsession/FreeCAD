@@ -14,6 +14,4 @@ class VPInitialConditions(BaseFlowVP):
 
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_initial_conditions import TaskInitialConditions
-        panel = TaskInitialConditions(vobj.Object)
-        FreeCADGui.Control.showDialog(panel)
-        return True
+        return self.show_task_panel(TaskInitialConditions, vobj.Object)

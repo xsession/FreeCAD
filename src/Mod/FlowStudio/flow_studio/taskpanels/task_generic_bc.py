@@ -77,11 +77,88 @@ BC_FIELDS = {
         ("Transmission", "Transmission [-]"),
         ("Scatter", "Scatter [-]"),
     ],
+    "FlowStudio::BCGeant4Source": [
+        ("SourceType", "Source type"),
+        ("ParticleType", "Particle type"),
+        ("EnergyMeV", "Energy [MeV]"),
+        ("BeamRadius", "Beam radius [mm]"),
+        ("DirectionX", "Direction X"),
+        ("DirectionY", "Direction Y"),
+        ("DirectionZ", "Direction Z"),
+        ("Events", "Events"),
+    ],
+    "FlowStudio::BCGeant4Detector": [
+        ("DetectorType", "Detector type"),
+        ("CollectionName", "Collection name"),
+        ("ThresholdKeV", "Threshold [keV]"),
+        ("PixelsX", "Pixels X"),
+        ("PixelsY", "Pixels Y"),
+    ],
+    "FlowStudio::BCGeant4Scoring": [
+        ("ScoreQuantity", "Score quantity"),
+        ("ScoringType", "Scoring type"),
+        ("BinsX", "Bins X"),
+        ("BinsY", "Bins Y"),
+        ("BinsZ", "Bins Z"),
+        ("NormalizePerEvent", "Normalize per event"),
+    ],
 }
 
 
 class TaskGenericBC(FloEFDTaskPanel):
     """Boundary-condition panel generated from known object properties."""
+
+    SUMMARY_DETAIL = (
+        "Assign geometry and edit the boundary parameters for {label}."
+    )
+
+    def _build_task_validation(self):
+        if not self._refs():
+            return (
+                "incomplete",
+                "Assign boundary targets",
+                "Select one or more faces, bodies, or regions so this boundary condition applies to geometry.",
+            )
+
+        title = self._title()
+        values = {}
+        for prop, widget in getattr(self, "_widgets", {}).items():
+            if isinstance(widget, QtGui.QCheckBox):
+                values[prop] = widget.isChecked()
+            elif isinstance(widget, QtGui.QComboBox):
+                values[prop] = widget.currentText()
+            else:
+                values[prop] = widget.value()
+
+        if "Temperature" in values and float(values["Temperature"]) <= 0.0:
+            return (
+                "warning",
+                f"{title} temperature required",
+                "Enter a positive temperature in kelvin before using this thermal boundary condition.",
+            )
+
+        if "AmbientTemperature" in values and float(values["AmbientTemperature"]) <= 0.0:
+            return (
+                "warning",
+                f"{title} ambient temperature required",
+                "Enter a positive ambient temperature in kelvin before solving.",
+            )
+
+        if "HeatTransferCoefficient" in values and float(values["HeatTransferCoefficient"]) <= 0.0:
+            return (
+                "warning",
+                f"{title} coefficient required",
+                "Enter a positive heat-transfer coefficient for this convection boundary condition.",
+            )
+
+        if "Emissivity" in values and not 0.0 <= float(values["Emissivity"]) <= 1.0:
+            return (
+                "warning",
+                f"{title} emissivity out of range",
+                "Keep emissivity between 0 and 1 for this radiation boundary condition.",
+            )
+
+        return super()._build_task_validation()
 
     def _build_form(self):
         widget = QtGui.QWidget()

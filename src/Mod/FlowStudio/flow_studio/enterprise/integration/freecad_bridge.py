@@ -35,6 +35,23 @@ def _group_items(obj) -> Sequence[object]:
     return tuple(group or ())
 
 
+def _serialize_references(obj: object) -> tuple[str, ...]:
+    refs = _safe_getattr(obj, "References", ()) or ()
+    targets: list[str] = []
+    for ref_obj, sub_elements in refs:
+        obj_name = _safe_getattr(ref_obj, "Name", None) or _safe_getattr(ref_obj, "Label", None)
+        base_ref = f"Document/{obj_name or 'LinkedObject'}"
+        if isinstance(sub_elements, str):
+            sub_names = (sub_elements,)
+        else:
+            sub_names = tuple(sub_elements or ())
+        if sub_names:
+            targets.extend(f"{base_ref}/{sub_name}" for sub_name in sub_names)
+        else:
+            targets.append(base_ref)
+    return tuple(dict.fromkeys(targets))
+
+
 def _reference_targets(obj: object, fallback: str) -> tuple[str, ...]:
     """Return stable document target refs from a FreeCAD References property."""
 
@@ -64,6 +81,7 @@ class LegacyAnalysisBridge:
     """
 
     analysis_object: object
+    solver_backend_override: str | None = None
 
     def to_study_definition(self) -> StudyDefinition:
         """Build a canonical study definition from a Flow Studio analysis."""
@@ -75,6 +93,7 @@ class LegacyAnalysisBridge:
             "SolverBackend",
             _safe_getattr(analysis, "SolverBackend", "OpenFOAM"),
         )
+        solver_backend = self.solver_backend_override or solver_backend
         solver_family = self._map_solver_family(solver_backend)
         mesh_object = self._find_first(("FlowStudio::MeshGmsh",))
         physics_object = self._find_first(("FlowStudio::PhysicsModel",))
@@ -95,7 +114,7 @@ class LegacyAnalysisBridge:
             mesh_recipe=mesh_recipe,
             materials=self._materials(material_object),
             physics=self._physics(physics_object),
-            parameters=self._parameters(analysis),
+            parameters=self._parameters(analysis, solver_object, solver_backend),
             adapter_extensions=self._adapter_extensions(solver_backend, solver_object),
         )
 
@@ -111,6 +130,7 @@ class LegacyAnalysisBridge:
             "OpenFOAM": "openfoam",
             "Elmer": "elmer",
             "FluidX3D": "fluidx3d",
+            "Geant4": "geant4",
         }
         return mapping.get(solver_backend, solver_backend.lower())
 
@@ -199,12 +219,33 @@ class LegacyAnalysisBridge:
         )
 
     @staticmethod
-    def _parameters(analysis_object: object) -> Mapping[str, str | float | bool]:
+    def _parameters(
+        analysis_object: object,
+        solver_object: object | None,
+        solver_backend: str,
+    ) -> Mapping[str, str | float | bool]:
+        multi_solver_backends = _safe_getattr(solver_object, "MultiSolverBackends", ()) or ()
+        if isinstance(multi_solver_backends, str):
+            serialized_multi_backends = multi_solver_backends
+        else:
+            serialized_multi_backends = ",".join(
+                str(item).strip() for item in multi_solver_backends if str(item).strip()
+            )
         return {
             "physics_domain": str(_safe_getattr(analysis_object, "PhysicsDomain", "CFD")),
             "analysis_type": str(_safe_getattr(analysis_object, "AnalysisType", "General")),
             "needs_mesh_rewrite": bool(_safe_getattr(analysis_object, "NeedsMeshRewrite", False)),
             "needs_case_rewrite": bool(_safe_getattr(analysis_object, "NeedsCaseRewrite", False)),
+            "selected_solver_backend": str(solver_backend),
+            "multi_solver_enabled": bool(_safe_getattr(solver_object, "MultiSolverEnabled", False)),
+            "multi_solver_backends": serialized_multi_backends,
+            "soft_runtime_warning_seconds": int(
+                _safe_getattr(solver_object, "SoftRuntimeWarningSeconds", 0) or 0
+            ),
+            "max_runtime_seconds": int(_safe_getattr(solver_object, "MaxRuntimeSeconds", 0) or 0),
+            "stall_timeout_seconds": int(_safe_getattr(solver_object, "StallTimeoutSeconds", 0) or 0),
+            "min_progress_percent": float(_safe_getattr(solver_object, "MinProgressPercent", 0.0) or 0.0),
+            "abort_on_threshold": bool(_safe_getattr(solver_object, "AbortOnThreshold", True)),
         }
 
     def _adapter_extensions(
@@ -247,11 +288,90 @@ class LegacyAnalysisBridge:
                     "multi_gpu": bool(_safe_getattr(solver_object, "FluidX3DMultiGPU", False)),
                 }
             }
+        if solver_backend == "Geant4":
+            if solver_object is None:
+                return {}
+            sources = []
+            detectors = []
+            scoring = []
+            for child in _group_items(self.analysis_object):
+                flow_type = _safe_getattr(child, "FlowType", "")
+                if flow_type == "FlowStudio::BCGeant4Source":
+                    sources.append({
+                        "name": str(_safe_getattr(child, "Name", "Geant4Source")),
+                        "label": str(_safe_getattr(child, "Label", _safe_getattr(child, "Name", "Geant4Source"))),
+                        "source_type": str(_safe_getattr(child, "SourceType", "Beam")),
+                        "particle_type": str(_safe_getattr(child, "ParticleType", "gamma")),
+                        "energy_mev": float(_safe_getattr(child, "EnergyMeV", 1.0)),
+                        "beam_radius_mm": float(_safe_getattr(child, "BeamRadius", 1.0)),
+                        "direction": [
+                            float(_safe_getattr(child, "DirectionX", 0.0)),
+                            float(_safe_getattr(child, "DirectionY", 0.0)),
+                            float(_safe_getattr(child, "DirectionZ", 1.0)),
+                        ],
+                        "events": int(_safe_getattr(child, "Events", 1000)),
+                        "reference_targets": list(_serialize_references(child)),
+                    })
+                elif flow_type == "FlowStudio::BCGeant4Detector":
+                    detectors.append({
+                        "name": str(_safe_getattr(child, "Name", "Geant4Detector")),
+                        "label": str(_safe_getattr(child, "Label", _safe_getattr(child, "Name", "Geant4Detector"))),
+                        "detector_type": str(_safe_getattr(child, "DetectorType", "Sensitive Detector")),
+                        "collection_name": str(_safe_getattr(child, "CollectionName", "detectorHits")),
+                        "threshold_kev": float(_safe_getattr(child, "ThresholdKeV", 0.0)),
+                        "reference_targets": list(_serialize_references(child)),
+                    })
+                elif flow_type == "FlowStudio::BCGeant4Scoring":
+                    scoring.append({
+                        "name": str(_safe_getattr(child, "Name", "Geant4Scoring")),
+                        "label": str(_safe_getattr(child, "Label", _safe_getattr(child, "Name", "Geant4Scoring"))),
+                        "score_quantity": str(_safe_getattr(child, "ScoreQuantity", "DoseDeposit")),
+                        "scoring_type": str(_safe_getattr(child, "ScoringType", "Mesh")),
+                        "bins": [
+                            int(_safe_getattr(child, "BinsX", 16)),
+                            int(_safe_getattr(child, "BinsY", 16)),
+                            int(_safe_getattr(child, "BinsZ", 16)),
+                        ],
+                        "normalize_per_event": bool(_safe_getattr(child, "NormalizePerEvent", True)),
+                        "reference_targets": list(_serialize_references(child)),
+                    })
+            return {
+                "geant4.primary": {
+                    "application_executable": str(
+                        _safe_getattr(solver_object, "Geant4Executable", "")
+                    ),
+                    "physics_list": str(
+                        _safe_getattr(solver_object, "Geant4PhysicsList", "FTFP_BERT")
+                    ),
+                    "event_count": int(_safe_getattr(solver_object, "Geant4EventCount", 1000)),
+                    "threads": int(_safe_getattr(solver_object, "Geant4Threads", 1)),
+                    "macro_name": str(
+                        _safe_getattr(solver_object, "Geant4MacroName", "run.mac")
+                    ),
+                    "visualization": bool(
+                        _safe_getattr(solver_object, "Geant4EnableVisualization", False)
+                    ),
+                    "sources": sources,
+                    "detectors": detectors,
+                    "scoring": scoring,
+                }
+            }
         return {}
 
 
-def build_project_manifest(project_id: str, analyses: Sequence[object]) -> ProjectManifest:
+def build_project_manifest(
+    project_id: str,
+    analyses: Sequence[object],
+    solver_backend_overrides: Sequence[str | None] | None = None,
+) -> ProjectManifest:
     """Build a portable project manifest from one or more analyses."""
 
-    studies = tuple(LegacyAnalysisBridge(analysis).to_study_definition() for analysis in analyses)
+    overrides = tuple(solver_backend_overrides or ())
+    studies = tuple(
+        LegacyAnalysisBridge(
+            analysis,
+            solver_backend_override=overrides[index] if index < len(overrides) else None,
+        ).to_study_definition()
+        for index, analysis in enumerate(analyses)
+    )
     return ProjectManifest(schema_version="1.0.0", project_id=project_id, studies=studies)

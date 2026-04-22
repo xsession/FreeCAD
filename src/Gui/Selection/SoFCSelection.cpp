@@ -78,8 +78,8 @@ SoFCSelection::SoFCSelection()
 {
     SO_NODE_CONSTRUCTOR(SoFCSelection);
 
-    SO_NODE_ADD_FIELD(colorHighlight, (SbColor(0.8f, 0.1f, 0.1f)));
-    SO_NODE_ADD_FIELD(colorSelection, (SbColor(0.1f, 0.8f, 0.1f)));
+    SO_NODE_ADD_FIELD(colorHighlight, (SbColor(1.0f, 0.69f, 0.13f)));
+    SO_NODE_ADD_FIELD(colorSelection, (SbColor(0.12f, 0.44f, 0.92f)));
     SO_NODE_ADD_FIELD(style, (EMISSIVE));
     SO_NODE_ADD_FIELD(preselectionMode, (AUTO));
     SO_NODE_ADD_FIELD(selectionMode, (SEL_ON));

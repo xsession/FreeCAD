@@ -14,6 +14,7 @@ from typing import Any, Mapping, Optional
 
 from flow_studio.enterprise.adapters.elmer import ElmerSolverAdapter
 from flow_studio.enterprise.adapters.fluidx3d import FluidX3DOptionalAdapter
+from flow_studio.enterprise.adapters.geant4 import Geant4SolverAdapter
 from flow_studio.enterprise.adapters.openfoam import OpenFOAMSolverAdapter
 from flow_studio.enterprise.core.domain import ExecutionProfile
 from flow_studio.enterprise.observability.logging import configure_logging, get_logger
@@ -67,6 +68,7 @@ def initialize_workbench() -> EnterpriseRuntime:
     adapters = {
         OpenFOAMSolverAdapter.adapter_id: OpenFOAMSolverAdapter(),
         ElmerSolverAdapter.adapter_id: ElmerSolverAdapter(),
+        Geant4SolverAdapter.adapter_id: Geant4SolverAdapter(),
     }
     enable_fluidx3d = os.getenv("FLOWSTUDIO_ENABLE_FLUIDX3D", "0") == "1"
     if enable_fluidx3d:

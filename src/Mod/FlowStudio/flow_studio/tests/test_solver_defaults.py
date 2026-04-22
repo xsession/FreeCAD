@@ -76,6 +76,15 @@ class TestSolverDefaultParallelSettings(unittest.TestCase):
         self.assertEqual(fake.NumProcessors, 6)
         self.assertEqual(fake.ElmerSolverBinary, "ElmerSolver_mpi")
 
+    def test_solver_object_adds_geant4_properties(self):
+        solver_module = _load_solver_module()
+        fake = _FakeFeatureObject()
+        solver_module.Solver(fake)
+
+        self.assertIn("Geant4PhysicsList", fake.PropertiesList)
+        self.assertEqual(fake.Geant4PhysicsList, "FTFP_BERT")
+        self.assertEqual(fake.Geant4MacroName, "run.mac")
+
 
 if __name__ == "__main__":
     unittest.main()

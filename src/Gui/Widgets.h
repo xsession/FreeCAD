@@ -294,7 +294,7 @@ private:
  * can be specified.
  * @author Werner Mayer
  */
-class GuiExport UrlLabel: public QLabel
+class GuiExport UrlLabel: public ::QLabel
 {
     Q_OBJECT
     Q_PROPERTY(QString url READ url WRITE setUrl)  // clazy:exclude=qproperty-without-notify
@@ -350,7 +350,7 @@ private:
  *
  * @author Chris Hennes
  */
-class GuiExport StatefulLabel: public QLabel, public Base::Observer<const char*>
+class GuiExport StatefulLabel: public ::QLabel, public Base::Observer<const char*>
 {
     Q_OBJECT
     Q_PROPERTY(bool overridePreference MEMBER _overridePreference WRITE setOverridePreference)

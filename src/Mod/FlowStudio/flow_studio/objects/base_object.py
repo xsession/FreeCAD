@@ -5,8 +5,6 @@
 
 """Base class for all FlowStudio FeaturePython objects."""
 
-import FreeCAD
-
 
 class BaseFlowObject:
     """Minimal FeaturePython proxy shared by every FlowStudio object."""

@@ -12,6 +12,58 @@ from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
 
 class TaskMeasurementSurface(BaseTaskPanel):
 
+    SUMMARY_TITLE = "Surface Measurement"
+    SUMMARY_DETAIL = (
+        "Define a surface extraction for {label}, then choose sampled fields and evaluation outputs."
+    )
+
+    def _build_task_validation(self):
+        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
+        if not fields:
+            return (
+                "incomplete",
+                "Select sampled fields",
+                "Enter at least one field name so the surface measurement produces useful results.",
+            )
+
+        surface_type = self.cb_type.currentText()
+        if surface_type == "Iso-Surface" and not self.le_isofield.text().strip():
+            return (
+                "incomplete",
+                "Iso field required",
+                "Choose the scalar field used to define the iso-surface before exporting or evaluating it.",
+            )
+
+        if surface_type == "Geometry Faces" and not list(getattr(self.obj, "FaceRefs", []) or []):
+            return (
+                "incomplete",
+                "Assign geometry faces",
+                "Pick one or more geometry faces when using a face-based measurement surface.",
+            )
+
+        if self.cb_normal.currentText() == "Custom":
+            normal = (self.sp_nx.value(), self.sp_ny.value(), self.sp_nz.value())
+            if normal == (0.0, 0.0, 0.0):
+                return (
+                    "warning",
+                    "Custom normal cannot be zero",
+                    "Set a non-zero custom normal vector so the cut or clip direction is defined.",
+                )
+
+        if not any((
+            self.chk_avg.isChecked(),
+            self.chk_integ.isChecked(),
+            self.chk_mflow.isChecked(),
+            self.chk_force.isChecked(),
+        )):
+            return (
+                "warning",
+                "Select an evaluation output",
+                "Enable at least one surface evaluation such as average, integral, mass flow, or force.",
+            )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -20,16 +72,15 @@ class TaskMeasurementSurface(BaseTaskPanel):
             "Define a cut-plane, iso-surface, or clip region for evaluation."
         ))
 
-        # Description
+        definition = self._section(layout, "Definition")
         self.le_desc = QtGui.QLineEdit(self.obj.Label2)
-        self._add_row(layout, "Description:", self.le_desc)
+        self._add_row(definition, "Description:", self.le_desc)
 
-        # --- Surface type ---
         self.cb_type = self._combo(
             ["Cut Plane", "Iso-Surface", "Geometry Faces", "Clip (Half-Space)"],
             self.obj.SurfaceType,
         )
-        self._add_row(layout, "Surface Type:", self.cb_type)
+        self._add_row(definition, "Surface Type:", self.cb_type)
 
         # --- Cut Plane ---
         grp_plane = QtGui.QGroupBox("Cut Plane / Clip")
@@ -61,11 +112,11 @@ class TaskMeasurementSurface(BaseTaskPanel):
         self._add_row(iso_lay, "Value:", self.sp_isoval)
         layout.addWidget(grp_iso)
 
-        # --- Fields to evaluate ---
+        sampling = self._section(layout, "Sampling")
         self.le_fields = QtGui.QLineEdit(
             ", ".join(self.obj.SampleFields) if self.obj.SampleFields else "U, p"
         )
-        self._add_row(layout, "Fields:", self.le_fields)
+        self._add_row(sampling, "Fields:", self.le_fields)
 
         # --- Evaluation options ---
         grp_eval = QtGui.QGroupBox("Evaluation")
@@ -87,7 +138,6 @@ class TaskMeasurementSurface(BaseTaskPanel):
         self._add_row(eval_lay, "Ref Point Z:", self.sp_rpz)
         layout.addWidget(grp_eval)
 
-        # --- Export ---
         grp_exp = QtGui.QGroupBox("Export")
         exp_lay = QtGui.QVBoxLayout(grp_exp)
         self.chk_csv = self._checkbox(self.obj.ExportCSV)

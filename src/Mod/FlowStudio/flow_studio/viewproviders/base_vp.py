@@ -6,6 +6,7 @@
 """Base ViewProvider for FlowStudio objects."""
 
 import os
+import FreeCAD
 import FreeCADGui
 
 ICONS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "Resources", "icons")
@@ -41,6 +42,13 @@ class BaseFlowVP:
         """Open the task panel for editing."""
         # Subclasses override to show a task panel
         return False
+
+    @staticmethod
+    def show_task_panel(task_panel, obj=None):
+        """Instantiate and show a task panel consistently across FlowStudio."""
+        panel = task_panel(obj) if isinstance(task_panel, type) else task_panel
+        FreeCADGui.Control.showDialog(panel)
+        return True
 
     def unsetEdit(self, vobj, mode=0):
         FreeCADGui.Control.closeDialog()

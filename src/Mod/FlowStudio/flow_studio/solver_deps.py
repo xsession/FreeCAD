@@ -174,7 +174,7 @@ def _detect_version(exe_path, name):
             if output:
                 # Return first line (usually contains version)
                 return output.splitlines()[0][:120]
-        except (OSError, subprocess.SubprocessError):
+        except (OSError, subprocess.SubprocessError, Exception):
             continue
     return ""
 
@@ -240,6 +240,12 @@ _BACKEND_DEPS = {
          "Part of Elmer FEM installation (mesh format conversion)"),
         ("ElmerSolver_mpi", "executable", False,
          "Parallel Elmer solver (requires MPI)"),
+    ],
+    "Geant4": [
+        ("geant4-config", "executable", False,
+         "Install Geant4 from https://geant4.web.cern.ch/download/ and source its environment setup script."),
+        ("cmake", "executable", False,
+         "CMake is typically required when building Geant4 applications from source."),
     ],
     "SU2": [
         ("SU2_CFD", "executable", True,
@@ -318,6 +324,9 @@ def check_backend(backend_name, extra_paths=None):
     -------
     BackendReport
     """
+    if backend_name == "Geant4":
+        return _check_geant4_backend(extra_paths)
+
     dep_defs = _BACKEND_DEPS.get(backend_name)
     if dep_defs is None:
         return BackendReport(
@@ -347,6 +356,62 @@ def check_backend(backend_name, extra_paths=None):
         backend=backend_name,
         available=all_required_met,
         deps=deps,
+    )
+
+
+def _check_geant4_backend(extra_paths=None):
+    """Detect Geant4 using its common environment markers and tooling."""
+
+    deps = []
+    config_path, config_ver = find_executable("geant4-config", extra_paths)
+    deps.append(DependencyStatus(
+        name="geant4-config",
+        kind="executable",
+        required=False,
+        found=config_path is not None,
+        path=config_path or "",
+        version=config_ver,
+        hint=(
+            "Install Geant4 from https://geant4.web.cern.ch/download/ and source the "
+            "provided environment setup script before launching FlowStudio."
+        ),
+    ))
+
+    env_markers = []
+    for env_name in ("GEANT4_INSTALL", "Geant4_DIR", "GEANT4_DATA_DIR"):
+        env_value = os.environ.get(env_name, "")
+        found = bool(env_value)
+        env_markers.append(found)
+        deps.append(DependencyStatus(
+            name=env_name,
+            kind="executable",
+            required=False,
+            found=found,
+            path=env_value,
+            version="",
+            hint=(
+                f"Set {env_name} by sourcing the Geant4 environment or configuring your build/install tree."
+            ),
+        ))
+
+    cmake_path, cmake_ver = find_executable("cmake", extra_paths)
+    deps.append(DependencyStatus(
+        name="cmake",
+        kind="executable",
+        required=False,
+        found=cmake_path is not None,
+        path=cmake_path or "",
+        version=cmake_ver,
+        hint="Install CMake if you need to build or rebuild Geant4 applications.",
+    ))
+
+    available = config_path is not None or any(env_markers)
+    message = "" if available else "Geant4 environment was not detected."
+    return BackendReport(
+        backend="Geant4",
+        available=available,
+        deps=deps,
+        message=message,
     )
 
 
@@ -409,6 +474,9 @@ def _platform_specific_hint(dep_name, system):
         ("FluidX3D", "Windows"):    "  Clone: git clone https://github.com/ProjectPhysX/FluidX3D\n  Build with Visual Studio (requires OpenCL SDK)",
         ("FluidX3D", "Linux"):      "  Clone: git clone https://github.com/ProjectPhysX/FluidX3D\n  $ cd FluidX3D && make",
         ("FluidX3D", "Darwin"):     "  Clone: git clone https://github.com/ProjectPhysX/FluidX3D\n  $ cd FluidX3D && make",
+        ("geant4-config", "Windows"): "  Install Geant4 from https://geant4.web.cern.ch/download/ and launch FlowStudio from a developer shell where the Geant4 environment is loaded.",
+        ("geant4-config", "Linux"):   "  Build or install Geant4, then source geant4.sh from the installation prefix before launching FlowStudio.",
+        ("geant4-config", "Darwin"):  "  Build or install Geant4, then source geant4.sh from the installation prefix before launching FlowStudio.",
         ("SU2_CFD", "Windows"):     "  Download from https://su2code.github.io/download.html\n  or: pip install SU2",
         ("SU2_CFD", "Linux"):       "  $ sudo apt install su2  (Ubuntu)\n  or: pip install SU2",
         ("SU2_CFD", "Darwin"):      "  $ brew install su2\n  or: pip install SU2",

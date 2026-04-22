@@ -33,21 +33,126 @@ _CHECKED_STATE = QtCore.Qt.Checked
 class _SimpleTaskPanel:
     """Task panel base for command-only dialogs."""
 
+    SUMMARY_TITLE = ""
+    SUMMARY_DETAIL = ""
+    VALIDATION_LEVEL = ""
+    VALIDATION_TITLE = ""
+    VALIDATION_DETAIL = ""
+
+    def _finalize_form(self):
+        self._refresh_taskview_metadata()
+        self._connect_taskview_metadata_signals()
+
     def accept(self):
         return True
 
     def reject(self):
         return True
 
+    def _apply_task_summary(self):
+        title, detail = self._build_task_summary()
+        self.taskview_summary_title = title
+        self.taskview_summary_detail = detail
+        if hasattr(self, "form") and self.form is not None:
+            self.form.setProperty("taskview_summary_title", title)
+            self.form.setProperty("taskview_summary_detail", detail)
+
+    def _apply_task_validation(self):
+        level, title, detail = self._build_task_validation()
+        self.taskview_validation_level = level
+        self.taskview_validation_title = title
+        self.taskview_validation_detail = detail
+        if hasattr(self, "form") and self.form is not None:
+            self.form.setProperty("taskview_validation_level", level)
+            self.form.setProperty("taskview_validation_title", title)
+            self.form.setProperty("taskview_validation_detail", detail)
+
+    def _refresh_taskview_metadata(self, *_args):
+        self._apply_task_summary()
+        self._apply_task_validation()
+
+    def _build_task_summary(self):
+        return self.SUMMARY_TITLE or "Task", self.SUMMARY_DETAIL
+
+    def _build_task_validation(self):
+        return self.VALIDATION_LEVEL, self.VALIDATION_TITLE, self.VALIDATION_DETAIL
+
+    def _connect_taskview_metadata_signals(self):
+        if not hasattr(self, "form") or self.form is None:
+            return
+
+        self._connect_widget_metadata_signal(self.form)
+        for widget in self.form.findChildren(QtGui.QWidget):
+            self._connect_widget_metadata_signal(widget)
+
+    def _connect_widget_metadata_signal(self, widget):
+        refresh = self._refresh_taskview_metadata
+
+        if isinstance(widget, QtGui.QLineEdit):
+            widget.textChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QComboBox):
+            widget.currentIndexChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QAbstractButton):
+            widget.clicked.connect(refresh)
+            if hasattr(widget, "toggled"):
+                widget.toggled.connect(refresh)
+        elif isinstance(widget, QtGui.QSpinBox):
+            widget.valueChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QDoubleSpinBox):
+            widget.valueChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QPlainTextEdit):
+            widget.textChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QTextEdit):
+            widget.textChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QListWidget):
+            widget.itemSelectionChanged.connect(refresh)
+        elif isinstance(widget, QtGui.QTreeWidget):
+            widget.itemChanged.connect(refresh)
+
 
 class TaskCheckGeometry(_SimpleTaskPanel):
     """Check geometry, create/show fluid volume, and launch leak tracking."""
+
+    SUMMARY_TITLE = "Geometry Check"
+    SUMMARY_DETAIL = (
+        "Review watertightness, fluid volume readiness, and leak-detection setup before meshing or solving."
+    )
 
     def __init__(self):
         self.last_result = None
         self.form = self._build_form()
         self._reload_objects()
         self._update_volume_button()
+        self._finalize_form()
+
+    def _build_task_validation(self):
+        checked_count = len(self._checked_objects()) if hasattr(self, "state_tree") else 0
+        if checked_count == 0:
+            return (
+                "incomplete",
+                "Select geometry to analyze",
+                "Check at least one body before running geometry validation or generating a fluid volume.",
+            )
+
+        if self.last_result is None:
+            return (
+                "info",
+                "Run geometry check",
+                "Use Check to confirm the current model is closed enough for fluid setup.",
+            )
+
+        if getattr(self.last_result, "issues", None):
+            return (
+                "warning",
+                "Geometry issues detected",
+                "Review the reported issues before creating the final fluid domain or starting meshing.",
+            )
+
+        return (
+            "success",
+            "Geometry looks ready",
+            "The checked bodies appear closed enough to continue with fluid-volume creation or meshing.",
+        )
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -188,11 +293,38 @@ class TaskCheckGeometry(_SimpleTaskPanel):
 class TaskLeakTracking(_SimpleTaskPanel):
     """Track a possible leak/connection between two selected faces."""
 
+    SUMMARY_TITLE = "Leak Tracking"
+    SUMMARY_DETAIL = (
+        "Compare an internal and external face to find unintended flow connections through the model."
+    )
+
     def __init__(self):
         self.face_a = None
         self.face_b = None
         self.form = self._build_form()
         self._load_selection()
+        self._finalize_form()
+
+    def _build_task_validation(self):
+        if not self.face_a or not self.face_b:
+            return (
+                "incomplete",
+                "Select internal and external faces",
+                "Capture one internal face and one external face before searching for a connection.",
+            )
+
+        if self.face_a == self.face_b:
+            return (
+                "warning",
+                "Faces must be different",
+                "Use two different faces so leak tracking can evaluate a real path through the model.",
+            )
+
+        return (
+            "info",
+            "Ready to find connection",
+            "Run Find Connection to trace a possible leak path between the selected faces.",
+        )
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -263,11 +395,13 @@ class TaskLeakTracking(_SimpleTaskPanel):
         self.face_b_list.clear()
         self.face_a_list.addItem(describe_face_ref(self.face_a) if self.face_a else "(no internal face)")
         self.face_b_list.addItem(describe_face_ref(self.face_b) if self.face_b else "(no external face)")
+        self._refresh_taskview_metadata()
 
     def _find_connection(self):
         report = run_leak_tracking(self.face_a, self.face_b)
         lines = [f"Status: {report['status']}"] + report["messages"]
         self.results.setPlainText("\n".join(lines))
+        self._refresh_taskview_metadata()
         FreeCAD.Console.PrintMessage("[FlowStudio] Leak Tracking completed.\n")
         for line in lines:
             FreeCAD.Console.PrintMessage(f"{line}\n")

@@ -15,5 +15,4 @@ class VPMaterial(BaseFlowVP):
 
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_materials import TaskMaterial
-        FreeCADGui.Control.showDialog(TaskMaterial(vobj.Object))
-        return True
+        return self.show_task_panel(TaskMaterial, vobj.Object)

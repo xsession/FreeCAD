@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 
 import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtGui
 
+from flow_studio.core.workflow import get_active_analysis
 from flow_studio.enterprise.ui.adapter_matrix import (
     ADAPTER_MATRIX_CSV_FIELDNAMES,
     collect_families,
@@ -42,7 +44,88 @@ class EnterpriseJobsPanel:
         self.runtime = runtime
         self._adapter_rows = []
         self.form = self._build_form()
+        self._update_taskview_metadata()
         self.refresh()
+
+    def _publish_taskview_property(self, name, value):
+        if self.form is not None:
+            self.form.setProperty(name, value)
+
+    def _set_taskview_metadata(
+        self,
+        summary_title,
+        summary_detail,
+        validation_level="",
+        validation_title="",
+        validation_detail="",
+    ):
+        self.taskview_summary_title = summary_title
+        self.taskview_summary_detail = summary_detail
+        self.taskview_validation_level = validation_level
+        self.taskview_validation_title = validation_title
+        self.taskview_validation_detail = validation_detail
+
+        self._publish_taskview_property("taskview_summary_title", summary_title)
+        self._publish_taskview_property("taskview_summary_detail", summary_detail)
+        self._publish_taskview_property("taskview_validation_level", validation_level)
+        self._publish_taskview_property("taskview_validation_title", validation_title)
+        self._publish_taskview_property("taskview_validation_detail", validation_detail)
+
+    def _update_taskview_metadata(self):
+        run_count = self.table.rowCount() if hasattr(self, "table") else 0
+        visible_adapter_count = self.adapter_table.rowCount() if hasattr(self, "adapter_table") else 0
+        selected_run_id = self._selected_run_id() if hasattr(self, "table") else None
+
+        summary_detail = (
+            "Inspect persisted enterprise runs, adapter capabilities, and artifact reopen paths. "
+            f"{run_count} run(s) loaded, {visible_adapter_count} adapter row(s) visible."
+        )
+        if selected_run_id:
+            summary_detail = (
+                "Inspect persisted enterprise runs, adapter capabilities, and artifact reopen paths. "
+                f"Selected run: {selected_run_id}. {run_count} run(s) loaded, "
+                f"{visible_adapter_count} adapter row(s) visible."
+            )
+
+        validation_level = ""
+        validation_title = ""
+        validation_detail = ""
+
+        if run_count == 0:
+            validation_level = "info"
+            validation_title = "No persisted enterprise runs"
+            validation_detail = (
+                "Submit an enterprise run or import persisted result artifacts to populate this history view."
+            )
+        elif selected_run_id:
+            summary_path = self._selected_result_summary_path()
+            can_open_geant4 = bool(summary_path and os.path.isfile(summary_path))
+            if can_open_geant4:
+                validation_level = "info"
+                validation_title = "Native Geant4 result available"
+                validation_detail = (
+                    f"Double-click the selected run or use Import Geant4 Result to reopen {selected_run_id}."
+                )
+            else:
+                validation_level = "warning"
+                validation_title = "Summary-only run selected"
+                validation_detail = (
+                    "This run does not expose a native Geant4 result artifact. Use Print Summary to inspect persisted metadata."
+                )
+        else:
+            validation_level = "info"
+            validation_title = "Select a run"
+            validation_detail = (
+                "Choose a persisted run to inspect artifacts, copy paths, or reopen supported results."
+            )
+
+        self._set_taskview_metadata(
+            "Enterprise Jobs",
+            summary_detail,
+            validation_level,
+            validation_title,
+            validation_detail,
+        )
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -64,6 +147,7 @@ class EnterpriseJobsPanel:
         self.table.setAlternatingRowColors(True)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemSelectionChanged.connect(self._update_details)
+        self.table.itemDoubleClicked.connect(self._open_selected_result)
         layout.addWidget(self.table)
 
         adapter_label = QtGui.QLabel("<b>Adapter Capability Matrix</b>")
@@ -122,11 +206,21 @@ class EnterpriseJobsPanel:
         self.bundle_button.clicked.connect(self._export_selected_bundle)
         button_row.addWidget(self.bundle_button)
 
+        self.import_geant4_button = QtGui.QPushButton("Import Geant4 Result")
+        self.import_geant4_button.clicked.connect(self._import_selected_geant4_result)
+        self.import_geant4_button.setEnabled(False)
+        button_row.addWidget(self.import_geant4_button)
+
         self.print_button = QtGui.QPushButton("Print Summary")
         self.print_button.clicked.connect(self._print_selected_summary)
         button_row.addWidget(self.print_button)
         button_row.addStretch()
         layout.addLayout(button_row)
+
+        self.result_status_banner = QtGui.QLabel("Select a run to inspect reopen options.")
+        self.result_status_banner.setWordWrap(True)
+        self.result_status_banner.setStyleSheet("color: #666; background: #f5f5f5; padding: 6px; border-radius: 4px;")
+        layout.addWidget(self.result_status_banner)
 
         self.details = QtGui.QPlainTextEdit()
         self.details.setReadOnly(True)
@@ -157,12 +251,15 @@ class EnterpriseJobsPanel:
         if summaries:
             self.table.selectRow(0)
         else:
+            self.result_status_banner.setText("No persisted runs are available to reopen yet.")
             self.details.setPlainText("No persisted enterprise runs were found yet.")
+            self._update_run_actions()
 
         adapter_rows = self.runtime.job_service.adapter_capability_matrix()
         self._adapter_rows = list(adapter_rows)
         self._refresh_adapter_family_filter()
         self._apply_adapter_filters()
+        self._update_taskview_metadata()
 
     def _refresh_adapter_family_filter(self):
         current_family = self.adapter_family_filter.currentData() or ""
@@ -211,6 +308,7 @@ class EnterpriseJobsPanel:
             self.adapter_table.selectRow(0)
         else:
             self.details.setPlainText("No adapters match the current filter.")
+        self._update_taskview_metadata()
 
     def _selected_run_id(self):
         indexes = self.table.selectionModel().selectedRows()
@@ -221,22 +319,76 @@ class EnterpriseJobsPanel:
             return None
         return item.data(QtCore.Qt.UserRole)
 
+    def _selected_result_summary_path(self):
+        run_id = self._selected_run_id()
+        if not run_id:
+            return None
+
+        result = self.runtime.job_service.persisted_run_result(run_id) or {}
+        artifact_manifest = result.get("artifact_manifest", {}) or {}
+        summary_path = artifact_manifest.get("result_summary")
+        if not summary_path:
+            return None
+        if not str(summary_path).lower().endswith("flowstudio_geant4_result_summary.json"):
+            return None
+        return str(summary_path)
+
+    def _update_run_actions(self):
+        summary_path = self._selected_result_summary_path()
+        can_open_geant4 = bool(summary_path and os.path.isfile(summary_path))
+        self.import_geant4_button.setEnabled(can_open_geant4)
+        if can_open_geant4:
+            self.result_status_banner.setText(
+                f"This run can be reopened as a native Geant4 result from:\n{summary_path}"
+            )
+            self.result_status_banner.setStyleSheet(
+                "color: #1b5e20; background: #e8f5e9; padding: 6px; border-radius: 4px;"
+            )
+        elif self._selected_run_id():
+            self.result_status_banner.setText(
+                "This run does not expose a reopenable native Geant4 result. Use Print Summary to inspect persisted metadata."
+            )
+            self.result_status_banner.setStyleSheet(
+                "color: #8a6d3b; background: #fff8e1; padding: 6px; border-radius: 4px;"
+            )
+        else:
+            self.result_status_banner.setText("Select a run to inspect reopen options.")
+            self.result_status_banner.setStyleSheet(
+                "color: #666; background: #f5f5f5; padding: 6px; border-radius: 4px;"
+            )
+        self._update_taskview_metadata()
+
     def _update_details(self):
         run_id = self._selected_run_id()
         if not run_id:
+            self._update_run_actions()
             return
 
         record = self.runtime.job_service.persisted_run_record(run_id) or {}
         result = self.runtime.job_service.persisted_run_result(run_id) or {}
         events = self.runtime.job_service.persisted_run_events(run_id)
+        summary_path = self._selected_result_summary_path()
+        can_open_geant4 = bool(summary_path and os.path.isfile(summary_path))
         payload = {
             "run_record": record,
             "result": result,
+            "result_open_action": {
+                "kind": "geant4-native-import" if can_open_geant4 else "summary-only",
+                "available": can_open_geant4,
+                "summary_path": summary_path or "",
+            },
             "event_count": len(events),
             "events_preview": events[:5],
             "execution_log": self.runtime.job_service.persisted_execution_log(run_id),
         }
         self.details.setPlainText(json.dumps(payload, indent=2, sort_keys=True))
+        self._update_run_actions()
+
+    def _open_selected_result(self, _item=None):
+        if self._selected_result_summary_path():
+            self._import_selected_geant4_result()
+            return
+        self._print_selected_summary()
 
     def _update_adapter_details(self):
         indexes = self.adapter_table.selectionModel().selectedRows()
@@ -267,6 +419,7 @@ class EnterpriseJobsPanel:
             "notes": adapter.get("notes", ""),
         }
         self.details.setPlainText(json.dumps(payload, indent=2, sort_keys=True))
+        self._update_taskview_metadata()
 
     def _copy_adapter_matrix_json(self):
         payload = self._filtered_adapter_rows()
@@ -307,6 +460,36 @@ class EnterpriseJobsPanel:
             return
         QtGui.QApplication.clipboard().setText(path)
         FreeCAD.Console.PrintMessage(f"FlowStudio: Copied enterprise run path: {path}\n")
+
+    def _import_selected_geant4_result(self):
+        summary_path = self._selected_result_summary_path()
+        if not summary_path:
+            FreeCAD.Console.PrintWarning(
+                "FlowStudio: Selected run does not expose a Geant4 result summary artifact.\n"
+            )
+            return
+        if not os.path.isfile(summary_path):
+            FreeCAD.Console.PrintWarning(
+                f"FlowStudio: Geant4 result summary was not found on disk: {summary_path}\n"
+            )
+            return
+
+        from flow_studio.feminout.importFlowStudio import open_geant4_summary
+
+        analysis = get_active_analysis()
+        obj = open_geant4_summary(
+            summary_path,
+            doc=FreeCAD.ActiveDocument,
+            analysis=analysis,
+        )
+        if obj is not None:
+            FreeCAD.Console.PrintMessage(
+                f"FlowStudio: Imported Geant4 result from enterprise run summary: {summary_path}\n"
+            )
+            try:
+                FreeCADGui.ActiveDocument.setEdit(obj.Name)
+            except Exception:
+                pass
 
     def _print_selected_summary(self):
         run_id = self._selected_run_id()

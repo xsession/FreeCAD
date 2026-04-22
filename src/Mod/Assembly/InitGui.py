@@ -22,6 +22,11 @@
 # **************************************************************************/
 
 import Assembly_rc
+from RibbonMetadata import (
+    build_contextual_ribbon_toolbar_name,
+    build_ribbon_toolbar_name,
+    register_contextual_ribbon_panel,
+)
 
 
 class AssemblyCommandGroup:
@@ -74,6 +79,9 @@ class AssemblyWorkbench(Workbench):
             Preferences.PreferencesPage, QT_TRANSLATE_NOOP("QObject", "Assembly")
         )
 
+        main_window_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
+        ribbon_enabled = bool(main_window_prefs.GetBool("UseRibbonBar", False))
+
         # build commands list
         cmdList = [
             "Assembly_CreateAssembly",
@@ -109,8 +117,89 @@ class AssemblyWorkbench(Workbench):
             "Assembly_CreateJointGearBelt",
         ]
 
-        self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Assembly"), cmdList)
-        self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Assembly Joints"), cmdListJoints)
+        if ribbon_enabled:
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Assembly", "Workflow", "Home", order=10),
+                cmdList,
+            )
+            self.appendToolbar(
+                build_ribbon_toolbar_name("Assembly", "Joints", "Home", order=20),
+                cmdListJoints,
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Assembly",
+                    "Assembly",
+                    "Assembly",
+                    workbench="Assembly",
+                    color="#2a7cb0",
+                    order=10,
+                ),
+                [
+                    "Assembly_CreateAssembly",
+                    "Assembly_ActivateAssembly",
+                    "Assembly_InsertLink",
+                    "Assembly_CreateBom",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Assembly",
+                    "Joints",
+                    "Assembly",
+                    workbench="Assembly",
+                    color="#2a7cb0",
+                    order=20,
+                ),
+                [
+                    "Assembly_CreateJointFixed",
+                    "Assembly_CreateJointRevolute",
+                    "Assembly_CreateJointSlider",
+                    "Assembly_CreateJointCylindrical",
+                    "Assembly_CreateJointBall",
+                    "Assembly_CreateJointDistance",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Assembly",
+                    "Solve",
+                    "Assembly",
+                    workbench="Assembly",
+                    color="#2a7cb0",
+                    order=30,
+                ),
+                [
+                    "Assembly_ToggleGrounded",
+                    "Assembly_CreateJointParallel",
+                    "Assembly_CreateJointPerpendicular",
+                    "Assembly_CreateJointAngle",
+                ],
+            )
+            register_contextual_ribbon_panel(
+                build_contextual_ribbon_toolbar_name(
+                    "Assembly",
+                    "Joint Presets",
+                    "Assembly",
+                    workbench="Assembly",
+                    color="#2a7cb0",
+                    order=40,
+                ),
+                [
+                    "Assembly_CreateJointFixed",
+                    "Assembly_CreateJointRevolute",
+                    "Assembly_CreateJointSlider",
+                    "Assembly_CreateJointCylindrical",
+                    "Assembly_CreateJointBall",
+                    "Assembly_CreateJointDistance",
+                    "Assembly_CreateJointParallel",
+                    "Assembly_CreateJointPerpendicular",
+                    "Assembly_CreateJointAngle",
+                ],
+            )
+        else:
+            self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Assembly"), cmdList)
+            self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "Assembly Joints"), cmdListJoints)
 
         self.appendMenu(
             [QT_TRANSLATE_NOOP("Workbench", "&Assembly")],

@@ -60,6 +60,8 @@ public Q_SLOTS:
     void refreshList(QList<QAction*>);
 
 private:
+    QList<QAction*> displayedActions;
+
     Q_DISABLE_COPY(WorkbenchComboBox)
 };
 

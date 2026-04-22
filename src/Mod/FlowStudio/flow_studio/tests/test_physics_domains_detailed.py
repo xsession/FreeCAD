@@ -199,6 +199,29 @@ class TestThermalDomain(unittest.TestCase):
         self.assertIn("Transient Heat Transfer", THERMAL.analysis_types)
 
 
+class TestOpticalDomain(unittest.TestCase):
+    """Test Optical domain definition."""
+
+    def test_key(self):
+        from flow_studio.physics_domains import OPTICAL
+        self.assertEqual(OPTICAL.key, "Optical")
+
+    def test_solver_backends(self):
+        from flow_studio.physics_domains import OPTICAL
+        for backend in ("Raysect", "Meep", "openEMS", "Optiland", "Geant4"):
+            self.assertIn(backend, OPTICAL.solver_backends)
+
+    def test_description_mentions_radiation_transport(self):
+        from flow_studio.physics_domains import OPTICAL
+        self.assertIn("radiation transport", OPTICAL.description)
+
+    def test_bc_types_include_geant4_authoring_objects(self):
+        from flow_studio.physics_domains import OPTICAL
+        self.assertIn("FlowStudio::BCGeant4Source", OPTICAL.bc_types)
+        self.assertIn("FlowStudio::BCGeant4Detector", OPTICAL.bc_types)
+        self.assertIn("FlowStudio::BCGeant4Scoring", OPTICAL.bc_types)
+
+
 # ======================================================================
 # Registry function tests
 # ======================================================================
@@ -329,11 +352,11 @@ class TestCrossDomainConsistency(unittest.TestCase):
         self.assertEqual(len(keys), len(set(keys)), "Duplicate domain keys")
 
     def test_solver_backends_match_domain_intent(self):
-        """Classical FEM domains use Elmer; optical uses optics backends."""
+        """Classical FEM domains use Elmer; optical uses optics/radiation backends."""
         for d in all_domains():
             if d.key == "Optical":
                 self.assertNotIn("Elmer", d.solver_backends)
-                for backend in ("Raysect", "Meep", "openEMS", "Optiland"):
+                for backend in ("Raysect", "Meep", "openEMS", "Optiland", "Geant4"):
                     self.assertIn(backend, d.solver_backends)
                 continue
 

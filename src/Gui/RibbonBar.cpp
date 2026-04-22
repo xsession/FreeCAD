@@ -40,6 +40,8 @@
 #include <QToolBar>
 #include <QStringList>
 #include <QTabBar>
+#include <algorithm>
+#include <limits>
 
 #include <App/Application.h>
 #include <Base/Parameter.h>
@@ -64,6 +66,10 @@ using namespace Gui;
 
 RibbonBar* RibbonBar::_instance = nullptr;
 
+namespace {
+QMap<QString, QStringList> g_registeredContextualRibbonPanels;
+}
+
 // ============================================================================
 // Ribbon style constants — Inventor-style dimensions
 // ============================================================================
@@ -82,6 +88,282 @@ namespace {
     constexpr int TabBarHeight       = 24;
     constexpr int QATBarHeight       = 26;
     constexpr int PanelContentHeight = RibbonHeight - TabBarHeight - PanelTitleHeight - 6;
+    constexpr int MaxHomePanels      = 3;
+    constexpr int DefaultRibbonPanelOrder = std::numeric_limits<int>::max();
+    const auto RibbonMetadataPrefix  = QStringLiteral("Ribbon::");
+    const auto RibbonContextMetadataPrefix = QStringLiteral("RibbonContext::");
+
+    struct RibbonToolbarMetadata {
+        QString tabName;
+        QString panelName;
+        bool promoteToHome = false;
+        int homePriority = 1;
+        int order = DefaultRibbonPanelOrder;
+
+        [[nodiscard]] bool isValid() const
+        {
+            return !tabName.isEmpty() && !panelName.isEmpty();
+        }
+    };
+
+    struct RibbonContextualToolbarMetadata {
+        QString tabName;
+        QString panelName;
+        QString workbenchName;
+        QStringList typeKeywords;
+        QColor accentColor;
+        int order = DefaultRibbonPanelOrder;
+
+        [[nodiscard]] bool isValid() const
+        {
+            return !tabName.isEmpty() && !panelName.isEmpty();
+        }
+    };
+
+    RibbonToolbarMetadata parseRibbonToolbarMetadata(const QString& toolbarName)
+    {
+        if (!toolbarName.startsWith(RibbonMetadataPrefix)) {
+            return {};
+        }
+
+        const QStringList parts = toolbarName.split(QStringLiteral("::"), Qt::KeepEmptyParts);
+        if (parts.size() < 3) {
+            return {};
+        }
+
+        RibbonToolbarMetadata metadata;
+        metadata.tabName = parts.at(1).trimmed();
+        metadata.panelName = parts.at(2).trimmed();
+        for (int index = 3; index < parts.size(); ++index) {
+            const QString flag = parts.at(index).trimmed();
+            if (flag.compare(QStringLiteral("Home"), Qt::CaseInsensitive) == 0) {
+                metadata.promoteToHome = true;
+                metadata.homePriority = 1;
+            }
+            else if (flag.compare(QStringLiteral("HomePrimary"), Qt::CaseInsensitive) == 0) {
+                metadata.promoteToHome = true;
+                metadata.homePriority = 0;
+            }
+            else if (flag.compare(QStringLiteral("HomeSecondary"), Qt::CaseInsensitive) == 0) {
+                metadata.promoteToHome = true;
+                metadata.homePriority = 1;
+            }
+            else if (flag.startsWith(QStringLiteral("Order="), Qt::CaseInsensitive)) {
+                bool ok = false;
+                int parsedOrder = flag.mid(QStringLiteral("Order=").size()).toInt(&ok);
+                if (ok) {
+                    metadata.order = parsedOrder;
+                }
+            }
+        }
+        return metadata;
+    }
+
+    RibbonContextualToolbarMetadata parseRibbonContextualToolbarMetadata(const QString& toolbarName)
+    {
+        if (!toolbarName.startsWith(RibbonContextMetadataPrefix)) {
+            return {};
+        }
+
+        const QStringList parts = toolbarName.split(QStringLiteral("::"), Qt::KeepEmptyParts);
+        if (parts.size() < 3) {
+            return {};
+        }
+
+        RibbonContextualToolbarMetadata metadata;
+        metadata.tabName = parts.at(1).trimmed();
+        metadata.panelName = parts.at(2).trimmed();
+        for (int index = 3; index < parts.size(); ++index) {
+            const QString flag = parts.at(index).trimmed();
+            if (flag.startsWith(QStringLiteral("Order="), Qt::CaseInsensitive)) {
+                bool ok = false;
+                int parsedOrder = flag.mid(QStringLiteral("Order=").size()).toInt(&ok);
+                if (ok) {
+                    metadata.order = parsedOrder;
+                }
+            }
+            else if (flag.startsWith(QStringLiteral("Workbench="), Qt::CaseInsensitive)) {
+                metadata.workbenchName = flag.mid(QStringLiteral("Workbench=").size()).trimmed();
+            }
+            else if (flag.startsWith(QStringLiteral("Types="), Qt::CaseInsensitive)) {
+                const QStringList keywords = flag.mid(QStringLiteral("Types=").size())
+                                                 .split(QStringLiteral(","), Qt::SkipEmptyParts);
+                for (const QString& keyword : keywords) {
+                    metadata.typeKeywords.append(keyword.trimmed());
+                }
+            }
+            else if (flag.startsWith(QStringLiteral("Color="), Qt::CaseInsensitive)) {
+                const QColor color(flag.mid(QStringLiteral("Color=").size()).trimmed());
+                if (color.isValid()) {
+                    metadata.accentColor = color;
+                }
+            }
+        }
+
+        return metadata;
+    }
+
+    bool matchesContextualToolbar(const RibbonContextualToolbarMetadata& metadata,
+                                  const QString& activeWorkbench,
+                                  const ViewProviderDocumentObject* editViewProvider)
+    {
+        if (!metadata.isValid() || !editViewProvider || !editViewProvider->getObject()) {
+            return false;
+        }
+
+        if (!metadata.workbenchName.isEmpty()
+            && !activeWorkbench.contains(metadata.workbenchName, Qt::CaseInsensitive)) {
+            return false;
+        }
+
+        if (metadata.typeKeywords.isEmpty()) {
+            return true;
+        }
+
+        const QString typeName
+            = QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
+        for (const QString& keyword : metadata.typeKeywords) {
+            if (typeName.contains(keyword, Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    QString toolbarLabelForHeuristics(const QString& toolbarName)
+    {
+        const auto metadata = parseRibbonToolbarMetadata(toolbarName);
+        if (metadata.isValid()) {
+            return metadata.panelName;
+        }
+
+        const auto contextualMetadata = parseRibbonContextualToolbarMetadata(toolbarName);
+        return contextualMetadata.isValid() ? contextualMetadata.panelName : toolbarName;
+    }
+
+    int toolbarOrderForMetadata(const QString& toolbarName)
+    {
+        const auto metadata = parseRibbonToolbarMetadata(toolbarName);
+        if (metadata.isValid()) {
+            return metadata.order;
+        }
+
+        const auto contextualMetadata = parseRibbonContextualToolbarMetadata(toolbarName);
+        return contextualMetadata.isValid() ? contextualMetadata.order : DefaultRibbonPanelOrder;
+    }
+
+    int toolbarHomePriorityForMetadata(const QString& toolbarName)
+    {
+        const auto metadata = parseRibbonToolbarMetadata(toolbarName);
+        if (metadata.isValid() && metadata.promoteToHome) {
+            return metadata.homePriority;
+        }
+
+        return 2;
+    }
+
+    bool nameContainsAny(const QString& source, std::initializer_list<const char*> keywords)
+    {
+        for (const auto* keyword : keywords) {
+            if (source.contains(QString::fromLatin1(keyword), Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool isUtilityToolbarName(const QString& toolbarName)
+    {
+        const QString label = toolbarLabelForHeuristics(toolbarName);
+        return nameContainsAny(
+            label,
+            {"View", "Navigation", "Clipboard", "Macro", "Help", "Window", "Selection"}
+        );
+    }
+
+    bool shouldPromoteToolbarToHome(const QString& toolbarName)
+    {
+        const auto metadata = parseRibbonToolbarMetadata(toolbarName);
+        if (metadata.isValid()) {
+            return metadata.promoteToHome;
+        }
+
+        const QString label = toolbarLabelForHeuristics(toolbarName);
+
+        if (label.compare(QStringLiteral("File"), Qt::CaseInsensitive) == 0) {
+            return false;
+        }
+
+        if (isUtilityToolbarName(toolbarName)) {
+            return false;
+        }
+
+        return nameContainsAny(
+                   label,
+                   {
+                       "Home",
+                       "Analysis",
+                       "Setup",
+                       "Create",
+                       "Feature",
+                       "Model",
+                       "Part",
+                       "Sketch",
+                       "Assembly",
+                       "Mesh",
+                       "Solve",
+                       "Results",
+                       "FlowStudio",
+                   })
+            || !label.isEmpty();
+    }
+
+    int ribbonTabPriority(const QString& tabName)
+    {
+        if (tabName == QObject::tr("Home")) {
+            return 0;
+        }
+        if (tabName == QObject::tr("Model")) {
+            return 1;
+        }
+        if (tabName == QObject::tr("Sketch")) {
+            return 2;
+        }
+        if (tabName == QObject::tr("Assembly")) {
+            return 3;
+        }
+        if (tabName == QObject::tr("Setup")) {
+            return 4;
+        }
+        if (tabName == QObject::tr("Simulation")) {
+            return 5;
+        }
+        if (tabName == QObject::tr("Solve")) {
+            return 6;
+        }
+        if (tabName == QObject::tr("Results")) {
+            return 7;
+        }
+        if (tabName == QObject::tr("Inspect")) {
+            return 8;
+        }
+        if (tabName == QObject::tr("Drawing")) {
+            return 9;
+        }
+        if (tabName == QObject::tr("Manufacturing")) {
+            return 10;
+        }
+        if (tabName == QObject::tr("View")) {
+            return 11;
+        }
+        if (tabName == QObject::tr("Tools")) {
+            return 12;
+        }
+
+        return 50;
+    }
 }
 
 
@@ -413,12 +695,11 @@ QuickAccessToolBar::QuickAccessToolBar(QWidget* parent)
 QStringList QuickAccessToolBar::defaultCommands()
 {
     return {
-        QStringLiteral("Std_New"),
-        QStringLiteral("Std_Open"),
         QStringLiteral("Std_Save"),
         QStringLiteral("Std_Undo"),
         QStringLiteral("Std_Redo"),
-        QStringLiteral("Std_Print"),
+        QStringLiteral("Std_Refresh"),
+        QStringLiteral("Std_ViewFitAll"),
     };
 }
 
@@ -586,7 +867,7 @@ RibbonBar::RibbonBar(QWidget* parent)
     searchField->setFixedHeight(QATBarHeight - 4);
     searchField->setMinimumWidth(220);
     searchField->setMaximumWidth(320);
-    searchField->setPlaceholderText(tr("Search commands"));
+    searchField->setPlaceholderText(tr("Search commands or press Ctrl+Shift+P"));
     searchField->addAction(BitmapFactory().iconFromTheme("edit-find"), QLineEdit::LeadingPosition);
     topRowLayout->addWidget(searchField, 0, Qt::AlignRight | Qt::AlignVCenter);
 
@@ -712,6 +993,30 @@ RibbonBar::~RibbonBar()
 
     if (_instance == this) {
         _instance = nullptr;
+    }
+}
+
+void RibbonBar::registerContextualRibbonPanel(const QString& name, const QStringList& commandNames)
+{
+    if (name.isEmpty()) {
+        return;
+    }
+
+    g_registeredContextualRibbonPanels.insert(name, commandNames);
+    if (_instance) {
+        _instance->refreshContextualTabs();
+    }
+}
+
+void RibbonBar::unregisterContextualRibbonPanel(const QString& name)
+{
+    if (name.isEmpty()) {
+        return;
+    }
+
+    g_registeredContextualRibbonPanels.remove(name);
+    if (_instance) {
+        _instance->refreshContextualTabs();
     }
 }
 
@@ -992,15 +1297,25 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
     }
     tabWidget->tabBar()->setTabTextColor(fileTabIndex, QColor(255, 255, 255));
 
-    QList<ToolBarItem*> items = toolBarItems->getItems();
+    configuredToolbarItems = toolBarItems->getItems();
+    QList<ToolBarItem*> items = configuredToolbarItems;
 
     // Group toolbars into ribbon tabs by category
     QMap<QString, QList<ToolBarItem*>> tabMap;
     QStringList tabOrder;
+    QList<ToolBarItem*> homeSourceItems;
 
     for (ToolBarItem* it : items) {
         QString tbName = QString::fromUtf8(it->command().c_str());
+        if (parseRibbonContextualToolbarMetadata(tbName).isValid()) {
+            continue;
+        }
+
         QString tabName = categorizeToolbar(tbName);
+
+        if (shouldPromoteToolbarToHome(tbName)) {
+            homeSourceItems.append(it);
+        }
 
         if (!tabMap.contains(tabName)) {
             tabOrder.append(tabName);
@@ -1008,10 +1323,84 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         tabMap[tabName].append(it);
     }
 
+    for (auto it = tabMap.begin(); it != tabMap.end(); ++it) {
+        auto& tabItems = it.value();
+        std::stable_sort(tabItems.begin(), tabItems.end(), [](ToolBarItem* left, ToolBarItem* right) {
+            const int leftOrder = toolbarOrderForMetadata(QString::fromUtf8(left->command().c_str()));
+            const int rightOrder = toolbarOrderForMetadata(QString::fromUtf8(right->command().c_str()));
+            return leftOrder < rightOrder;
+        });
+    }
+
+    std::stable_sort(homeSourceItems.begin(), homeSourceItems.end(), [](ToolBarItem* left, ToolBarItem* right) {
+        const int leftHomePriority
+            = toolbarHomePriorityForMetadata(QString::fromUtf8(left->command().c_str()));
+        const int rightHomePriority
+            = toolbarHomePriorityForMetadata(QString::fromUtf8(right->command().c_str()));
+        if (leftHomePriority != rightHomePriority) {
+            return leftHomePriority < rightHomePriority;
+        }
+
+        const int leftOrder = toolbarOrderForMetadata(QString::fromUtf8(left->command().c_str()));
+        const int rightOrder = toolbarOrderForMetadata(QString::fromUtf8(right->command().c_str()));
+        return leftOrder < rightOrder;
+    });
+    if (homeSourceItems.size() > MaxHomePanels) {
+        homeSourceItems = homeSourceItems.mid(0, MaxHomePanels);
+    }
+
+    if (homeSourceItems.isEmpty()) {
+        for (ToolBarItem* it : items) {
+            QString tbName = QString::fromUtf8(it->command().c_str());
+            if (isUtilityToolbarName(tbName)) {
+                continue;
+            }
+
+            homeSourceItems.append(it);
+            if (homeSourceItems.size() >= MaxHomePanels) {
+                break;
+            }
+        }
+    }
+
+    if (!homeSourceItems.isEmpty()) {
+        auto* homePage = new RibbonTabPage(tabWidget);
+        int homeTabIndex = tabWidget->addTab(homePage, tr("Home"));
+        tabWidget->setTabToolTip(homeTabIndex, tr("Most common actions for the active workbench"));
+        tabPages[tr("Home")] = homePage;
+
+        for (ToolBarItem* tbItem : std::as_const(homeSourceItems)) {
+            RibbonPanel* panel = createPanel(QString::fromUtf8(tbItem->command().c_str()), tbItem);
+            if (panel && panel->buttonCount() > 0) {
+                homePage->addPanel(panel);
+            }
+            else {
+                delete panel;
+            }
+        }
+    }
+
+    std::stable_sort(tabOrder.begin(), tabOrder.end(), [](const QString& left, const QString& right) {
+        return ribbonTabPriority(left) < ribbonTabPriority(right);
+    });
+
     // Create ribbon tabs and panels
     for (const QString& tabName : tabOrder) {
+        if (tabPages.contains(tabName)) {
+            continue;
+        }
+
         auto* tabPage = new RibbonTabPage(tabWidget);
-        tabWidget->addTab(tabPage, tabName);
+        int tabIndex = tabWidget->addTab(tabPage, tabName);
+        if (tabName == tr("View")) {
+            tabWidget->setTabToolTip(tabIndex, tr("Display, navigation, and panel visibility tools"));
+        }
+        else if (tabName == tr("Inspect")) {
+            tabWidget->setTabToolTip(tabIndex, tr("Validation, diagnostics, and measurement tools"));
+        }
+        else if (tabName == tr("Simulation")) {
+            tabWidget->setTabToolTip(tabIndex, tr("Analysis setup, solving, and simulation workflow tools"));
+        }
         tabPages[tabName] = tabPage;
 
         for (ToolBarItem* tbItem : tabMap[tabName]) {
@@ -1036,49 +1425,51 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
 
 QString RibbonBar::categorizeToolbar(const QString& tbName) const
 {
-    // Inventor-style tab grouping
-    if (tbName == QStringLiteral("File")
-        || tbName == QStringLiteral("Edit")
-        || tbName == QStringLiteral("Clipboard")
-        || tbName == QStringLiteral("Macro")
-        || tbName == QStringLiteral("Structure")
-        || tbName == QStringLiteral("Help")) {
-        return tr("Home");
+    const auto metadata = parseRibbonToolbarMetadata(tbName);
+    if (metadata.isValid()) {
+        return metadata.tabName;
     }
-    if (tbName == QStringLiteral("View")
-        || tbName == QStringLiteral("Navigation")
-        || tbName == QStringLiteral("Individual views")) {
+
+    const QString label = toolbarLabelForHeuristics(tbName);
+
+    if (nameContainsAny(label, {"View", "Navigation", "Individual views", "Display"})) {
         return tr("View");
     }
-    if (tbName.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
+
+    if (nameContainsAny(label, {"Inspect", "Measure", "Validate", "Check", "Report", "Diagnostic"})) {
+        return tr("Inspect");
+    }
+
+    if (nameContainsAny(label, {"Results", "Post", "Plot", "Probe", "Contour", "Trajectory", "Streamline"})) {
+        return tr("Results");
+    }
+
+    if (label.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
         return tr("Sketch");
     }
-    if (tbName.contains(QStringLiteral("Part Design"), Qt::CaseInsensitive)
-        || tbName.contains(QStringLiteral("PartDesign"), Qt::CaseInsensitive)) {
-        return tr("Design");
-    }
-    if (tbName.contains(QStringLiteral("Part"), Qt::CaseInsensitive)
-        && !tbName.contains(QStringLiteral("Design"), Qt::CaseInsensitive)) {
-        return tr("Part");
-    }
-    if (tbName.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive)) {
+
+    if (label.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive)) {
         return tr("Assembly");
     }
-    if (tbName.contains(QStringLiteral("Mesh"), Qt::CaseInsensitive)
-        || tbName.contains(QStringLiteral("FEM"), Qt::CaseInsensitive)) {
-        return tr("Analysis");
+
+    if (nameContainsAny(label, {"FlowStudio", "CFD", "FEM", "Mesh", "Solve", "Solver", "Thermal", "Electro", "Optical"})) {
+        return tr("Simulation");
     }
-    if (tbName.contains(QStringLiteral("Drawing"), Qt::CaseInsensitive)
-        || tbName.contains(QStringLiteral("TechDraw"), Qt::CaseInsensitive)) {
+
+    if (nameContainsAny(label, {"Drawing", "TechDraw"})) {
         return tr("Drawing");
     }
-    if (tbName.contains(QStringLiteral("CAM"), Qt::CaseInsensitive)
-        || tbName.contains(QStringLiteral("Path"), Qt::CaseInsensitive)) {
+
+    if (nameContainsAny(label, {"CAM", "Path", "Manufacturing"})) {
         return tr("Manufacturing");
     }
-    if (tbName.contains(QStringLiteral("FlowStudio"), Qt::CaseInsensitive)
-        || tbName.contains(QStringLiteral("CFD"), Qt::CaseInsensitive)) {
-        return tr("Simulation");
+
+    if (nameContainsAny(label, {"Part Design", "PartDesign", "Part", "Body", "Feature", "Create", "Modify", "Insert", "Draft"})) {
+        return tr("Model");
+    }
+
+    if (nameContainsAny(label, {"Edit", "Clipboard", "Macro", "Structure", "Help", "File"})) {
+        return tr("Tools");
     }
 
     return tr("Tools");
@@ -1092,6 +1483,7 @@ void RibbonBar::clear()
     }
     tabWidget->clear();
     tabPages.clear();
+    configuredToolbarItems.clear();
     fileTabIndex = -1;
     lastContentTabIndex = -1;
 }
@@ -1119,7 +1511,12 @@ void RibbonBar::openBackstage()
 
 RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarItem)
 {
-    QByteArray tbNameBytes = name.toUtf8();
+    const auto metadata = parseRibbonToolbarMetadata(name);
+    const auto contextualMetadata = parseRibbonContextualToolbarMetadata(name);
+    const QString panelName = metadata.isValid()
+        ? metadata.panelName
+        : (contextualMetadata.isValid() ? contextualMetadata.panelName : name);
+    QByteArray tbNameBytes = panelName.toUtf8();
     QString displayName = QApplication::translate("Workbench", tbNameBytes.constData());
 
     auto* panel = new RibbonPanel(displayName);
@@ -1164,6 +1561,8 @@ RibbonPanel* RibbonBar::createPanel(const QString& name, ToolBarItem* toolbarIte
 RibbonPanel* RibbonBar::createContextPanel(const QString& title, const QStringList& commandNames)
 {
     auto* panel = new RibbonPanel(title);
+    int primaryCount = 0;
+    constexpr int primaryLimit = 3;
     for (const QString& commandName : commandNames) {
         if (commandName == QStringLiteral("Separator")) {
             panel->addSeparator();
@@ -1171,7 +1570,13 @@ RibbonPanel* RibbonBar::createContextPanel(const QString& title, const QStringLi
         }
 
         if (auto* button = createButton(commandName)) {
+            const bool hasMenu = (button->menu() || button->popupMode() != QToolButton::DelayedPopup);
+            const bool isPrimary = (primaryCount < primaryLimit);
+            button->setButtonSize((hasMenu || isPrimary)
+                                      ? RibbonButton::Large
+                                      : RibbonButton::Small);
             panel->addButton(button);
+            ++primaryCount;
         }
     }
 
@@ -1267,287 +1672,72 @@ void RibbonBar::refreshContextualTabs()
         removeContextualTab(name);
     }
 
-    if (shouldShowSketchContext(activeWorkbench, editVp)) {
-        auto* page = showContextualTab(tr("Sketch"), QColor(217, 110, 43), editVp != nullptr);
-        populateSketchContextualTab(page);
-    }
-
-    if (shouldShowAssemblyContext(activeWorkbench, editVp)) {
-        auto* page = showContextualTab(tr("Assembly"), QColor(42, 124, 176), editVp != nullptr);
-        populateAssemblyContextualTab(page);
-    }
-}
-
-void RibbonBar::populateSketchContextualTab(RibbonTabPage* page)
-{
-    if (!page) {
-        return;
-    }
-
-    page->clearPanels();
-
-    auto* sketchPanel = createContextPanel(
-        tr("Sketch"),
-        {
-            QStringLiteral("Sketcher_NewSketch"),
-            QStringLiteral("Sketcher_EditSketch"),
-            QStringLiteral("Sketcher_ValidateSketch"),
-            QStringLiteral("Sketcher_LeaveSketch"),
-        }
-    );
-    if (sketchPanel->buttonCount() > 0) {
-        page->addPanel(sketchPanel);
-    }
-    else {
-        delete sketchPanel;
-    }
-
-    auto* geometryPanel = createContextPanel(
-        tr("Geometry"),
-        {
-            QStringLiteral("Sketcher_CreateLine"),
-            QStringLiteral("Sketcher_CreateCircle"),
-            QStringLiteral("Sketcher_CreateArc"),
-            QStringLiteral("Sketcher_CreateRectangle"),
-            QStringLiteral("Sketcher_CreatePoint"),
-            QStringLiteral("Sketcher_ToggleConstruction"),
-        }
-    );
-    if (geometryPanel->buttonCount() > 0) {
-        page->addPanel(geometryPanel);
-    }
-    else {
-        delete geometryPanel;
-    }
-
-    auto* constraintsPanel = createContextPanel(
-        tr("Constraints"),
-        {
-            QStringLiteral("Sketcher_ConstrainCoincidentUnified"),
-            QStringLiteral("Sketcher_ConstrainHorizontal"),
-            QStringLiteral("Sketcher_ConstrainVertical"),
-            QStringLiteral("Sketcher_ConstrainParallel"),
-            QStringLiteral("Sketcher_ConstrainPerpendicular"),
-            QStringLiteral("Sketcher_Dimension"),
-            QStringLiteral("Sketcher_ConstrainDistance"),
-            QStringLiteral("Sketcher_ConstrainAngle"),
-        }
-    );
-    if (constraintsPanel->buttonCount() > 0) {
-        page->addPanel(constraintsPanel);
-    }
-    else {
-        delete constraintsPanel;
-    }
-
-    auto* smartDimPanel = new RibbonPanel(tr("Smart Dimension"));
-    auto* gallery = new RibbonGallery(smartDimPanel);
-    gallery->setThumbnailSize(QSize(26, 26));
-    gallery->setVisibleColumns(4);
-    gallery->setVisibleRows(1);
-
-    auto addGalleryCommand = [gallery](const QString& cmdName) {
-        CommandManager& mgr = Application::Instance->commandManager();
-        Command* cmd = mgr.getCommandByName(cmdName.toLatin1().constData());
-        if (!cmd) {
-            return;
+    QMap<QString, QList<ToolBarItem*>> contextualToolbarMap;
+    QMap<QString, QColor> contextualAccentColors;
+    for (ToolBarItem* tbItem : std::as_const(configuredToolbarItems)) {
+        const QString tbName = QString::fromUtf8(tbItem->command().c_str());
+        const auto metadata = parseRibbonContextualToolbarMetadata(tbName);
+        if (!matchesContextualToolbar(metadata, activeWorkbench, editVp)) {
+            continue;
         }
 
-        const char* menuText = cmd->getMenuText();
-        QString label = menuText && menuText[0]
-            ? QApplication::translate(cmd->className(), menuText)
-            : cmdName;
-        label.remove(QLatin1Char('&'));
+        contextualToolbarMap[metadata.tabName].append(tbItem);
+        if (metadata.accentColor.isValid() && !contextualAccentColors.contains(metadata.tabName)) {
+            contextualAccentColors.insert(metadata.tabName, metadata.accentColor);
+        }
+    }
 
-        QIcon icon;
-        const char* pixmapName = cmd->getPixmap();
-        if (pixmapName && pixmapName[0]) {
-            icon = BitmapFactory().iconFromTheme(pixmapName);
-            if (icon.isNull()) {
-                QPixmap pm = BitmapFactory().pixmap(pixmapName);
-                if (!pm.isNull()) {
-                    icon = QIcon(pm);
-                }
+    QMap<QString, QList<QPair<RibbonContextualToolbarMetadata, QStringList>>> registeredContextualPanels;
+    for (auto it = g_registeredContextualRibbonPanels.begin(); it != g_registeredContextualRibbonPanels.end(); ++it) {
+        const auto metadata = parseRibbonContextualToolbarMetadata(it.key());
+        if (!matchesContextualToolbar(metadata, activeWorkbench, editVp)) {
+            continue;
+        }
+
+        registeredContextualPanels[metadata.tabName].append({metadata, it.value()});
+        if (metadata.accentColor.isValid() && !contextualAccentColors.contains(metadata.tabName)) {
+            contextualAccentColors.insert(metadata.tabName, metadata.accentColor);
+        }
+    }
+
+    for (auto it = contextualToolbarMap.begin(); it != contextualToolbarMap.end(); ++it) {
+        auto& toolbars = it.value();
+        std::stable_sort(toolbars.begin(), toolbars.end(), [](ToolBarItem* left, ToolBarItem* right) {
+            const int leftOrder = toolbarOrderForMetadata(QString::fromUtf8(left->command().c_str()));
+            const int rightOrder = toolbarOrderForMetadata(QString::fromUtf8(right->command().c_str()));
+            return leftOrder < rightOrder;
+        });
+
+        auto* page = showContextualTab(it.key(), contextualAccentColors.value(it.key()), editVp != nullptr);
+        page->clearPanels();
+        for (ToolBarItem* tbItem : std::as_const(toolbars)) {
+            RibbonPanel* panel = createPanel(QString::fromUtf8(tbItem->command().c_str()), tbItem);
+            if (panel && panel->buttonCount() > 0) {
+                page->addPanel(panel);
+            }
+            else {
+                delete panel;
             }
         }
-
-        gallery->addItem(RibbonGalleryItem(cmdName, icon, label, label));
-    };
-
-    gallery->addCategory(tr("Dimensions"));
-    addGalleryCommand(QStringLiteral("Sketcher_Dimension"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistance"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistanceX"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDistanceY"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainAngle"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainRadius"));
-    addGalleryCommand(QStringLiteral("Sketcher_ConstrainDiameter"));
-
-    connect(gallery, &RibbonGallery::itemActivated, this, [](const QString& cmdName) {
-        if (cmdName.isEmpty()) {
-            return;
-        }
-        CommandManager& mgr = Application::Instance->commandManager();
-        mgr.runCommandByName(cmdName.toLatin1().constData());
-    });
-
-    if (gallery->itemCount() > 0) {
-        smartDimPanel->addCustomWidget(gallery);
-        page->addPanel(smartDimPanel);
-    }
-    else {
-        delete smartDimPanel;
-    }
-}
-
-void RibbonBar::populateAssemblyContextualTab(RibbonTabPage* page)
-{
-    if (!page) {
-        return;
     }
 
-    page->clearPanels();
+    for (auto it = registeredContextualPanels.begin(); it != registeredContextualPanels.end(); ++it) {
+        auto panels = it.value();
+        std::stable_sort(panels.begin(), panels.end(), [](const auto& left, const auto& right) {
+            return left.first.order < right.first.order;
+        });
 
-    auto* assemblyPanel = createContextPanel(
-        tr("Assembly"),
-        {
-            QStringLiteral("Assembly_CreateAssembly"),
-            QStringLiteral("Assembly_ActivateAssembly"),
-            QStringLiteral("Assembly_InsertLink"),
-            QStringLiteral("Assembly_CreateBom"),
-        }
-    );
-    if (assemblyPanel->buttonCount() > 0) {
-        page->addPanel(assemblyPanel);
-    }
-    else {
-        delete assemblyPanel;
-    }
-
-    auto* jointsPanel = createContextPanel(
-        tr("Joints"),
-        {
-            QStringLiteral("Assembly_CreateJointFixed"),
-            QStringLiteral("Assembly_CreateJointRevolute"),
-            QStringLiteral("Assembly_CreateJointSlider"),
-            QStringLiteral("Assembly_CreateJointCylindrical"),
-            QStringLiteral("Assembly_CreateJointBall"),
-            QStringLiteral("Assembly_CreateJointDistance"),
-        }
-    );
-    if (jointsPanel->buttonCount() > 0) {
-        page->addPanel(jointsPanel);
-    }
-    else {
-        delete jointsPanel;
-    }
-
-    auto* solvePanel = createContextPanel(
-        tr("Solve"),
-        {
-            QStringLiteral("Assembly_ToggleGrounded"),
-            QStringLiteral("Assembly_CreateJointParallel"),
-            QStringLiteral("Assembly_CreateJointPerpendicular"),
-            QStringLiteral("Assembly_CreateJointAngle"),
-        }
-    );
-    if (solvePanel->buttonCount() > 0) {
-        page->addPanel(solvePanel);
-    }
-    else {
-        delete solvePanel;
-    }
-
-    auto* jointPresetPanel = new RibbonPanel(tr("Joint Presets"));
-    auto* gallery = new RibbonGallery(jointPresetPanel);
-    gallery->setThumbnailSize(QSize(26, 26));
-    gallery->setVisibleColumns(5);
-    gallery->setVisibleRows(1);
-
-    auto addGalleryCommand = [gallery](const QString& cmdName) {
-        CommandManager& mgr = Application::Instance->commandManager();
-        Command* cmd = mgr.getCommandByName(cmdName.toLatin1().constData());
-        if (!cmd) {
-            return;
-        }
-
-        const char* menuText = cmd->getMenuText();
-        QString label = menuText && menuText[0]
-            ? QApplication::translate(cmd->className(), menuText)
-            : cmdName;
-        label.remove(QLatin1Char('&'));
-
-        QIcon icon;
-        const char* pixmapName = cmd->getPixmap();
-        if (pixmapName && pixmapName[0]) {
-            icon = BitmapFactory().iconFromTheme(pixmapName);
-            if (icon.isNull()) {
-                QPixmap pm = BitmapFactory().pixmap(pixmapName);
-                if (!pm.isNull()) {
-                    icon = QIcon(pm);
-                }
+        auto* page = showContextualTab(it.key(), contextualAccentColors.value(it.key()), editVp != nullptr);
+        for (const auto& panelEntry : panels) {
+            auto* panel = createContextPanel(panelEntry.first.panelName, panelEntry.second);
+            if (panel && panel->buttonCount() > 0) {
+                page->addPanel(panel);
+            }
+            else {
+                delete panel;
             }
         }
-
-        gallery->addItem(RibbonGalleryItem(cmdName, icon, label, label));
-    };
-
-    gallery->addCategory(tr("Primary Joints"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointFixed"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointRevolute"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointSlider"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointCylindrical"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointBall"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointDistance"));
-
-    gallery->addCategory(tr("Auxiliary Joints"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointParallel"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointPerpendicular"));
-    addGalleryCommand(QStringLiteral("Assembly_CreateJointAngle"));
-
-    connect(gallery, &RibbonGallery::itemActivated, this, [](const QString& cmdName) {
-        if (cmdName.isEmpty()) {
-            return;
-        }
-        CommandManager& mgr = Application::Instance->commandManager();
-        mgr.runCommandByName(cmdName.toLatin1().constData());
-    });
-
-    if (gallery->itemCount() > 0) {
-        jointPresetPanel->addCustomWidget(gallery);
-        page->addPanel(jointPresetPanel);
     }
-    else {
-        delete jointPresetPanel;
-    }
-}
-
-bool RibbonBar::shouldShowSketchContext(const QString& activeWorkbench,
-                                        const ViewProviderDocumentObject* editViewProvider) const
-{
-    if (activeWorkbench.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
-        return true;
-    }
-    if (!editViewProvider || !editViewProvider->getObject()) {
-        return false;
-    }
-
-    const QString typeName = QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
-    return typeName.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive);
-}
-
-bool RibbonBar::shouldShowAssemblyContext(const QString& activeWorkbench,
-                                          const ViewProviderDocumentObject* editViewProvider) const
-{
-    if (activeWorkbench.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive)) {
-        return true;
-    }
-    if (!editViewProvider || !editViewProvider->getObject()) {
-        return false;
-    }
-
-    const QString typeName = QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
-    return typeName.contains(QStringLiteral("Assembly"), Qt::CaseInsensitive);
 }
 
 // ============================================================================

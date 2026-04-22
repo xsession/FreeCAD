@@ -57,6 +57,7 @@
 #include "MainWindowPy.h"
 #include "PythonEditor.h"
 #include "PythonWrapper.h"
+#include "RibbonBar.h"
 #include "SoFCDB.h"
 #include "SplitView3DInventor.h"
 #include "View3DInventor.h"
@@ -491,6 +492,23 @@ PyMethodDef ApplicationPy::Methods[] = {
      "Remove an added workbench manipulator.\n"
      "\n"
      "obj : object"},
+    {"registerContextualRibbonPanel",
+     (PyCFunction)ApplicationPy::sRegisterContextualRibbonPanel,
+     METH_VARARGS,
+     "registerContextualRibbonPanel(name, commands) -> None\n"
+     "\n"
+     "Register a contextual ribbon panel definition.\n"
+     "\n"
+     "name : str\n    Contextual ribbon metadata name.\n"
+     "commands : sequence[str]\n    Commands shown inside the contextual panel."},
+    {"unregisterContextualRibbonPanel",
+     (PyCFunction)ApplicationPy::sUnregisterContextualRibbonPanel,
+     METH_VARARGS,
+     "unregisterContextualRibbonPanel(name) -> None\n"
+     "\n"
+     "Remove a previously registered contextual ribbon panel.\n"
+     "\n"
+     "name : str"},
     {"listUserEditModes",
      (PyCFunction)ApplicationPy::sListUserEditModes,
      METH_VARARGS,
@@ -1873,6 +1891,43 @@ PyObject* ApplicationPy::sRemoveWbManipulator(PyObject* /*self*/, PyObject* args
     PY_TRY
     {
         WorkbenchManipulatorPython::removeManipulator(Py::Object(o));
+        Py_Return;
+    }
+    PY_CATCH;
+}
+
+PyObject* ApplicationPy::sRegisterContextualRibbonPanel(PyObject* /*self*/, PyObject* args)
+{
+    char* name = nullptr;
+    PyObject* commandsObj = nullptr;
+    if (!PyArg_ParseTuple(args, "sO", &name, &commandsObj)) {
+        return nullptr;
+    }
+
+    PY_TRY
+    {
+        Py::Sequence commands(commandsObj);
+        QStringList commandNames;
+        for (Py::Sequence::size_type index = 0; index < commands.length(); ++index) {
+            commandNames.append(QString::fromStdString(Py::String(commands[index]).as_std_string()));
+        }
+
+        RibbonBar::registerContextualRibbonPanel(QString::fromUtf8(name), commandNames);
+        Py_Return;
+    }
+    PY_CATCH;
+}
+
+PyObject* ApplicationPy::sUnregisterContextualRibbonPanel(PyObject* /*self*/, PyObject* args)
+{
+    char* name = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &name)) {
+        return nullptr;
+    }
+
+    PY_TRY
+    {
+        RibbonBar::unregisterContextualRibbonPanel(QString::fromUtf8(name));
         Py_Return;
     }
     PY_CATCH;

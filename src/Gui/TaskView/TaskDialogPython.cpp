@@ -25,6 +25,7 @@
 #include <sstream>
 #include <QEvent>
 #include <QFile>
+#include <QDynamicPropertyChangeEvent>
 #include <QPointer>
 
 
@@ -43,6 +44,19 @@
 
 using namespace Gui;
 using namespace Gui::TaskView;
+
+namespace {
+
+bool isTaskViewMetadataProperty(const QByteArray& propertyName)
+{
+    return propertyName == QByteArrayLiteral("taskview_summary_title")
+        || propertyName == QByteArrayLiteral("taskview_summary_detail")
+        || propertyName == QByteArrayLiteral("taskview_validation_level")
+        || propertyName == QByteArrayLiteral("taskview_validation_title")
+        || propertyName == QByteArrayLiteral("taskview_validation_detail");
+}
+
+}
 
 ControlPy* ControlPy::instance = nullptr;
 
@@ -693,6 +707,34 @@ Py::Object TaskDialogPy::reject(const Py::Tuple& args)
 TaskDialogPython::TaskDialogPython(const Py::Object& o)
     : dlg(o)
 {
+    Base::PyGILStateLocker lock;
+    try {
+        const std::array<std::pair<const char*, const char*>, 5> forwardedProperties {{
+            {"taskview_summary_title", "taskview_summary_title"},
+            {"taskview_summary_detail", "taskview_summary_detail"},
+            {"taskview_validation_level", "taskview_validation_level"},
+            {"taskview_validation_title", "taskview_validation_title"},
+            {"taskview_validation_detail", "taskview_validation_detail"},
+        }};
+
+        for (const auto& propertyPair : forwardedProperties) {
+            if (dlg.hasAttr(std::string(propertyPair.first))) {
+                Py::Object value(dlg.getAttr(std::string(propertyPair.first)));
+                if (!value.isNone()) {
+                    Py::String text(value);
+                    setProperty(
+                        propertyPair.second,
+                        QString::fromUtf8(text.as_std_string().c_str())
+                    );
+                }
+            }
+        }
+    }
+    catch (Py::Exception&) {
+        Base::PyException e;
+        e.reportException();
+    }
+
     if (!tryLoadUiFile()) {
         tryLoadForm();
     }
@@ -887,6 +929,14 @@ void TaskDialogPython::helpRequested()
 
 bool TaskDialogPython::eventFilter(QObject* watched, QEvent* event)
 {
+    if (event->type() == QEvent::DynamicPropertyChange) {
+        auto* propertyEvent = static_cast<QDynamicPropertyChangeEvent*>(event);
+        const QByteArray propertyName = propertyEvent->propertyName();
+        if (isTaskViewMetadataProperty(propertyName)) {
+            setProperty(propertyName.constData(), watched->property(propertyName.constData()));
+        }
+    }
+
     if (event->type() == QEvent::LanguageChange) {
         Base::PyGILStateLocker lock;
         try {

@@ -213,6 +213,42 @@ def makePostPipeline(doc=None, name="PostPipeline"):
     return obj
 
 
+def makeGeant4Result(doc=None, name="Geant4Result"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.geant4_result import Geant4Result
+    Geant4Result(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_geant4_result import VPGeant4Result
+        VPGeant4Result(obj.ViewObject)
+    return obj
+
+
+def makeGeant4ScoringResult(doc=None, name="Geant4ScoringResult"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.geant4_result_components import Geant4ScoringResult
+    Geant4ScoringResult(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_geant4_result_component import VPGeant4ResultComponent
+        VPGeant4ResultComponent(obj.ViewObject)
+    return obj
+
+
+def makeGeant4DetectorResult(doc=None, name="Geant4DetectorResult"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.geant4_result_components import Geant4DetectorResult
+    Geant4DetectorResult(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_geant4_result_component import VPGeant4ResultComponent
+        VPGeant4ResultComponent(obj.ViewObject)
+    return obj
+
+
 # ======================================================================
 # Multi-physics domain objects
 # ======================================================================
@@ -490,6 +526,42 @@ def makeBCOpticalBoundary(doc=None, name="OpticalBoundary"):
     obj = doc.addObject("App::FeaturePython", name)
     from flow_studio.objects.bc_optical import BCOpticalBoundary
     BCOpticalBoundary(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+def makeBCGeant4Source(doc=None, name="Geant4Source"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_geant4 import BCGeant4Source
+    BCGeant4Source(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+def makeBCGeant4Detector(doc=None, name="Geant4Detector"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_geant4 import BCGeant4Detector
+    BCGeant4Detector(obj)
+    if FreeCAD.GuiUp:
+        from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
+        VPGenericBC(obj.ViewObject)
+    return obj
+
+
+def makeBCGeant4Scoring(doc=None, name="Geant4Scoring"):
+    if doc is None:
+        doc = FreeCAD.ActiveDocument
+    obj = doc.addObject("App::FeaturePython", name)
+    from flow_studio.objects.bc_geant4 import BCGeant4Scoring
+    BCGeant4Scoring(obj)
     if FreeCAD.GuiUp:
         from flow_studio.viewproviders.vp_generic_bc import VPGenericBC
         VPGenericBC(obj.ViewObject)

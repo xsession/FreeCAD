@@ -13,7 +13,9 @@ from flow_studio.enterprise.app.legacy_actions import (
     export_fcstd_sidecar,
     export_analysis_manifest,
     prepare_runtime_submission,
+    prepare_runtime_submissions,
     submit_analysis_to_runtime,
+    submit_analysis_to_runtime_batch,
 )
 from flow_studio.enterprise.bootstrap import initialize_workbench
 
@@ -53,11 +55,19 @@ def _analysis_fixture():
             ),
             SimpleNamespace(
                 FlowType="FlowStudio::Solver",
+                SolverBackend="OpenFOAM",
                 OpenFOAMSolver="simpleFoam",
                 MaxIterations=200,
                 ConvergenceTolerance=1e-4,
                 WriteInterval=20,
                 NumProcessors=2,
+                MultiSolverEnabled=False,
+                MultiSolverBackends=["OpenFOAM", "Elmer"],
+                SoftRuntimeWarningSeconds=0,
+                MaxRuntimeSeconds=0,
+                StallTimeoutSeconds=0,
+                MinProgressPercent=0.0,
+                AbortOnThreshold=True,
             ),
         ],
     )
@@ -147,6 +157,49 @@ def test_submit_analysis_to_runtime_supports_remote_execution_profile(tmp_path: 
     assert record.target_ref == "loopback.default"
     assert record.remote_run_id == "run-remote-actions"
     assert manifest_hash.startswith("sha256:")
+
+
+def test_prepare_runtime_submissions_expands_multi_solver_plan(tmp_path: Path):
+    analysis = _analysis_fixture()
+    solver = analysis.Group[-1]
+    solver.MultiSolverEnabled = True
+    solver.MultiSolverBackends = ["OpenFOAM", "Elmer"]
+    solver.MaxRuntimeSeconds = 120
+    runtime = initialize_workbench()
+
+    submissions = prepare_runtime_submissions(
+        runtime=runtime,
+        analysis_object=analysis,
+        project_id="project-multi",
+        run_id="run-multi-plan",
+        working_directory=str(tmp_path / "multi-plan"),
+    )
+
+    assert [item[0] for item in submissions] == ["OpenFOAM", "Elmer"]
+    assert submissions[0][2].runtime_thresholds.max_wall_time_seconds == 120
+    assert submissions[0][2].run_id == "run-multi-plan-openfoam"
+    assert submissions[1][2].run_id == "run-multi-plan-elmer"
+
+
+def test_submit_analysis_to_runtime_batch_runs_multi_solver_configuration(tmp_path: Path):
+    analysis = _analysis_fixture()
+    solver = analysis.Group[-1]
+    solver.MultiSolverEnabled = True
+    solver.MultiSolverBackends = ["OpenFOAM", "Elmer"]
+    solver.MaxRuntimeSeconds = 90
+    runtime = initialize_workbench()
+
+    submissions = submit_analysis_to_runtime_batch(
+        runtime=runtime,
+        analysis_object=analysis,
+        project_id="project-multi-submit",
+        run_id="run-multi-submit",
+        working_directory=str(tmp_path / "multi-submit"),
+    )
+
+    assert len(submissions) == 2
+    assert {record.adapter_id for _, record, _ in submissions} == {"openfoam.primary", "elmer.primary"}
+    assert all(manifest_hash.startswith("sha256:") for _, _, manifest_hash in submissions)
 
 
 def test_export_fcstd_sidecar_writes_canonical_payload(tmp_path: Path):

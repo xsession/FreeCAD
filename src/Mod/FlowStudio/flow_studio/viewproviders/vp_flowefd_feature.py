@@ -32,5 +32,4 @@ class VPFlowEFDFeature(BaseFlowVP):
         panel_cls = panel_map.get(flow_type)
         if panel_cls is None:
             return False
-        FreeCADGui.Control.showDialog(panel_cls(obj))
-        return True
+        return self.show_task_panel(panel_cls, obj)

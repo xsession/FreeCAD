@@ -12,6 +12,33 @@ from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
 
 class TaskMeasurementPoint(BaseTaskPanel):
 
+    SUMMARY_TITLE = "Measurement Probe"
+    SUMMARY_DETAIL = (
+        "Define a point or line probe for {label}, then choose which fields to sample."
+    )
+
+    def _build_task_validation(self):
+        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
+
+        if not fields:
+            return (
+                "incomplete",
+                "Select sampled fields",
+                "Enter at least one field name such as U, p, or T so the probe captures useful data.",
+            )
+
+        if self.chk_line.isChecked():
+            start = (self.sp_sx.value(), self.sp_sy.value(), self.sp_sz.value())
+            end = (self.sp_ex.value(), self.sp_ey.value(), self.sp_ez.value())
+            if start == end:
+                return (
+                    "warning",
+                    "Line probe needs distinct endpoints",
+                    "Move the line end point away from the start point so the probe spans a real path.",
+                )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -20,9 +47,9 @@ class TaskMeasurementPoint(BaseTaskPanel):
             "Define measurement points for Paraview evaluation scripts."
         ))
 
-        # Description
+        details = self._section(layout, "Probe Setup")
         self.le_desc = QtGui.QLineEdit(self.obj.Label2)
-        self._add_row(layout, "Description:", self.le_desc)
+        self._add_row(details, "Description:", self.le_desc)
 
         # --- Single Point ---
         grp_pt = QtGui.QGroupBox("Point Probe")
@@ -38,7 +65,7 @@ class TaskMeasurementPoint(BaseTaskPanel):
 
         # --- Line Probe ---
         self.chk_line = self._checkbox(self.obj.UseLine)
-        self._add_row(layout, "Use Line Probe:", self.chk_line)
+        self._add_row(details, "Use Line Probe:", self.chk_line)
 
         grp_line = QtGui.QGroupBox("Line Probe (Plot Over Line)")
         line_lay = QtGui.QVBoxLayout(grp_line)
@@ -64,17 +91,17 @@ class TaskMeasurementPoint(BaseTaskPanel):
         self.chk_line.toggled.connect(grp_line.setEnabled)
 
         # --- Fields ---
+        export = self._section(layout, "Sampling & Export")
         self.le_fields = QtGui.QLineEdit(
             ", ".join(self.obj.SampleFields) if self.obj.SampleFields else "U, p"
         )
         self.le_fields.setToolTip("Comma-separated field names, e.g. U, p, T, k")
-        self._add_row(layout, "Fields:", self.le_fields)
+        self._add_row(export, "Fields:", self.le_fields)
 
-        # --- Export ---
         self.chk_csv = self._checkbox(self.obj.ExportCSV)
-        self._add_row(layout, "Export CSV:", self.chk_csv)
+        self._add_row(export, "Export CSV:", self.chk_csv)
         self.chk_ts = self._checkbox(self.obj.TimeSeries)
-        self._add_row(layout, "Time Series:", self.chk_ts)
+        self._add_row(export, "Time Series:", self.chk_ts)
 
         layout.addStretch()
         return widget

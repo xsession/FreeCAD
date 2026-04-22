@@ -33,6 +33,8 @@
 #include <QImage>
 #include <QLabel>
 
+#include <fastsignals/signal.h>
+
 #include <Inventor/SbRotation.h>
 #include <Inventor/nodes/SoEnvironment.h>
 #include <Inventor/nodes/SoEventCallback.h>
@@ -593,6 +595,9 @@ private:
     void setCursorRepresentation(int mode);
     void aboutToDestroyGLContext();
     void createStandardCursors();
+    void connectDocumentStateSignals();
+    void disconnectDocumentStateSignals();
+    void updateViewportStateBadge();
 
 private:
     NaviCube* naviCube;
@@ -653,9 +658,18 @@ private:
     // stuff needed to draw the fps counter
     bool fpsEnabled;
     QLabel* fpsCounter = nullptr;
+    QLabel* viewportStateBadge = nullptr;
     unsigned long previousAxisLetterColor = 0;
     bool vboEnabled;
     bool naviCubeEnabled;
+    bool viewportStateRecomputing = false;
+    fastsignals::connection viewportTouchedConnection;
+    fastsignals::connection viewportBeforeRecomputeConnection;
+    fastsignals::connection viewportRecomputedConnection;
+    fastsignals::connection viewportSkipRecomputeConnection;
+    fastsignals::connection viewportUndoConnection;
+    fastsignals::connection viewportRedoConnection;
+    fastsignals::connection viewportFinishSaveConnection;
     // Screen-only viewer decorations such as the navicube are rendered only
     // when the active render intent allows them.
     mutable std::vector<RenderIntent> renderIntentOverrideStack;

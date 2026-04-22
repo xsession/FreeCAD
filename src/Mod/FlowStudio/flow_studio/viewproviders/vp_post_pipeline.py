@@ -10,5 +10,4 @@ class VPPostPipeline(BaseFlowVP):
     icon_name = "FlowStudioPost.svg"
     def setEdit(self, vobj, mode=0):
         from flow_studio.taskpanels.task_post_pipeline import TaskPostPipeline
-        FreeCADGui.Control.showDialog(TaskPostPipeline(vobj.Object))
-        return True
+        return self.show_task_panel(TaskPostPipeline, vobj.Object)

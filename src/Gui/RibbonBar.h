@@ -194,6 +194,9 @@ public:
     explicit RibbonBar(QWidget* parent = nullptr);
     ~RibbonBar() override;
 
+    static void registerContextualRibbonPanel(const QString& name, const QStringList& commandNames);
+    static void unregisterContextualRibbonPanel(const QString& name);
+
     void setup(ToolBarItem* toolBarItems);
     void clear();
 
@@ -244,18 +247,12 @@ private:
     RibbonButton* createButton(const QString& cmdName);
     QString categorizeToolbar(const QString& tbName) const;
     void refreshContextualTabs();
-    void populateSketchContextualTab(RibbonTabPage* page);
-    void populateAssemblyContextualTab(RibbonTabPage* page);
     void openBackstage();
     void applyMinimizedState(bool animated = true);
     void finalizeMinimizedLayout(bool showPanelArea);
     void updateMinimizeAffordance();
     void showMinimizedPreview();
     void collapseMinimizedPreview();
-    bool shouldShowSketchContext(const QString& activeWorkbench,
-                                 const ViewProviderDocumentObject* editViewProvider) const;
-    bool shouldShowAssemblyContext(const QString& activeWorkbench,
-                                   const ViewProviderDocumentObject* editViewProvider) const;
 
     QuickAccessToolBar* qatBar{nullptr};
     QToolButton* minimizeButton{nullptr};
@@ -264,6 +261,7 @@ private:
     QLineEdit* searchField{nullptr};
     QTabWidget* tabWidget{nullptr};
     QMap<QString, RibbonTabPage*> tabPages;
+    QList<ToolBarItem*> configuredToolbarItems;
     int fileTabIndex{-1};
     int lastContentTabIndex{-1};
 

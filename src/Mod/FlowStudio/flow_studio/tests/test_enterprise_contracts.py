@@ -224,3 +224,21 @@ def test_local_process_executor_uses_synthetic_fallback(tmp_path: Path):
     assert result.state == JobState.COMPLETED
     assert result.execution_mode == "synthetic"
     assert result.return_code == 0
+
+
+def test_local_process_executor_uses_case_runtime_threshold_override(tmp_path: Path):
+    executor = LocalProcessExecutor(timeout_seconds=30, allow_synthetic_fallback=False)
+    prepared_case = PreparedCase(
+        adapter_id="test.adapter",
+        run_id="run-timeout-override",
+        case_directory=str(tmp_path),
+        launch_command=(sys.executable, "-c", "import time; time.sleep(2)"),
+        artifact_manifest={},
+        max_runtime_seconds=1,
+    )
+
+    result = executor.execute(prepared_case)
+
+    assert result.state == JobState.FAILED
+    assert result.return_code == 124
+    assert "1 seconds" in result.stderr

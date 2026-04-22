@@ -12,6 +12,78 @@ from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
 
 class TaskMeasurementVolume(BaseTaskPanel):
 
+    SUMMARY_TITLE = "Volume Measurement"
+    SUMMARY_DETAIL = (
+        "Define a volume extraction for {label}, then choose sampled fields and statistics to compute."
+    )
+
+    def _build_task_validation(self):
+        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
+        if not fields:
+            return (
+                "incomplete",
+                "Select sampled fields",
+                "Enter at least one field name so the volume measurement has data to evaluate.",
+            )
+
+        volume_type = self.cb_type.currentText()
+        if volume_type == "Box":
+            if not (
+                self.sp_bx0.value() < self.sp_bx1.value()
+                and self.sp_by0.value() < self.sp_by1.value()
+                and self.sp_bz0.value() < self.sp_bz1.value()
+            ):
+                return (
+                    "warning",
+                    "Box limits are invalid",
+                    "Set each minimum corner value below its corresponding maximum value.",
+                )
+
+        if volume_type == "Sphere" and self.sp_sr.value() <= 0.0:
+            return (
+                "warning",
+                "Sphere radius required",
+                "Enter a positive sphere radius before evaluating this volume measurement.",
+            )
+
+        if volume_type == "Cylinder":
+            axis = (self.sp_cax.value(), self.sp_cay.value(), self.sp_caz.value())
+            if axis == (0.0, 0.0, 0.0):
+                return (
+                    "warning",
+                    "Cylinder axis cannot be zero",
+                    "Set a non-zero cylinder axis vector so the volume orientation is defined.",
+                )
+            if self.sp_cr.value() <= 0.0 or self.sp_ch.value() <= 0.0:
+                return (
+                    "warning",
+                    "Cylinder size required",
+                    "Enter positive cylinder radius and height values before evaluating this region.",
+                )
+
+        if volume_type == "Threshold (field-based)":
+            if not self.le_thrfield.text().strip():
+                return (
+                    "incomplete",
+                    "Threshold field required",
+                    "Choose the field used to create the threshold-based measurement region.",
+                )
+            if self.sp_thrmin.value() >= self.sp_thrmax.value():
+                return (
+                    "warning",
+                    "Threshold range is invalid",
+                    "Set a threshold minimum smaller than the threshold maximum.",
+                )
+
+        if not any((self.chk_avg.isChecked(), self.chk_minmax.isChecked(), self.chk_integ.isChecked())):
+            return (
+                "warning",
+                "Select a statistic to compute",
+                "Enable at least one evaluation output such as average, min/max, or integral.",
+            )
+
+        return super()._build_task_validation()
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -20,16 +92,15 @@ class TaskMeasurementVolume(BaseTaskPanel):
             "Define a volume region for field statistics in Paraview."
         ))
 
-        # Description
+        definition = self._section(layout, "Definition")
         self.le_desc = QtGui.QLineEdit(self.obj.Label2)
-        self._add_row(layout, "Description:", self.le_desc)
+        self._add_row(definition, "Description:", self.le_desc)
 
-        # --- Volume type ---
         self.cb_type = self._combo(
             ["Box", "Sphere", "Cylinder", "Threshold (field-based)", "Entire Domain"],
             self.obj.VolumeType,
         )
-        self._add_row(layout, "Volume Type:", self.cb_type)
+        self._add_row(definition, "Volume Type:", self.cb_type)
 
         # --- Box ---
         grp_box = QtGui.QGroupBox("Box")
@@ -98,11 +169,11 @@ class TaskMeasurementVolume(BaseTaskPanel):
         self._add_row(thr_lay, "Max:", self.sp_thrmax)
         layout.addWidget(grp_thr)
 
-        # --- Fields ---
+        sampling = self._section(layout, "Sampling")
         self.le_fields = QtGui.QLineEdit(
             ", ".join(self.obj.SampleFields) if self.obj.SampleFields else "U, p"
         )
-        self._add_row(layout, "Fields:", self.le_fields)
+        self._add_row(sampling, "Fields:", self.le_fields)
 
         # --- Evaluation ---
         grp_eval = QtGui.QGroupBox("Evaluation")
@@ -115,11 +186,11 @@ class TaskMeasurementVolume(BaseTaskPanel):
         self._add_row(eval_lay, "Volume Integral:", self.chk_integ)
         layout.addWidget(grp_eval)
 
-        # --- Export ---
+        export = self._section(layout, "Export")
         self.chk_csv = self._checkbox(self.obj.ExportCSV)
-        self._add_row(layout, "Export CSV:", self.chk_csv)
+        self._add_row(export, "Export CSV:", self.chk_csv)
         self.chk_ts = self._checkbox(self.obj.TimeSeries)
-        self._add_row(layout, "Time Series:", self.chk_ts)
+        self._add_row(export, "Time Series:", self.chk_ts)
 
         layout.addStretch()
         return widget
