@@ -1,5 +1,8 @@
 [workspace]
 members = [
+    "backend/crates/command-core",
+    "backend/crates/document-core",
+    "backend/crates/protocol-types",
     "backend/crates/api-gateway",
     "native/freecad-bridge",
 ]

@@ -2,11 +2,25 @@ syntax = "proto3";
 
 package asterforge.protocol.v1;
 
+message BridgeCapabilities {
+  bool fcstd_open = 1;
+  bool object_tree_fetch = 2;
+  bool property_fetch = 3;
+  bool tessellation_fetch = 4;
+  bool command_execution = 5;
+}
+
+message BridgeStatus {
+  string worker_mode = 1;
+  bool freecad_runtime_detected = 2;
+  BridgeCapabilities capabilities = 3;
+}
+
 message DocumentRef {
   string document_id = 1;
   string display_name = 2;
-  string file_path = 3;
-  string active_workbench = 4;
+  optional string file_path = 3;
+  string workbench = 4;
   bool dirty = 5;
 }
 
@@ -29,7 +43,7 @@ message PropertyMetadata {
   string property_type = 3;
   string value_kind = 4;
   bool read_only = 5;
-  string unit = 6;
+  optional string unit = 6;
   bool expression_capable = 7;
   string value_preview = 8;
 }
@@ -79,14 +93,27 @@ message WorkbenchState {
   string mode = 3;
 }
 
+message CommandArgumentDefinition {
+  string argument_id = 1;
+  string label = 2;
+  string value_type = 3;
+  bool required = 4;
+  optional string default_value = 5;
+  optional string placeholder = 6;
+  optional string unit = 7;
+  repeated string options = 8;
+}
+
 message CommandDefinition {
   string command_id = 1;
   string label = 2;
   string group = 3;
-  string shortcut = 4;
+  optional string shortcut = 4;
   bool enabled = 5;
   bool requires_selection = 6;
   string description = 7;
+  optional string action_label = 8;
+  repeated CommandArgumentDefinition arguments = 9;
 }
 
 message CommandCatalogResponse {
@@ -120,11 +147,11 @@ message FeatureHistoryEntry {
   string label = 2;
   string object_type = 3;
   uint32 sequence_index = 4;
-  string source_object_id = 5;
+  optional string source_object_id = 5;
   string role = 6;
   bool suppressed = 7;
   bool active = 8;
-  string inactive_reason = 9;
+  optional string inactive_reason = 9;
   bool rolled_back = 10;
 }
 
@@ -146,9 +173,9 @@ message DiagnosticsSummary {
 }
 
 message DiagnosticsSelection {
-  string object_id = 1;
-  string object_label = 2;
-  string object_type = 3;
+  optional string object_id = 1;
+  optional string object_label = 2;
+  optional string object_type = 3;
   string model_state = 4;
   string dependency_note = 5;
   bool visible_in_viewport = 6;
@@ -215,9 +242,9 @@ message SelectionModeRequest {
 message PreselectionState {
   string document_id = 1;
   string current_mode = 2;
-  string object_id = 3;
-  string object_label = 4;
-  string object_type = 5;
+  optional string object_id = 3;
+  optional string object_label = 4;
+  optional string object_type = 5;
   bool selectable = 6;
   string model_state = 7;
   string dependency_note = 8;
@@ -232,7 +259,7 @@ message JobStatusEntry {
   string state = 4;
   uint32 progress_percent = 5;
   string detail = 6;
-  string object_id = 7;
+  optional string object_id = 7;
   repeated JobStageEntry stages = 8;
 }
 
@@ -250,13 +277,13 @@ message JobStatusResponse {
 
 message PreselectionRequest {
   string document_id = 1;
-  string object_id = 2;
+  optional string object_id = 2;
 }
 
 message CommandInvocation {
   string command_id = 1;
   string document_id = 2;
-  string target_object_id = 3;
+  optional string target_object_id = 3;
   map<string, string> arguments = 4;
 }
 
@@ -265,7 +292,7 @@ message EventEnvelope {
   string level = 2;
   string message = 3;
   string document_id = 4;
-  string object_id = 5;
+  optional string object_id = 5;
 }
 
 message OpenDocumentRequest {
@@ -285,6 +312,19 @@ message CommandReply {
   string command_id = 1;
   bool accepted = 2;
   string status_message = 3;
+  bool document_dirty = 4;
+  ViewportDiffResponse viewport_diff = 5;
+}
+
+message ViewportDiffResponse {
+  string document_id = 1;
+  string selected_object_id = 2;
+  repeated ViewportDrawable added = 3;
+  repeated string removed = 4;
+  repeated ViewportDrawable modified = 5;
+  bool camera_changed = 6;
+  repeated float camera_eye = 7;
+  repeated float camera_target = 8;
 }
 
 message SubscribeRequest {
@@ -293,19 +333,20 @@ message SubscribeRequest {
 
 message BootPayload {
   BootReport boot_report = 1;
-  DocumentRef document = 2;
-  repeated ObjectNode object_tree = 3;
-  string selected_object_id = 4;
-  SelectionState selection_state = 5;
-  PreselectionState preselection_state = 6;
-  JobStatusResponse jobs = 7;
-  PropertyResponse properties = 8;
-  ViewportResponse viewport = 9;
-  FeatureHistoryResponse feature_history = 10;
-  CommandCatalogResponse command_catalog = 11;
-  TaskPanelResponse task_panel = 12;
-  DiagnosticsResponse diagnostics = 13;
-  repeated EventEnvelope events = 14;
+  BridgeStatus bridge_status = 2;
+  DocumentRef document = 3;
+  repeated ObjectNode object_tree = 4;
+  string selected_object_id = 5;
+  SelectionState selection_state = 6;
+  PreselectionState preselection_state = 7;
+  JobStatusResponse jobs = 8;
+  PropertyResponse properties = 9;
+  ViewportResponse viewport = 10;
+  FeatureHistoryResponse feature_history = 11;
+  CommandCatalogResponse command_catalog = 12;
+  TaskPanelResponse task_panel = 13;
+  DiagnosticsResponse diagnostics = 14;
+  repeated EventEnvelope events = 15;
 }
 
 message Empty {}

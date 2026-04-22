@@ -6,21 +6,18 @@ use asterforge_freecad_bridge::{
     sketch_workflow_description, BridgeDocumentSnapshot, BridgeStatus, DrawableMesh, ViewportDiff,
     ViewportSnapshot,
 };
+use asterforge_command_core::command_spec;
+pub use asterforge_command_core::{CommandArgumentDefinition, CommandDefinition};
+pub use asterforge_document_core::{
+    DocumentDependencyEdge, DocumentEvaluationState, DocumentGraph, DocumentObjectRecord,
+    DocumentSummary, FeatureHistoryEntry, FeatureHistoryResponse,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BootReport {
     pub services: Vec<String>,
     pub event_streams: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DocumentSummary {
-    pub document_id: String,
-    pub display_name: String,
-    pub workbench: String,
-    pub file_path: Option<String>,
-    pub dirty: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -230,31 +227,6 @@ pub struct CommandCatalogResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandArgumentDefinition {
-    pub argument_id: String,
-    pub label: String,
-    pub value_type: String,
-    pub required: bool,
-    pub default_value: Option<String>,
-    pub placeholder: Option<String>,
-    pub unit: Option<String>,
-    pub options: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CommandDefinition {
-    pub command_id: String,
-    pub label: String,
-    pub group: String,
-    pub shortcut: Option<String>,
-    pub enabled: bool,
-    pub requires_selection: bool,
-    pub description: String,
-    pub action_label: Option<String>,
-    pub arguments: Vec<CommandArgumentDefinition>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskPanelResponse {
     pub document_id: String,
     pub title: String,
@@ -275,26 +247,6 @@ pub struct TaskPanelRow {
     pub label: String,
     pub value: String,
     pub emphasis: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeatureHistoryResponse {
-    pub document_id: String,
-    pub entries: Vec<FeatureHistoryEntry>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct FeatureHistoryEntry {
-    pub object_id: String,
-    pub label: String,
-    pub object_type: String,
-    pub sequence_index: u32,
-    pub source_object_id: Option<String>,
-    pub role: String,
-    pub suppressed: bool,
-    pub active: bool,
-    pub inactive_reason: Option<String>,
-    pub rolled_back: bool,
 }
 
 pub fn sample_boot_report() -> BootReport {
@@ -329,6 +281,26 @@ pub fn workbench_state_from_bridge(snapshot: &BridgeDocumentSnapshot) -> Workben
         workbench_id: snapshot.workbench.to_lowercase(),
         display_name: snapshot.workbench.clone(),
         mode: "feature_modeling".into(),
+    }
+}
+
+fn command_definition(
+    command_id: &str,
+    enabled: bool,
+    arguments: Vec<CommandArgumentDefinition>,
+) -> CommandDefinition {
+    let spec = command_spec(command_id).unwrap_or_else(|| panic!("missing command spec for {command_id}"));
+
+    CommandDefinition {
+        command_id: spec.command_id.into(),
+        label: spec.label.into(),
+        group: spec.group.into(),
+        shortcut: spec.shortcut.map(str::to_string),
+        enabled,
+        requires_selection: spec.requires_selection,
+        description: spec.description.into(),
+        action_label: spec.action_label.map(str::to_string),
+        arguments,
     }
 }
 
@@ -376,49 +348,10 @@ pub fn command_catalog_from_bridge(
         document_id: document_id.to_string(),
         workbench: workbench_state_from_bridge(snapshot),
         commands: vec![
-            CommandDefinition {
-                command_id: "document.recompute".into(),
-                label: "Recompute".into(),
-                group: "Document".into(),
-                shortcut: Some("Ctrl+R".into()),
-                enabled: true,
-                requires_selection: false,
-                description: "Rebuild the dependency graph and refresh the active model.".into(),
-                action_label: Some("Recompute".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "document.save".into(),
-                label: "Save".into(),
-                group: "Document".into(),
-                shortcut: Some("Ctrl+S".into()),
-                enabled: true,
-                requires_selection: false,
-                description: "Persist the current document state through the backend pipeline.".into(),
-                action_label: Some("Save".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "selection.focus".into(),
-                label: "Focus Selection".into(),
-                group: "View".into(),
-                shortcut: Some("F".into()),
-                enabled: selected_object_id.is_some(),
-                requires_selection: true,
-                description: "Center the viewport workflow around the currently selected object.".into(),
-                action_label: Some("Focus".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "partdesign.new_sketch".into(),
-                label: "Create Sketch".into(),
-                group: "PartDesign".into(),
-                shortcut: None,
-                enabled: selected_is_body,
-                requires_selection: true,
-                description: "Create a new sketch inside the selected body.".into(),
-                action_label: Some("Create Sketch".into()),
-                arguments: vec![CommandArgumentDefinition {
+            command_definition("document.recompute", true, vec![]),
+            command_definition("document.save", true, vec![]),
+            command_definition("selection.focus", selected_object_id.is_some(), vec![]),
+            command_definition("partdesign.new_sketch", selected_is_body, vec![CommandArgumentDefinition {
                     argument_id: "sketch_label".into(),
                     label: "Sketch label".into(),
                     value_type: "string".into(),
@@ -436,18 +369,8 @@ pub fn command_catalog_from_bridge(
                     placeholder: None,
                     unit: None,
                     options: vec!["XY".into(), "XZ".into(), "YZ".into()],
-                }],
-            },
-            CommandDefinition {
-                command_id: "partdesign.pad".into(),
-                label: "Create Pad".into(),
-                group: "PartDesign".into(),
-                shortcut: None,
-                enabled: selected_is_sketch && selected_is_operable,
-                requires_selection: true,
-                description: "Extrude the active sketch into a solid PartDesign feature.".into(),
-                action_label: Some("Create Pad".into()),
-                arguments: vec![CommandArgumentDefinition {
+                }]),
+            command_definition("partdesign.pad", selected_is_sketch && selected_is_operable, vec![CommandArgumentDefinition {
                     argument_id: "length_mm".into(),
                     label: "Pad length".into(),
                     value_type: "quantity".into(),
@@ -465,18 +388,8 @@ pub fn command_catalog_from_bridge(
                     placeholder: None,
                     unit: None,
                     options: vec!["false".into(), "true".into()],
-                }],
-            },
-            CommandDefinition {
-                command_id: "partdesign.pocket".into(),
-                label: "Create Pocket".into(),
-                group: "PartDesign".into(),
-                shortcut: None,
-                enabled: selected_is_sketch && selected_is_operable,
-                requires_selection: true,
-                description: "Cut material from the active sketch profile into the body.".into(),
-                action_label: Some("Create Pocket".into()),
-                arguments: vec![CommandArgumentDefinition {
+                }]),
+            command_definition("partdesign.pocket", selected_is_sketch && selected_is_operable, vec![CommandArgumentDefinition {
                     argument_id: "depth_mm".into(),
                     label: "Pocket depth".into(),
                     value_type: "quantity".into(),
@@ -494,18 +407,8 @@ pub fn command_catalog_from_bridge(
                     placeholder: None,
                     unit: None,
                     options: vec!["dimension".into(), "through_all".into()],
-                }],
-            },
-            CommandDefinition {
-                command_id: "partdesign.edit_pad".into(),
-                label: "Edit Pad".into(),
-                group: "PartDesign".into(),
-                shortcut: None,
-                enabled: selected_is_pad && selected_is_operable,
-                requires_selection: true,
-                description: "Open the selected pad feature for parameter editing.".into(),
-                action_label: Some("Apply Pad".into()),
-                arguments: vec![
+                }]),
+            command_definition("partdesign.edit_pad", selected_is_pad && selected_is_operable, vec![
                     CommandArgumentDefinition {
                         argument_id: "length_mm".into(),
                         label: "Pad length".into(),
@@ -526,18 +429,8 @@ pub fn command_catalog_from_bridge(
                         unit: None,
                         options: vec!["false".into(), "true".into()],
                     },
-                ],
-            },
-            CommandDefinition {
-                command_id: "partdesign.edit_pocket".into(),
-                label: "Edit Pocket".into(),
-                group: "PartDesign".into(),
-                shortcut: None,
-                enabled: selected_is_pocket && selected_is_operable,
-                requires_selection: true,
-                description: "Open the selected pocket feature for parameter editing.".into(),
-                action_label: Some("Apply Pocket".into()),
-                arguments: vec![
+                ]),
+            command_definition("partdesign.edit_pocket", selected_is_pocket && selected_is_operable, vec![
                     CommandArgumentDefinition {
                         argument_id: "depth_mm".into(),
                         label: "Pocket depth".into(),
@@ -558,63 +451,12 @@ pub fn command_catalog_from_bridge(
                         unit: None,
                         options: vec!["dimension".into(), "through_all".into()],
                     },
-                ],
-            },
-            CommandDefinition {
-                command_id: "history.rollback_here".into(),
-                label: "Rollback Here".into(),
-                group: "History".into(),
-                shortcut: None,
-                enabled: selected_is_feature,
-                requires_selection: true,
-                description: "Rebuild the model using history only up to the selected feature.".into(),
-                action_label: Some("Roll Here".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "history.resume_full".into(),
-                label: "Resume Full History".into(),
-                group: "History".into(),
-                shortcut: None,
-                enabled: history_marker_active,
-                requires_selection: false,
-                description: "Restore every feature after a rollback marker and rebuild the full result.".into(),
-                action_label: Some("Resume Full".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "model.toggle_suppression".into(),
-                label: "Toggle Suppression".into(),
-                group: "Model".into(),
-                shortcut: None,
-                enabled: selected_is_feature,
-                requires_selection: true,
-                description: "Suppress or unsuppress the selected feature or sketch in the model history.".into(),
-                action_label: Some("Toggle".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "document.undo".into(),
-                label: "Undo".into(),
-                group: "Document".into(),
-                shortcut: Some("Ctrl+Z".into()),
-                enabled: can_undo,
-                requires_selection: false,
-                description: "Undo the last modeling operation.".into(),
-                action_label: Some("Undo".into()),
-                arguments: vec![],
-            },
-            CommandDefinition {
-                command_id: "document.redo".into(),
-                label: "Redo".into(),
-                group: "Document".into(),
-                shortcut: Some("Ctrl+Y".into()),
-                enabled: can_redo,
-                requires_selection: false,
-                description: "Redo the last undone modeling operation.".into(),
-                action_label: Some("Redo".into()),
-                arguments: vec![],
-            },
+                ]),
+            command_definition("history.rollback_here", selected_is_feature, vec![]),
+            command_definition("history.resume_full", history_marker_active, vec![]),
+            command_definition("model.toggle_suppression", selected_is_feature, vec![]),
+            command_definition("document.undo", can_undo, vec![]),
+            command_definition("document.redo", can_redo, vec![]),
         ],
     }
 }
@@ -1179,6 +1021,62 @@ pub fn feature_history_from_bridge(snapshot: &BridgeDocumentSnapshot) -> Feature
     }
 }
 
+pub fn document_evaluation_state_from_bridge(
+    snapshot: &BridgeDocumentSnapshot,
+    worker_mode: &str,
+) -> DocumentEvaluationState {
+    let history = feature_history_from_bridge(snapshot);
+    DocumentEvaluationState::from_feature_history(
+        &history,
+        snapshot.history_marker.is_some(),
+        worker_mode,
+    )
+}
+
+pub fn document_graph_from_bridge(snapshot: &BridgeDocumentSnapshot) -> DocumentGraph {
+    let mut graph = DocumentGraph::default();
+
+    for root in &snapshot.roots {
+        collect_document_graph_node(&mut graph, root, None);
+    }
+
+    graph
+}
+
+fn collect_document_graph_node(
+    graph: &mut DocumentGraph,
+    node: &asterforge_freecad_bridge::BridgeObjectNode,
+    parent_object_id: Option<&str>,
+) {
+    graph.objects.push(DocumentObjectRecord {
+        object_id: node.object_id.clone(),
+        object_type: node.object_type.clone(),
+        label: node.label.clone(),
+        parent_object_id: parent_object_id.map(str::to_string),
+        source_object_id: node.source_object_id.clone(),
+    });
+
+    if let Some(parent_object_id) = parent_object_id {
+        graph.dependencies.push(DocumentDependencyEdge {
+            from_object_id: parent_object_id.to_string(),
+            to_object_id: node.object_id.clone(),
+            relationship: "contains".into(),
+        });
+    }
+
+    if let Some(source_object_id) = node.source_object_id.as_ref() {
+        graph.dependencies.push(DocumentDependencyEdge {
+            from_object_id: source_object_id.clone(),
+            to_object_id: node.object_id.clone(),
+            relationship: "depends_on".into(),
+        });
+    }
+
+    for child in &node.children {
+        collect_document_graph_node(graph, child, Some(&node.object_id));
+    }
+}
+
 pub fn diagnostics_from_bridge(
     snapshot: &BridgeDocumentSnapshot,
     selected_object_id: Option<&str>,
@@ -1453,6 +1351,33 @@ fn find_bridge_object<'a>(
         .iter()
         .flat_map(|root| std::iter::once(root).chain(root.children.iter()))
         .find(|node| node.object_id == object_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use asterforge_freecad_bridge::open_document_snapshot;
+
+    use super::document_graph_from_bridge;
+
+    #[test]
+    fn projects_bridge_snapshot_into_document_graph() {
+        let snapshot = open_document_snapshot(None);
+        let graph = document_graph_from_bridge(&snapshot);
+
+        assert!(graph.objects.iter().any(|object| object.object_id == "body-001"));
+        assert!(graph.objects.iter().any(|object| object.object_id == "sketch-001"));
+        assert!(graph.objects.iter().any(|object| object.object_id == "pad-001"));
+        assert!(graph.dependencies.iter().any(|edge| {
+            edge.from_object_id == "body-001"
+                && edge.to_object_id == "sketch-001"
+                && edge.relationship == "contains"
+        }));
+        assert!(graph.dependencies.iter().any(|edge| {
+            edge.from_object_id == "sketch-001"
+                && edge.to_object_id == "pad-001"
+                && edge.relationship == "depends_on"
+        }));
+    }
 }
 
 pub fn selectable_object_ids_for_mode(

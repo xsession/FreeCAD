@@ -1,202 +1,320 @@
-# AsterForge FreeCAD Layout Transplant Plan
+# AsterForge FreeCAD React Variant Master Prompt
 
-Status: structural parity implemented in the React shell on 2026-04-20. The remaining work is refinement, persistence, and deeper backend-owned menu and toolbar models.
+Status: layout parity is already established in the React shell as of 2026-04-20. The next step is no longer a shell-only transplant. The next step is to drive AsterForge as a production-grade, parametric FreeCAD reimplementation with Rust-owned semantics, a React desktop shell, and a native FreeCAD bridge that can later evolve toward a dedicated kernel.
 
-## Goal
+## Purpose
 
-Clone the practical FreeCAD desktop layout into the React shell as closely as possible, while keeping Rust as the authoritative backend and reusing the slices already implemented in AsterForge.
+Use the following prompt when generating architecture, implementation slices, or planning documents for the AsterForge variant. It is tailored to the code already present under `variants/asterforge` and is intentionally stricter than a generic React CAD prompt.
 
-This plan is about layout and workflow parity first:
+This prompt assumes:
 
-- menu bar structure
-- toolbar density
-- document tabs
-- combo view behavior
-- center viewport dominance
-- bottom utility docks
-- status bar feedback
+- React plus TypeScript frontend in `frontend/app`
+- Rust backend and service ownership in `backend/crates/api-gateway`
+- explicit protocol contracts in `protocol/proto` and `protocol/schemas`
+- native integration boundary in `native/freecad-bridge`
+- FreeCAD-style desktop shell parity as a requirement, not the end goal
+- long-term migration path from bridge-backed geometry toward a stronger Rust and WASM geometry core
 
-It is not yet a pixel-for-pixel skin copy of every Qt widget. The immediate target is a faithful React transplant of the FreeCAD workspace model.
+## Master Prompt
 
-## FreeCAD Regions To Recreate
+Act as a senior CAD software architect, computational geometry engineer, Rust systems engineer, and React frontend systems engineer.
 
-### Menu Bar
+Your task is to design and generate a production-grade, web-first and desktop-packaged CAD system for the AsterForge FreeCAD variant. The system is inspired by FreeCAD, but reimplemented with a modern React plus Rust architecture, backend-owned semantics, protocol-driven boundaries, and an extensible multi-backend system.
 
-Match the classic desktop application frame:
+Do not design a toy viewer. Design a long-lived parametric CAD platform with workbench extensibility, native bridge integration, and a migration path from FreeCAD-backed services toward dedicated geometry infrastructure.
 
-- File
-- Edit
-- View
-- Tools
-- Macro
-- Window
-- Help
+### Goal
 
-### Toolbar Deck
+Create a parametric CAD application with:
 
-The top chrome should behave like FreeCAD's dense toolbar rows:
+- feature-based modeling similar to FreeCAD, Fusion 360, and Onshape
+- multi-workbench architecture
+- real-time, high-performance 3D rendering
+- Rust-owned document and command semantics
+- protocol-driven frontend and backend boundaries
+- extensible plugin and workbench model for CAD, CAM, CFD, electronics, and digital-twin workflows
 
-- workbench selector
-- primary file and edit actions
-- recompute and save affordances
-- selection and workflow shortcuts
-- command palette access as an AsterForge enhancement
+### Target AsterForge Stack
 
-### Document Tabs
+Frontend:
 
-Keep tabbed document switching visible near the top of the shell, not hidden in dashboard-style cards.
+- React plus TypeScript
+- Zustand for state management
+- Vite for build and development workflow
+- Tailwind for styling
+- Three.js for current rendering, with scene abstraction that could support Babylon.js later if required
+- WebGL required, WebGPU optional
+- desktop shell compatibility with the current Tauri target
 
-### Combo View
+Core application and service layer:
 
-The left dock should become the FreeCAD-style combo view:
+- Rust as the authoritative domain and command layer
+- `backend/crates/api-gateway` as the initial service boundary
+- explicit document, selection, property, command, job, and viewport payload contracts
+- streaming-friendly architecture for future gRPC or websocket transport
 
-- Model tab
-- Tasks tab
+Native and geometry layer:
 
-Inside `Model`, provide:
+- near-term native FreeCAD bridge in `native/freecad-bridge`
+- near-term geometry authority may remain bridge-backed for document extraction and scene generation
+- medium-term geometry acceleration in Rust for meshing, constraint solving, and selective recompute
+- long-term option for WASM or Rust-native geometry kernels, including OpenCascade-backed services or a dedicated Rust kernel
 
-- tree/content view
-- property view
+Backend and compute execution:
 
-Inside `Tasks`, host:
+- local Rust service layer first
+- websocket or streaming transport for heavy updates and long operations
+- worker-based job supervision for expensive recompute, import, meshing, and simulation steps
+- clear separation between UI orchestration, document semantics, geometry execution, and native bridge operations
 
-- active task panel
-- selection guidance
-- command forms related to the current task or preselection
+### Architecture Requirements
 
-### Central Viewport
+Design a layered system with strict ownership boundaries.
 
-The center must become the dominant workspace area:
+1. Document model layer
 
-- viewport at top
-- interaction overlays kept minimal
-- workbench and selection tools attached to the viewport region
+- parametric feature tree
+- dependency graph as a DAG
+- recompute engine with invalidation tracking
+- undo and redo model
+- rollback, suppression, and dependency-aware inactive states
+- stable object identity and reference model across edits
 
-### Bottom Utility Dock
+2. Command and workflow layer
 
-This should mirror the report-style utility area used by FreeCAD:
+- backend-owned command registry
+- argument schemas and task-panel metadata
+- workbench-aware enablement rules
+- selection-sensitive command resolution
+- transaction boundaries for document mutation
 
-- Report view
-- Python console
-- Jobs
-- Diagnostics
-- History
-- Commands
+3. Geometry layer
 
-`Python Console` can ship as a placeholder first, but the dock slot must exist now.
+- solid modeling and B-Rep ownership model
+- sketch entities and constraint graph
+- boolean operations
+- meshing pipeline for viewport and export
+- bridge-backed extraction now, kernel abstraction preserved for future replacement
 
-### Status Bar
+4. Rendering layer
 
-The bottom status strip should continuously show:
+- scene graph abstraction independent from raw Three.js component trees
+- selection and preselection system for faces, edges, vertices, sketches, bodies, and features
+- GPU-aware large-model rendering
+- incremental scene updates instead of full reloads
+- support strategy for large assemblies and large STEP or STL imports
 
-- active workbench
-- save state
-- selected object
-- backend worker mode
-- service and job health
+5. UI layer
 
-## Implementation Phases
+- FreeCAD-style desktop shell with menu bar, toolbar deck, document tabs, combo view, dominant central viewport, bottom utility dock, and status bar
+- workbench-scoped panels and tool groups
+- property editor and model tree
+- task panel and workflow guidance
+- command palette driven by backend metadata
 
-### Phase 1: Structural Parity
+### Workbench System
 
-Replace the current dashboard shell with a desktop CAD frame:
+Implement modular workbenches similar to FreeCAD, but backed by versioned Rust and protocol contracts.
 
-- remove hero-first layout
-- add menubar and toolbar stack
-- convert left side into combo view
-- convert lower area into tabbed bottom dock
-- add status bar
+Initial workbench targets:
 
-### Phase 2: Visual Density Parity
+- Part Design
+- Sketcher
+- Assembly
+- Mesh
+- TechDraw
+- CFD with multi-solver readiness for OpenFOAM, FluidX3D, Elmer, and future external engines
 
-Tune spacing and proportions toward FreeCAD:
+Each workbench must be able to:
 
-- flatter panels
-- tighter toolbar controls
-- dock borders instead of card-first composition
-- more desktop-like vertical compression
+- register tools and command groups
+- extend menus, toolbars, task panels, and dock content
+- add domain data types and property groups
+- contribute validation rules and workflow stages
+- expose job types and simulation hooks where needed
 
-### Phase 3: Interaction Parity
+### Sketcher System
 
-Bring behavior closer to FreeCAD:
+Define a fully parametric sketch system as a first-class subsystem, not a drawing overlay.
 
-- persist active combo view tab
-- persist bottom dock tab
-- add keyboard focus and selection cues
-- map more toolbars directly to command groups
+Geometry primitives:
 
-### Phase 4: Detailed Layout Clone
+- line
+- arc
+- circle
+- spline
+- point and construction geometry support
 
-Push closer to 1:1 shell parity:
+Constraints:
 
-- menu ownership by backend command taxonomy
-- proper toolbar grouping
-- dock resize handles
-- detachable or reconfigurable panels
-- layout persistence profiles
+- coincident
+- parallel
+- perpendicular
+- tangent
+- horizontal and vertical
+- distance
+- angle
+- radius and diameter
+- symmetry and equality
 
-## Mapping Existing AsterForge Features Into The New Shell
+Solver requirements:
 
-### Combo View / Model
+- incremental solving
+- conflict detection and diagnosis
+- under-constrained and over-constrained state reporting
+- editable constraint graph
+- migration path to Rust-native solving with optional WASM packaging later
 
-- object tree
-- properties
+### Parametric Modeling
 
-### Combo View / Tasks
+Implement feature-based modeling with explicit dependency tracking.
 
-- task panel
-- selection inspector
+Initial feature set:
 
-### Center Viewport
+- extrude or pad
+- pocket
+- revolve
+- loft
+- sweep
+- fillet
+- chamfer
+- pattern and mirror readiness
 
-- backend-owned scene payload
-- preselection overlay
-- selection mode toolbar
-- quick actions
+Each feature must:
 
-### Bottom Dock / Report
+- reference prior geometry through stable selectors
+- remain editable through command arguments and property metadata
+- trigger partial recompute where possible
+- expose suppression, rollback, and dependency diagnostics
 
-- backend activity stream
-- notice cards
+### Performance Requirements
 
-### Bottom Dock / Python Console
+- handle large assemblies and high-object-count scenes
+- prefer lazy recomputation over eager full-document rebuilds
+- support incremental updates for tree, properties, viewport, and task panels
+- use worker threads, Rust concurrency, and future WASM parallelism where appropriate
+- cache geometry, tessellation, and selection acceleration structures
+- define a strategy for 500MB-class import scenarios without freezing the UI
 
-- placeholder now
-- real backend automation console later
+### Extensibility
 
-### Bottom Dock / Jobs
+Design a plugin and extension system with stable versioned contracts.
 
-- jobs panel
+The API surface must cover:
 
-### Bottom Dock / Diagnostics
+- workbench registration
+- command registration
+- task-panel contributions
+- property and document type extensions
+- geometry and simulation service hooks
+- import and export adapters
 
-- diagnostics panel
+Plugins must be dynamically loadable where safe, versioned, and isolated from core document corruption risks.
 
-### Bottom Dock / History
+### Data Interchange
 
-- feature timeline
+Support at least:
 
-### Bottom Dock / Commands
+- STEP
+- STL
+- OBJ
+- DXF for 2D
 
-- command catalog
+Include:
+
+- import pipeline
+- export pipeline
+- conversion into internal document and geometry representations
+- background job execution for heavy imports and exports
+
+### Advanced Features
+
+- future-ready multi-user collaboration model
+- digital-twin integration hooks for live telemetry and embedded systems
+- live data overlays on geometry and assemblies
+- solver and simulation integration points
+- enterprise-ready supervision for long-running jobs and external compute adapters
+
+### Testing Strategy
+
+Use a deterministic, professional CAD-style testing strategy.
+
+Include:
+
+- deterministic geometry tests
+- document recompute and dependency tests
+- protocol compatibility tests between Rust and TypeScript layers
+- UI automation tests for workflow-critical panels
+- rendering snapshot or golden-image tests
+- import and export regression tests
+
+### Output Format
+
+Return a highly structured, implementation-ready response with:
+
+1. full system architecture with clear layer boundaries
+2. folder structure aligned to the current AsterForge workspace
+3. key module definitions with code for document model, feature system, sketcher base, command registry, and 3D viewer boundary
+4. example workbench implementation using the current Rust-owned command model
+5. example plugin or extension contract
+6. performance strategy for large models and long-running jobs
+7. staged roadmap from current bridge-backed implementation to a stronger native geometry platform
+
+### Important Constraints
+
+- do not produce a toy CAD viewer
+- do not frontload cosmetic UI work ahead of document and geometry correctness
+- keep Rust as the authority for domain semantics, command enablement, workflow state, and recompute triggers
+- preserve protocol boundaries so frontend code does not become the hidden domain layer
+- keep FreeCAD desktop shell parity, but treat it as an interaction requirement rather than the whole architecture
+- design for maintainability over a ten-year horizon
+- favor correctness, stable ownership, and migration safety over novelty
+
+### Inspiration
+
+Take conceptual inspiration from:
+
+- FreeCAD
+- Autodesk Fusion 360
+- Onshape
+- Siemens NX
+
+Do not copy their architecture blindly. Modernize it for AsterForge's Rust-first, protocol-driven, React-shell design.
+
+## What This Replaces
+
+The older shell-transplant framing is now a subproblem inside the UI layer. The shell still needs to preserve these FreeCAD interaction patterns:
+
+- classic menu bar structure
+- dense toolbar rows
+- top document tabs
+- left combo view with model and tasks
+- central viewport dominance
+- bottom utility dock with report, Python console, jobs, diagnostics, history, and commands
+- live status bar feedback
+
+Those requirements remain valid, but they are no longer the primary architecture target.
+
+## Recommended Prompt Chain
+
+Do not ask for the entire system implementation in one step. Use this prompt first for architecture, then split implementation by subsystem.
+
+Recommended sequence:
+
+1. architecture and folder plan for the full AsterForge variant
+2. document DAG plus recompute and undo model
+3. command registry plus workbench extension contracts
+4. sketch constraint graph and solver strategy
+5. viewport scene graph and large-model rendering path
+6. bridge-backed geometry extraction to protocol payload pipeline
+7. import, export, and simulation adapter surfaces
 
 ## Immediate Acceptance Criteria
 
-This step is complete when:
+This document is correctly applied when future design and generation work for AsterForge:
 
-1. the React app no longer presents a dashboard hero layout
-2. the shell visually reads as a desktop CAD workspace
-3. the object tree, task panel, properties, viewport, activity stream, jobs, diagnostics, history, and command deck all remain accessible
-4. the viewport is the dominant center region
-5. the left side behaves like a combo view
-6. the bottom area behaves like a utility dock
-7. the status bar reports live backend state
-
-## Next Targets
-
-- persist dock tabs across sessions
-- add toolbar groups derived from backend command metadata
-- add a real menu command model
-- add a Python console service and panel
-- add resizable dock splitters
-- continue tuning spacing and contrast toward a closer FreeCAD clone
+1. treats parametric modeling and document recompute as the core problem
+2. keeps Rust as the authoritative domain layer
+3. preserves protocol and bridge boundaries
+4. treats the FreeCAD shell as a required interaction surface, not the product definition
+5. plans for workbench extensibility, solver integration, and large-model handling from the start

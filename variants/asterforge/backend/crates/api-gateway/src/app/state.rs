@@ -1,25 +1,43 @@
 use std::{collections::HashMap, sync::Arc};
 
-use asterforge_freecad_bridge::{
-    compute_viewport_diff, create_pad_from_selected_sketch, create_pocket_from_selected_sketch,
-    create_sketch_in_body, open_document_snapshot, resume_full_history,
-    rollback_history_to_selected, update_selected_pad_profile,
-    update_selected_pocket_profile, BridgeDocumentSnapshot, BridgeStatus,
-    toggle_selected_suppression, UndoStack,
+pub use asterforge_command_core::CommandExecutionRequest;
+use asterforge_document_core::{DocumentState, DocumentSummary};
+use asterforge_freecad_bridge::{open_document_snapshot, BridgeDocumentSnapshot, BridgeStatus, UndoStack};
+use asterforge_protocol_types::asterforge::protocol::v1::{
+    BootPayload as ProtoBootPayload, CommandCatalogResponse as ProtoCommandCatalogResponse,
+    CommandInvocation, CommandReply, DiagnosticsResponse as ProtoDiagnosticsResponse,
+    EventEnvelope as ProtoEventEnvelope,
+    FeatureHistoryResponse as ProtoFeatureHistoryResponse, JobStatusResponse as ProtoJobStatusResponse,
+    ObjectTreeResponse as ProtoObjectTreeResponse,
+    PreselectionRequest as ProtoPreselectionRequest,
+    PreselectionState as ProtoPreselectionState,
+    SelectionModeRequest as ProtoSelectionModeRequest, SelectionRef, SelectionReply,
+    SelectionState as ProtoSelectionState, PropertyResponse as ProtoPropertyResponse,
+    TaskPanelResponse as ProtoTaskPanelResponse, ViewportResponse as ProtoViewportResponse,
 };
 use tokio::sync::RwLock;
 
+use super::protocol::{
+    boot_payload_proto_from_http, command_reply_from_http, preselection_state_proto_from_http,
+    proto_command_catalog_from_http, proto_diagnostics_from_http, proto_document_ref_from_http,
+    proto_event_from_http, proto_feature_history_from_http, proto_jobs_from_http,
+    proto_object_node_from_http, proto_properties_from_http, proto_task_panel_from_http,
+    proto_viewport_from_http, selection_reply_from_http, selection_state_proto_from_http,
+};
+use super::command_runtime;
+
 use crate::domain::{
-    bridge_object_state, document_summary_from_bridge, feature_history_from_bridge,
+    bridge_object_state, document_evaluation_state_from_bridge, document_graph_from_bridge,
+    document_summary_from_bridge, feature_history_from_bridge,
     find_bridge_child, find_pad_length_mm, object_tree_from_bridge, sample_boot_report, sample_bridge_status,
     preselection_state_from_bridge, selectable_object_ids_for_mode, selection_state_from_bridge,
     sketch_constraint_summary,
     command_catalog_from_bridge, sample_event_stream, sample_property_groups, task_panel_from_bridge,
-    viewport_from_bridge, viewport_diff_response, BackendEvent, BootReport, CommandCatalogResponse,
-    DiagnosticsResponse, DocumentSummary, FeatureHistoryResponse, ObjectNode, PropertyGroup,
+    viewport_from_bridge, BackendEvent, BootReport, CommandCatalogResponse,
+    DiagnosticsResponse, FeatureHistoryResponse, ObjectNode, PropertyGroup,
     JobStageEntry, JobStatusEntry, JobStatusResponse, PreselectionStateResponse,
-    PropertyResponse, SelectionStateResponse, TaskPanelResponse, ViewportDiffResponse,
-    ViewportResponse, diagnostics_from_bridge,
+    PropertyResponse, SelectionStateResponse, TaskPanelResponse,
+    ViewportDiffResponse, ViewportResponse, diagnostics_from_bridge,
 };
 
 #[derive(Clone)]
@@ -28,19 +46,19 @@ pub struct AppState {
 }
 
 #[derive(Debug, Clone)]
-struct AppModel {
-    boot_report: BootReport,
-    bridge_status: BridgeStatus,
-    bridge_snapshot: BridgeDocumentSnapshot,
-    document: DocumentSummary,
-    object_tree: Vec<ObjectNode>,
-    selection_mode: String,
-    preselected_object_id: Option<String>,
-    selected_object_id: String,
-    jobs: Vec<JobStatusEntry>,
-    properties_by_object: HashMap<String, Vec<PropertyGroup>>,
-    events: Vec<BackendEvent>,
-    undo_stack: UndoStack,
+pub(super) struct AppModel {
+    pub(super) boot_report: BootReport,
+    pub(super) bridge_status: BridgeStatus,
+    pub(super) bridge_snapshot: BridgeDocumentSnapshot,
+    pub(super) document: DocumentState,
+    pub(super) object_tree: Vec<ObjectNode>,
+    pub(super) selection_mode: String,
+    pub(super) preselected_object_id: Option<String>,
+    pub(super) selected_object_id: String,
+    pub(super) jobs: Vec<JobStatusEntry>,
+    pub(super) properties_by_object: HashMap<String, Vec<PropertyGroup>>,
+    pub(super) events: Vec<BackendEvent>,
+    pub(super) undo_stack: UndoStack,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -98,16 +116,8 @@ pub struct PreselectionRequest {
     pub object_id: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct CommandExecutionRequest {
-    pub command_id: String,
-    pub document_id: String,
-    pub target_object_id: Option<String>,
-    pub arguments: HashMap<String, String>,
-}
-
 #[derive(Debug, Clone, serde::Serialize)]
-pub struct CommandExecutionResponse {
+pub struct HttpCommandExecutionResponse {
     pub command_id: String,
     pub accepted: bool,
     pub status_message: String,
@@ -119,7 +129,8 @@ pub struct CommandExecutionResponse {
 impl AppState {
     pub fn new() -> Self {
         let snapshot = open_document_snapshot(None);
-        let document = document_summary_from_bridge(&snapshot);
+        let bridge_status = sample_bridge_status();
+        let document = document_state_from_bridge(&snapshot, &bridge_status);
         let object_tree = object_tree_from_bridge(&snapshot);
         let selected_object_id = snapshot.selected_object_id.clone();
         let properties_by_object = build_property_map(&snapshot, &object_tree);
@@ -127,7 +138,7 @@ impl AppState {
         Self {
             inner: Arc::new(RwLock::new(AppModel {
                 boot_report: sample_boot_report(),
-                bridge_status: sample_bridge_status(),
+                bridge_status,
                 bridge_snapshot: snapshot,
                 document,
                 object_tree,
@@ -146,7 +157,7 @@ impl AppState {
         let model = self.inner.read().await;
         AppSnapshot {
             boot_report: model.boot_report.clone(),
-            document: model.document.clone(),
+            document: model.document.summary().clone(),
             object_tree: model.object_tree.clone(),
             events: model.events.clone(),
         }
@@ -159,7 +170,7 @@ impl AppState {
         BootPayload {
             boot_report: model.boot_report.clone(),
             bridge_status: model.bridge_status.clone(),
-            document: model.document.clone(),
+            document: model.document.summary().clone(),
             object_tree: model.object_tree.clone(),
             selected_object_id: selected_object_id.clone(),
             selection_state: model.selection_state(),
@@ -182,96 +193,8 @@ impl AppState {
         }
     }
 
-    pub async fn set_selection(&self, request: SelectionRequest) -> Option<SelectionResponse> {
-        let mut model = self.inner.write().await;
-        if model.document.document_id != request.document_id {
-            return None;
-        }
-        let next_selection =
-            model.normalize_selection_for_mode(&request.object_id, &model.selection_mode)?;
-        if !model.properties_by_object.contains_key(&next_selection) {
-            return None;
-        }
-
-        model.bridge_snapshot.selected_object_id = next_selection.clone();
-        model.selected_object_id = next_selection.clone();
-        model.preselected_object_id = None;
-        model.sync_from_snapshot();
-        let document_id = model.document.document_id.clone();
-        let selection_mode = model.selection_mode.clone();
-        let selection_message = if next_selection == request.object_id {
-            format!("Selected {}", next_selection)
-        } else {
-            format!(
-                "Selection mode {} retargeted {} to {}",
-                selection_mode, request.object_id, next_selection
-            )
-        };
-        model.events.insert(
-            0,
-            BackendEvent {
-                topic: "selection_changed".into(),
-                level: "info".into(),
-                message: selection_message,
-                document_id: document_id.clone(),
-                object_id: Some(next_selection.clone()),
-            },
-        );
-        model.events.insert(
-            1,
-            BackendEvent {
-                topic: "viewport_updated".into(),
-                level: "info".into(),
-                message: "Viewport synchronized to backend-owned selection".into(),
-                document_id,
-                object_id: Some(next_selection.clone()),
-            },
-        );
-
-        Some(SelectionResponse {
-            selected_object_id: next_selection,
-        })
-    }
-
-    pub async fn set_selection_mode(
-        &self,
-        request: SelectionModeRequest,
-    ) -> Option<SelectionStateResponse> {
-        let mut model = self.inner.write().await;
-        if model.document.document_id != request.document_id {
-            return None;
-        }
-
-        if !["object", "body", "sketch", "feature"].contains(&request.mode_id.as_str()) {
-            return None;
-        }
-
-        let next_selection =
-            model.normalize_selection_for_mode(&model.selected_object_id, &request.mode_id)?;
-
-        model.selection_mode = request.mode_id;
-        model.bridge_snapshot.selected_object_id = next_selection.clone();
-        model.selected_object_id = next_selection.clone();
-        model.preselected_object_id = None;
-        model.sync_from_snapshot();
-        let document_id = model.document.document_id.clone();
-        let selection_mode = model.selection_mode.clone();
-        let mode_message = format!(
-            "Selection mode set to {} with {} active",
-            selection_mode, next_selection
-        );
-        model.events.insert(
-            0,
-            BackendEvent {
-                topic: "selection_mode_changed".into(),
-                level: "info".into(),
-                message: mode_message,
-                document_id,
-                object_id: Some(next_selection),
-            },
-        );
-
-        Some(model.selection_state())
+    pub async fn boot_payload_proto(&self) -> ProtoBootPayload {
+        boot_payload_proto_from_http(self.boot_payload().await)
     }
 
     pub async fn open_document(&self, file_path: String) -> DocumentSummary {
@@ -350,12 +273,133 @@ impl AppState {
             },
         );
 
-        model.document.clone()
+        model.document.summary().clone()
     }
 
-    pub async fn object_tree(&self, document_id: &str) -> Option<Vec<ObjectNode>> {
+    pub async fn set_selection(&self, request: SelectionRequest) -> Option<SelectionResponse> {
+        let mut model = self.inner.write().await;
+        if model.document.document_id != request.document_id {
+            return None;
+        }
+        let next_selection =
+            model.normalize_selection_for_mode(&request.object_id, &model.selection_mode)?;
+        if !model.properties_by_object.contains_key(&next_selection) {
+            return None;
+        }
+
+        model.bridge_snapshot.selected_object_id = next_selection.clone();
+        model.selected_object_id = next_selection.clone();
+        model.preselected_object_id = None;
+        model.sync_from_snapshot();
+        let document_id = model.document.document_id.clone();
+        let selection_mode = model.selection_mode.clone();
+        let selection_message = if next_selection == request.object_id {
+            format!("Selected {}", next_selection)
+        } else {
+            format!(
+                "Selection mode {} retargeted {} to {}",
+                selection_mode, request.object_id, next_selection
+            )
+        };
+        model.events.insert(
+            0,
+            BackendEvent {
+                topic: "selection_changed".into(),
+                level: "info".into(),
+                message: selection_message,
+                document_id: document_id.clone(),
+                object_id: Some(next_selection.clone()),
+            },
+        );
+        model.events.insert(
+            1,
+            BackendEvent {
+                topic: "viewport_updated".into(),
+                level: "info".into(),
+                message: "Viewport synchronized to backend-owned selection".into(),
+                document_id,
+                object_id: Some(next_selection.clone()),
+            },
+        );
+
+        Some(SelectionResponse {
+            selected_object_id: next_selection,
+        })
+    }
+
+    pub async fn set_selection_proto(&self, request: SelectionRef) -> Option<SelectionReply> {
+        self.set_selection(SelectionRequest {
+            document_id: request.document_id,
+            object_id: request.object_id,
+        })
+        .await
+        .map(selection_reply_from_http)
+    }
+
+    pub async fn set_selection_mode(
+        &self,
+        request: SelectionModeRequest,
+    ) -> Option<SelectionStateResponse> {
+        let mut model = self.inner.write().await;
+        if model.document.document_id != request.document_id {
+            return None;
+        }
+
+        if !["object", "body", "sketch", "feature"].contains(&request.mode_id.as_str()) {
+            return None;
+        }
+
+        let next_selection =
+            model.normalize_selection_for_mode(&model.selected_object_id, &request.mode_id)?;
+
+        model.selection_mode = request.mode_id;
+        model.bridge_snapshot.selected_object_id = next_selection.clone();
+        model.selected_object_id = next_selection.clone();
+        model.preselected_object_id = None;
+        model.sync_from_snapshot();
+        let document_id = model.document.document_id.clone();
+        let selection_mode = model.selection_mode.clone();
+        let mode_message = format!(
+            "Selection mode set to {} with {} active",
+            selection_mode, next_selection
+        );
+        model.events.insert(
+            0,
+            BackendEvent {
+                topic: "selection_mode_changed".into(),
+                level: "info".into(),
+                message: mode_message,
+                document_id,
+                object_id: Some(next_selection),
+            },
+        );
+
+        Some(model.selection_state())
+    }
+
+    pub async fn set_selection_mode_proto(
+        &self,
+        request: ProtoSelectionModeRequest,
+    ) -> Option<ProtoSelectionState> {
+        self.set_selection_mode(SelectionModeRequest {
+            document_id: request.document_id,
+            mode_id: request.mode_id,
+        })
+        .await
+        .map(selection_state_proto_from_http)
+    }
+
+    pub async fn object_tree_proto(&self, document_id: &str) -> Option<ProtoObjectTreeResponse> {
         let model = self.inner.read().await;
-        (model.document.document_id == document_id).then(|| model.object_tree.clone())
+        model.document.matches_document(document_id).then(|| ProtoObjectTreeResponse {
+            document: Some(proto_document_ref_from_http(model.document.summary().clone())),
+            roots: model
+                .object_tree
+                .clone()
+                .into_iter()
+                .map(proto_object_node_from_http)
+                .collect(),
+        })
     }
 
     pub async fn properties(&self, document_id: &str, object_id: &str) -> Option<PropertyResponse> {
@@ -374,9 +418,25 @@ impl AppState {
             })
     }
 
+    pub async fn properties_proto(
+        &self,
+        document_id: &str,
+        object_id: &str,
+    ) -> Option<ProtoPropertyResponse> {
+        self.properties(document_id, object_id)
+            .await
+            .map(proto_properties_from_http)
+    }
+
     pub async fn events(&self, document_id: &str) -> Option<Vec<BackendEvent>> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.events.clone())
+    }
+
+    pub async fn events_proto(&self, document_id: &str) -> Option<Vec<ProtoEventEnvelope>> {
+        self.events(document_id)
+            .await
+            .map(|events| events.into_iter().map(proto_event_from_http).collect())
     }
 
     pub async fn viewport(&self, document_id: &str) -> Option<ViewportResponse> {
@@ -384,9 +444,22 @@ impl AppState {
         (model.document.document_id == document_id).then(|| model.viewport())
     }
 
+    pub async fn viewport_proto(&self, document_id: &str) -> Option<ProtoViewportResponse> {
+        self.viewport(document_id).await.map(proto_viewport_from_http)
+    }
+
     pub async fn command_catalog(&self, document_id: &str) -> Option<CommandCatalogResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.command_catalog())
+    }
+
+    pub async fn command_catalog_proto(
+        &self,
+        document_id: &str,
+    ) -> Option<ProtoCommandCatalogResponse> {
+        self.command_catalog(document_id)
+            .await
+            .map(proto_command_catalog_from_http)
     }
 
     pub async fn feature_history(&self, document_id: &str) -> Option<FeatureHistoryResponse> {
@@ -394,9 +467,24 @@ impl AppState {
         (model.document.document_id == document_id).then(|| model.feature_history())
     }
 
+    pub async fn feature_history_proto(
+        &self,
+        document_id: &str,
+    ) -> Option<ProtoFeatureHistoryResponse> {
+        self.feature_history(document_id)
+            .await
+            .map(proto_feature_history_from_http)
+    }
+
     pub async fn task_panel(&self, document_id: &str) -> Option<TaskPanelResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.task_panel())
+    }
+
+    pub async fn task_panel_proto(&self, document_id: &str) -> Option<ProtoTaskPanelResponse> {
+        self.task_panel(document_id)
+            .await
+            .map(proto_task_panel_from_http)
     }
 
     pub async fn diagnostics(&self, document_id: &str) -> Option<DiagnosticsResponse> {
@@ -404,9 +492,24 @@ impl AppState {
         (model.document.document_id == document_id).then(|| model.diagnostics())
     }
 
+    pub async fn diagnostics_proto(
+        &self,
+        document_id: &str,
+    ) -> Option<ProtoDiagnosticsResponse> {
+        self.diagnostics(document_id)
+            .await
+            .map(proto_diagnostics_from_http)
+    }
+
     pub async fn selection_state(&self, document_id: &str) -> Option<SelectionStateResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.selection_state())
+    }
+
+    pub async fn selection_state_proto(&self, document_id: &str) -> Option<ProtoSelectionState> {
+        self.selection_state(document_id)
+            .await
+            .map(selection_state_proto_from_http)
     }
 
     pub async fn preselection_state(
@@ -415,6 +518,15 @@ impl AppState {
     ) -> Option<PreselectionStateResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.preselection_state())
+    }
+
+    pub async fn preselection_state_proto(
+        &self,
+        document_id: &str,
+    ) -> Option<ProtoPreselectionState> {
+        self.preselection_state(document_id)
+            .await
+            .map(preselection_state_proto_from_http)
     }
 
     pub async fn set_preselection(
@@ -454,569 +566,53 @@ impl AppState {
         Some(model.preselection_state())
     }
 
+    pub async fn set_preselection_proto(
+        &self,
+        request: ProtoPreselectionRequest,
+    ) -> Option<ProtoPreselectionState> {
+        self.set_preselection(PreselectionRequest {
+            document_id: request.document_id,
+            object_id: request.object_id,
+        })
+        .await
+        .map(preselection_state_proto_from_http)
+    }
+
     pub async fn jobs(&self, document_id: &str) -> Option<JobStatusResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.jobs())
     }
 
+    pub async fn jobs_proto(&self, document_id: &str) -> Option<ProtoJobStatusResponse> {
+        self.jobs(document_id).await.map(proto_jobs_from_http)
+    }
+
     pub async fn run_command(
         &self,
         request: CommandExecutionRequest,
-    ) -> Option<CommandExecutionResponse> {
+    ) -> Option<HttpCommandExecutionResponse> {
         let mut model = self.inner.write().await;
         if model.document.document_id != request.document_id {
             return None;
         }
 
-        let viewport_before = model.bridge_snapshot.viewport.clone();
-        let target_object_id = request.target_object_id.clone();
+        Some(command_runtime::run_command(&mut model, request))
+    }
 
-        // Push undo before mutating commands (not for read-only or undo/redo)
-        let is_mutating = !matches!(
-            request.command_id.as_str(),
-            "document.save" | "selection.focus" | "document.undo" | "document.redo"
-        );
-        if is_mutating {
-            let snap_clone = model.bridge_snapshot.clone();
-            model.undo_stack.push(&snap_clone);
-        }
-
-        let response = match request.command_id.as_str() {
-            "document.save" => {
-                model.document.dirty = false;
-                model.bridge_snapshot.dirty = false;
-                CommandExecutionResponse {
-                    command_id: request.command_id.clone(),
-                    accepted: true,
-                    status_message: "Document marked as saved".into(),
-                    document_dirty: model.document.dirty,
-                    viewport_diff: None,
-                }
-            }
-            "document.recompute" => {
-                model.document.dirty = true;
-                model.bridge_snapshot.dirty = true;
-                CommandExecutionResponse {
-                    command_id: request.command_id.clone(),
-                    accepted: true,
-                    status_message: "Recompute queued through bridge-backed mock backend".into(),
-                    document_dirty: model.document.dirty,
-                    viewport_diff: None,
-                }
-            }
-            "selection.focus" => CommandExecutionResponse {
-                command_id: request.command_id.clone(),
-                accepted: true,
-                status_message: "Selection focus requested".into(),
-                document_dirty: model.document.dirty,
-                viewport_diff: None,
-            },
-            "history.rollback_here" => {
-                if let Some((object_id, sequence_index)) =
-                    rollback_history_to_selected(&mut model.bridge_snapshot)
-                {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Rolled back model evaluation to {} at step {}",
-                            object_id, sequence_index
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Rollback requires a selected history feature".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "history.resume_full" => {
-                if resume_full_history(&mut model.bridge_snapshot) {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: "Restored full feature history".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Feature history is already fully resumed".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "model.toggle_suppression" => {
-                if let Some((object_id, suppressed)) =
-                    toggle_selected_suppression(&mut model.bridge_snapshot)
-                {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: if suppressed {
-                            format!("Suppressed {}", object_id)
-                        } else {
-                            format!("Unsuppressed {}", object_id)
-                        },
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Suppression requires a non-body selection".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "partdesign.new_sketch" => {
-                let requested_label = request.arguments.get("sketch_label").map(String::as_str);
-                let reference_plane = request.arguments.get("reference_plane").map(String::as_str);
-                if create_sketch_in_body(&mut model.bridge_snapshot, requested_label, reference_plane).is_some() {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Created a new sketch in the active body on {}: {}",
-                            reference_plane.unwrap_or("XY"),
-                            model.selected_object_id,
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Sketch creation requires the body to be selected".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "partdesign.edit_pocket" => {
-                let parsed_depth = request
-                    .arguments
-                    .get("depth_mm")
-                    .and_then(|value| value.parse::<f32>().ok());
-                let parsed_extent_mode = request.arguments.get("extent_mode").map(String::as_str);
-                let normalized_depth = parsed_depth.filter(|value| *value > 0.0);
-                let updated = update_selected_pocket_profile(
-                    &mut model.bridge_snapshot,
-                    normalized_depth,
-                    parsed_extent_mode,
-                );
-
-                if model.selected_object_id.starts_with("pocket-") && updated.is_some() {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Updated {} to {:.2} mm depth ({})",
-                            model.selected_object_id,
-                            parsed_depth.unwrap_or(0.0),
-                            parsed_extent_mode.unwrap_or("dimension")
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else if model.selected_object_id.starts_with("pocket-") {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pocket editing requires a positive depth_mm argument".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pocket editing requires an active pocket selection".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "partdesign.edit_pad" => {
-                let parsed_length = request
-                    .arguments
-                    .get("length_mm")
-                    .and_then(|value| value.parse::<f32>().ok());
-                let parsed_midplane = request
-                    .arguments
-                    .get("midplane")
-                    .and_then(|value| parse_bool_flag(value));
-                let normalized_length = parsed_length.filter(|value| *value > 0.0);
-                let updated = update_selected_pad_profile(
-                    &mut model.bridge_snapshot,
-                    normalized_length,
-                    parsed_midplane,
-                );
-
-                if updated.is_some() {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Updated {} to {:.2} mm ({})",
-                            model.selected_object_id,
-                            parsed_length.unwrap_or(0.0),
-                            if parsed_midplane.unwrap_or(false) {
-                                "symmetric"
-                            } else {
-                                "one-sided"
-                            }
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else if model.selected_object_id.starts_with("pad-") {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pad editing requires a positive length_mm argument".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pad editing requires an active pad selection".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "partdesign.pocket" => {
-                let parsed_depth = request
-                    .arguments
-                    .get("depth_mm")
-                    .and_then(|value| value.parse::<f32>().ok());
-                let parsed_extent_mode = request.arguments.get("extent_mode").map(String::as_str);
-                if create_pocket_from_selected_sketch(&mut model.bridge_snapshot, parsed_depth, parsed_extent_mode)
-                    .is_some()
-                {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Created a new pocket feature from the selected sketch ({})",
-                            parsed_extent_mode.unwrap_or("dimension")
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pocket creation requires an active sketch selection".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "partdesign.pad" => {
-                let parsed_length = request
-                    .arguments
-                    .get("length_mm")
-                    .and_then(|value| value.parse::<f32>().ok());
-                let parsed_midplane = request
-                    .arguments
-                    .get("midplane")
-                    .and_then(|value| parse_bool_flag(value))
-                    .unwrap_or(false);
-                let pad_length = parsed_length.filter(|value| *value > 0.0);
-
-                if create_pad_from_selected_sketch(&mut model.bridge_snapshot, pad_length, Some("dimension"), parsed_midplane).is_some()
-                {
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: format!(
-                            "Created a new pad feature from the selected sketch at {:.2} mm ({})",
-                            pad_length.unwrap_or(12.0),
-                            if parsed_midplane { "symmetric" } else { "one-sided" }
-                        ),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Pad creation requires an active sketch selection".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "document.undo" => {
-                let current_snap = model.bridge_snapshot.clone();
-                if let Some(previous) = model.undo_stack.undo(&current_snap) {
-                    model.bridge_snapshot = previous;
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: "Undo applied".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Nothing to undo".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            "document.redo" => {
-                let current_snap = model.bridge_snapshot.clone();
-                if let Some(next) = model.undo_stack.redo(&current_snap) {
-                    model.bridge_snapshot = next;
-                    model.sync_from_snapshot();
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: true,
-                        status_message: "Redo applied".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                } else {
-                    CommandExecutionResponse {
-                        command_id: request.command_id.clone(),
-                        accepted: false,
-                        status_message: "Nothing to redo".into(),
-                        document_dirty: model.document.dirty,
-                        viewport_diff: None,
-                    }
-                }
-            }
-            _ => CommandExecutionResponse {
-                command_id: request.command_id.clone(),
-                accepted: false,
-                status_message: format!("Unknown command: {}", request.command_id),
-                document_dirty: model.document.dirty,
-                viewport_diff: None,
-            },
+    pub async fn run_command_proto(&self, request: CommandInvocation) -> Option<CommandReply> {
+        let http_request = CommandExecutionRequest {
+            command_id: request.command_id,
+            document_id: request.document_id,
+            target_object_id: request.target_object_id,
+            arguments: request.arguments,
         };
 
-        // If the command didn't accept, pop the undo snapshot we just pushed
-        if !response.accepted && is_mutating {
-            let snap_clone = model.bridge_snapshot.clone();
-            model.undo_stack.undo(&snap_clone);
-        }
-
-        // Compute viewport diff for accepted mutating commands
-        let viewport_diff = if response.accepted && is_mutating {
-            let diff = compute_viewport_diff(&viewport_before, &model.bridge_snapshot.viewport);
-            if diff.is_empty() {
-                None
-            } else {
-                Some(viewport_diff_response(
-                    &model.document.document_id,
-                    &model.selected_object_id,
-                    diff,
-                ))
-            }
-        } else {
-            None
-        };
-
-        let mut response = response;
-        response.viewport_diff = viewport_diff;
-        let job_title = request
-            .command_id
-            .split('.')
-            .next_back()
-            .map(|segment| segment.replace('_', " "))
-            .unwrap_or_else(|| request.command_id.clone());
-        let job_stages = job_stages_for_command(
-            request.command_id.as_str(),
-            response.accepted,
-            response.viewport_diff.is_some(),
-        );
-        let job_entry = JobStatusEntry {
-            job_id: format!("job-{}-{}", model.jobs.len() + 1, request.command_id),
-            title: job_title,
-            command_id: request.command_id.clone(),
-            state: if response.accepted {
-                "completed".into()
-            } else {
-                "failed".into()
-            },
-            progress_percent: if response.accepted { 100 } else { 0 },
-            detail: response.status_message.clone(),
-            object_id: target_object_id.clone(),
-            stages: job_stages.clone(),
-        };
-        model.jobs.insert(0, job_entry);
-        model.jobs.truncate(8);
-
-        let document_id = model.document.document_id.clone();
-        if response.accepted {
-            for stage in job_stages {
-                model.events.insert(
-                    0,
-                    BackendEvent {
-                        topic: if stage.progress_percent < 100 {
-                            "recompute_progress".into()
-                        } else {
-                            "task_status".into()
-                        },
-                        level: "info".into(),
-                        message: format!("{}: {}", request.command_id, stage.label),
-                        document_id: document_id.clone(),
-                        object_id: target_object_id.clone(),
-                    },
-                );
-            }
-        }
-        model.events.insert(
-            0,
-            BackendEvent {
-                topic: if response.accepted {
-                    "task_status".into()
-                } else {
-                    "backend_warning".into()
-                },
-                level: if response.accepted {
-                    "info".into()
-                } else {
-                    "warning".into()
-                },
-                message: format!(
-                    "{}{}",
-                    response.status_message,
-                    request
-                        .arguments
-                        .get("source")
-                        .map(|source| format!(" via {}", source))
-                        .unwrap_or_default()
-                ),
-                document_id: document_id.clone(),
-                object_id: target_object_id,
-            },
-        );
-
-        if response.accepted {
-            let selected_object_id = model.selected_object_id.clone();
-            model.events.insert(
-                1,
-                BackendEvent {
-                    topic: "viewport_updated".into(),
-                    level: "info".into(),
-                    message: "Viewport scene invalidated for selected feature".into(),
-                    document_id,
-                    object_id: Some(selected_object_id),
-                },
-            );
-        }
-
-        Some(response)
+        self.run_command(http_request)
+            .await
+            .map(command_reply_from_http)
     }
 }
 
-fn parse_bool_flag(value: &str) -> Option<bool> {
-    match value {
-        "true" | "1" | "yes" | "on" => Some(true),
-        "false" | "0" | "no" | "off" => Some(false),
-        _ => None,
-    }
-}
-
-fn job_stages_for_command(
-    command_id: &str,
-    accepted: bool,
-    viewport_changed: bool,
-) -> Vec<JobStageEntry> {
-    let final_state = if accepted { "completed" } else { "failed" };
-    let final_progress = if accepted { 100 } else { 0 };
-    let mut stages = vec![JobStageEntry {
-        stage_id: "queued".into(),
-        label: "Queued by shell".into(),
-        state: if accepted { "completed".into() } else { "failed".into() },
-        progress_percent: if accepted { 15 } else { 0 },
-    }];
-
-    match command_id {
-        "document.recompute" => stages.push(JobStageEntry {
-            stage_id: "bridge_recompute".into(),
-            label: "Bridge recompute pass".into(),
-            state: final_state.into(),
-            progress_percent: if accepted { 70 } else { 0 },
-        }),
-        "document.save" => stages.push(JobStageEntry {
-            stage_id: "persist_document".into(),
-            label: "Persist document state".into(),
-            state: final_state.into(),
-            progress_percent: if accepted { 75 } else { 0 },
-        }),
-        "partdesign.new_sketch"
-        | "partdesign.pad"
-        | "partdesign.pocket"
-        | "partdesign.edit_pad"
-        | "partdesign.edit_pocket"
-        | "model.toggle_suppression"
-        | "history.rollback_here"
-        | "history.resume_full" => stages.push(JobStageEntry {
-            stage_id: "bridge_mutation".into(),
-            label: "Apply bridge-backed mutation".into(),
-            state: final_state.into(),
-            progress_percent: if accepted { 68 } else { 0 },
-        }),
-        _ => stages.push(JobStageEntry {
-            stage_id: "backend_dispatch".into(),
-            label: "Backend dispatch".into(),
-            state: final_state.into(),
-            progress_percent: if accepted { 60 } else { 0 },
-        }),
-    }
-
-    if viewport_changed {
-        stages.push(JobStageEntry {
-            stage_id: "viewport_sync".into(),
-            label: "Viewport sync".into(),
-            state: final_state.into(),
-            progress_percent: if accepted { 90 } else { 0 },
-        });
-    }
-
-    stages.push(JobStageEntry {
-        stage_id: "completed".into(),
-        label: if accepted {
-            "Job completed".into()
-        } else {
-            "Job failed".into()
-        },
-        state: final_state.into(),
-        progress_percent: final_progress,
-    });
-    stages
-}
 
 impl AppModel {
     fn viewport(&self) -> ViewportResponse {
@@ -1034,7 +630,7 @@ impl AppModel {
     }
 
     fn feature_history(&self) -> FeatureHistoryResponse {
-        feature_history_from_bridge(&self.bridge_snapshot)
+        self.document.history().clone()
     }
 
     fn task_panel(&self) -> TaskPanelResponse {
@@ -1049,12 +645,19 @@ impl AppModel {
     }
 
     fn diagnostics(&self) -> DiagnosticsResponse {
-        diagnostics_from_bridge(
+        let mut diagnostics = diagnostics_from_bridge(
             &self.bridge_snapshot,
             Some(&self.selected_object_id),
             &self.events,
             &self.bridge_status,
-        )
+        );
+        diagnostics.summary.total_features = self.document.evaluation().total_features;
+        diagnostics.summary.suppressed_count = self.document.evaluation().suppressed_count;
+        diagnostics.summary.inactive_count = self.document.evaluation().inactive_count;
+        diagnostics.summary.rolled_back_count = self.document.evaluation().rolled_back_count;
+        diagnostics.summary.history_marker_active = self.document.evaluation().history_marker_active;
+        diagnostics.summary.worker_mode = self.document.evaluation().worker_mode.clone();
+        diagnostics
     }
 
     fn selection_state(&self) -> SelectionStateResponse {
@@ -1082,8 +685,17 @@ impl AppModel {
         }
     }
 
-    fn sync_from_snapshot(&mut self) {
-        self.document = document_summary_from_bridge(&self.bridge_snapshot);
+    pub(super) fn sync_from_snapshot(&mut self) {
+        self.document.sync(
+            document_summary_from_bridge(&self.bridge_snapshot),
+            feature_history_from_bridge(&self.bridge_snapshot),
+            document_evaluation_state_from_bridge(
+                &self.bridge_snapshot,
+                &self.bridge_status.worker_mode,
+            ),
+        );
+        self.document
+            .set_graph(document_graph_from_bridge(&self.bridge_snapshot));
         self.object_tree = object_tree_from_bridge(&self.bridge_snapshot);
         self.selected_object_id = self.bridge_snapshot.selected_object_id.clone();
         self.properties_by_object = build_property_map(&self.bridge_snapshot, &self.object_tree);
@@ -1094,8 +706,11 @@ impl AppModel {
         requested_object_id: &str,
         selection_mode: &str,
     ) -> Option<String> {
-        if selection_mode == "object" && self.properties_by_object.contains_key(requested_object_id) {
-            return Some(requested_object_id.to_string());
+        if selection_mode == "object" {
+            return self
+                .properties_by_object
+                .contains_key(requested_object_id)
+                .then(|| requested_object_id.to_string());
         }
 
         let selectable_ids = selectable_object_ids_for_mode(&self.bridge_snapshot, selection_mode);
@@ -1109,6 +724,18 @@ impl AppModel {
             selectable_ids.into_iter().next()
         }
     }
+}
+
+fn document_state_from_bridge(
+    snapshot: &BridgeDocumentSnapshot,
+    bridge_status: &BridgeStatus,
+) -> DocumentState {
+    DocumentState::new(
+        document_summary_from_bridge(snapshot),
+        feature_history_from_bridge(snapshot),
+        document_evaluation_state_from_bridge(snapshot, &bridge_status.worker_mode),
+    )
+    .with_graph(document_graph_from_bridge(snapshot))
 }
 
 fn build_property_map(

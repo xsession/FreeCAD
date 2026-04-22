@@ -23,3 +23,9 @@ This package defines the first transport and payload contracts for the AsterForg
 - The `.proto` file is the long-term source of generated client/server bindings.
 - The JSON schemas make it easier to review contracts before code generation is wired in.
 - Large mesh payloads are intentionally out of scope for this first slice.
+
+## Generation
+
+- Rust generated bindings compile through `backend/crates/protocol-types` using `prost-build` plus vendored `protoc`.
+- TypeScript generated bindings are emitted to `frontend/app/src/generated` via `npm run generate:protocol` in `frontend/app`.
+- The frontend `src/protocol.ts` file should remain a thin fetch facade over generated transport types, not a second handwritten schema source.

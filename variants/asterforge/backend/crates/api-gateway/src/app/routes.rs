@@ -4,6 +4,11 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use asterforge_command_core::CommandExecutionRequest;
+use asterforge_protocol_types::asterforge::protocol::v1::{
+    CommandInvocation, PreselectionRequest as ProtoPreselectionRequest,
+    SelectionModeRequest as ProtoSelectionModeRequest, SelectionRef,
+};
 use tracing::info;
 
 use crate::domain::{
@@ -12,9 +17,17 @@ use crate::domain::{
     SelectionStateResponse, TaskPanelResponse, ViewportResponse,
 };
 
+use super::protocol::{
+    http_boot_payload_from_proto, http_command_catalog_from_proto,
+    http_command_response_from_proto, http_diagnostics_from_proto, http_events_from_proto,
+    http_feature_history_from_proto, http_jobs_from_proto, http_object_tree_from_proto,
+    http_preselection_state_from_proto, http_properties_from_proto,
+    http_selection_response_from_proto, http_selection_state_from_proto,
+    http_task_panel_from_proto, http_viewport_from_proto,
+};
 use super::state::{
-    AppState, BootPayload, CommandExecutionRequest, CommandExecutionResponse, SelectionRequest,
-    PreselectionRequest, SelectionModeRequest, SelectionResponse,
+    AppState, BootPayload, HttpCommandExecutionResponse, PreselectionRequest,
+    SelectionModeRequest, SelectionRequest, SelectionResponse,
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -51,7 +64,7 @@ async fn health() -> Json<serde_json::Value> {
 }
 
 async fn bootstrap(State(state): State<AppState>) -> Json<BootPayload> {
-    Json(state.boot_payload().await)
+    Json(http_boot_payload_from_proto(state.boot_payload_proto().await))
 }
 
 async fn open_document(
@@ -65,9 +78,16 @@ async fn set_selection(
     State(state): State<AppState>,
     Json(request): Json<SelectionRequest>,
 ) -> Result<Json<SelectionResponse>, StatusCode> {
+    let proto_request = SelectionRef {
+        document_id: request.document_id,
+        object_id: request.object_id,
+        subelement: String::new(),
+        selection_mode: String::new(),
+    };
     state
-        .set_selection(request)
+        .set_selection_proto(proto_request)
         .await
+        .map(http_selection_response_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -76,9 +96,14 @@ async fn set_selection_mode(
     State(state): State<AppState>,
     Json(request): Json<SelectionModeRequest>,
 ) -> Result<Json<SelectionStateResponse>, StatusCode> {
+    let proto_request = ProtoSelectionModeRequest {
+        document_id: request.document_id,
+        mode_id: request.mode_id,
+    };
     state
-        .set_selection_mode(request)
+        .set_selection_mode_proto(proto_request)
         .await
+        .map(http_selection_state_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -87,9 +112,14 @@ async fn set_preselection(
     State(state): State<AppState>,
     Json(request): Json<PreselectionRequest>,
 ) -> Result<Json<PreselectionStateResponse>, StatusCode> {
+    let proto_request = ProtoPreselectionRequest {
+        document_id: request.document_id,
+        object_id: request.object_id,
+    };
     state
-        .set_preselection(request)
+        .set_preselection_proto(proto_request)
         .await
+        .map(http_preselection_state_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -99,8 +129,9 @@ async fn fetch_object_tree(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ObjectNode>>, StatusCode> {
     state
-        .object_tree(&document_id)
+        .object_tree_proto(&document_id)
         .await
+        .map(http_object_tree_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -110,8 +141,9 @@ async fn fetch_properties(
     State(state): State<AppState>,
 ) -> Result<Json<PropertyResponse>, StatusCode> {
     state
-        .properties(&document_id, &object_id)
+    .properties_proto(&document_id, &object_id)
         .await
+    .map(http_properties_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -120,7 +152,12 @@ async fn fetch_events(
     Path(document_id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<BackendEvent>>, StatusCode> {
-    state.events(&document_id).await.map(Json).ok_or(StatusCode::NOT_FOUND)
+    state
+        .events_proto(&document_id)
+        .await
+        .map(http_events_from_proto)
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn fetch_commands(
@@ -128,8 +165,9 @@ async fn fetch_commands(
     State(state): State<AppState>,
 ) -> Result<Json<CommandCatalogResponse>, StatusCode> {
     state
-        .command_catalog(&document_id)
+    .command_catalog_proto(&document_id)
         .await
+    .map(http_command_catalog_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -139,8 +177,9 @@ async fn fetch_history(
     State(state): State<AppState>,
 ) -> Result<Json<FeatureHistoryResponse>, StatusCode> {
     state
-        .feature_history(&document_id)
+    .feature_history_proto(&document_id)
         .await
+    .map(http_feature_history_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -150,8 +189,9 @@ async fn fetch_task_panel(
     State(state): State<AppState>,
 ) -> Result<Json<TaskPanelResponse>, StatusCode> {
     state
-        .task_panel(&document_id)
+    .task_panel_proto(&document_id)
         .await
+    .map(http_task_panel_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -161,8 +201,9 @@ async fn fetch_diagnostics(
     State(state): State<AppState>,
 ) -> Result<Json<DiagnosticsResponse>, StatusCode> {
     state
-        .diagnostics(&document_id)
+    .diagnostics_proto(&document_id)
         .await
+    .map(http_diagnostics_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -172,8 +213,9 @@ async fn fetch_selection_state(
     State(state): State<AppState>,
 ) -> Result<Json<SelectionStateResponse>, StatusCode> {
     state
-        .selection_state(&document_id)
+        .selection_state_proto(&document_id)
         .await
+        .map(http_selection_state_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -183,8 +225,9 @@ async fn fetch_preselection_state(
     State(state): State<AppState>,
 ) -> Result<Json<PreselectionStateResponse>, StatusCode> {
     state
-        .preselection_state(&document_id)
+        .preselection_state_proto(&document_id)
         .await
+        .map(http_preselection_state_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -194,8 +237,9 @@ async fn fetch_jobs(
     State(state): State<AppState>,
 ) -> Result<Json<JobStatusResponse>, StatusCode> {
     state
-        .jobs(&document_id)
+    .jobs_proto(&document_id)
         .await
+    .map(http_jobs_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -205,8 +249,9 @@ async fn fetch_viewport(
     State(state): State<AppState>,
 ) -> Result<Json<ViewportResponse>, StatusCode> {
     state
-        .viewport(&document_id)
+    .viewport_proto(&document_id)
         .await
+    .map(http_viewport_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }
@@ -214,10 +259,17 @@ async fn fetch_viewport(
 async fn run_command(
     State(state): State<AppState>,
     Json(request): Json<CommandExecutionRequest>,
-) -> Result<Json<CommandExecutionResponse>, StatusCode> {
+) -> Result<Json<HttpCommandExecutionResponse>, StatusCode> {
+    let proto_request = CommandInvocation {
+        command_id: request.command_id,
+        document_id: request.document_id,
+        target_object_id: request.target_object_id,
+        arguments: request.arguments,
+    };
     let response = state
-        .run_command(request)
+        .run_command_proto(proto_request)
         .await
+        .map(http_command_response_from_proto)
         .ok_or(StatusCode::NOT_FOUND)?;
 
     info!(command_id = %response.command_id, accepted = response.accepted, "command executed");
