@@ -57,7 +57,7 @@ if not exist "!QT_PLUGIN_PATH!\platforms" (
 
 REM ---- Python (embedded in pixi env) ----
 set "PYTHONHOME=!PIXI_ENV!"
-set "PYTHONPATH=!BUILD_LIB!;!BUILD_MOD!;%SCRIPT_DIR%src\Mod;%SCRIPT_DIR%src\Ext"
+set "PYTHONPATH=!BUILD_LIB!;!BUILD_MOD!;%SCRIPT_DIR%src\Mod;%SCRIPT_DIR%src\Ext;%SCRIPT_DIR%src\Gui"
 
 REM ---- PROJ (geospatial coordinate transforms ? used by some workbenches) ----
 if exist "!PIXI_ENV!\Library\share\proj" (

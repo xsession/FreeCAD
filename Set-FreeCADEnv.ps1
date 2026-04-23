@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1-or-later
+﻿# SPDX-License-Identifier: LGPL-2.1-or-later
 #
 # FreeCAD Environment Setup for PowerShell
 #
@@ -43,7 +43,7 @@ if (-not $BuildBin) {
 # ---- Detect pixi environment ----
 $PixiEnv = Join-Path $ScriptDir ".pixi\envs\default"
 if (-not (Test-Path (Join-Path $PixiEnv "Library\bin"))) {
-    Write-Error "Pixi environment not found at: $PixiEnv — run 'pixi install' first."
+    Write-Error "Pixi environment not found at: $PixiEnv - run 'pixi install' first."
     return
 }
 
@@ -64,12 +64,12 @@ if ($pathsToAdd) {
     $env:PATH = ($pathsToAdd -join ';') + ';' + $env:PATH
 }
 
-# ---- Qt 6 (critical — FreeCAD won't start without this) ----
+# ---- Qt 6 (critical - FreeCAD won't start without this) ----
 $env:QT_PLUGIN_PATH = Join-Path $PixiEnv "Library\lib\qt6\plugins"
 
 # ---- Python ----
 $env:PYTHONHOME = $PixiEnv
-$env:PYTHONPATH = @($BuildLib, $BuildMod, (Join-Path $ScriptDir "src\Mod"), (Join-Path $ScriptDir "src\Ext")) -join ';'
+$env:PYTHONPATH = @($BuildLib, $BuildMod, (Join-Path $ScriptDir "src\Mod"), (Join-Path $ScriptDir "src\Ext"), (Join-Path $ScriptDir "src\Gui")) -join ';'
 
 # ---- PROJ (coordinate transforms) ----
 $projDir = Join-Path $PixiEnv "Library\share\proj"

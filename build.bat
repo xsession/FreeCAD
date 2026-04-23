@@ -152,10 +152,28 @@ set "ICE_RETRIES=0"
 set "MAX_ICE_RETRIES=3"
 set "CCACHE_EXE=%SCRIPT_DIR%.pixi\envs\default\Library\bin\ccache.exe"
 
+REM Prevent linker failures from a running FreeCAD GUI holding output DLLs open.
+tasklist /FI "IMAGENAME eq FreeCAD.exe" | findstr /I /C:"FreeCAD.exe" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo [ERROR] FreeCAD.exe is still running and locking build outputs.
+    echo         Close all FreeCAD GUI windows, then rerun the build.
+    echo         Tip: use 'build.bat run' only after the build completes.
+    exit /b 1
+)
+
 :build_attempt
 powershell -NoProfile -Command "cmake --build '%SCRIPT_DIR%build\debug' --parallel %NPROC% 2>&1 | Tee-Object -FilePath '!BUILD_LOG!'; exit $LASTEXITCODE"
 set "BUILD_ERR=!errorlevel!"
 if !BUILD_ERR! equ 0 goto :build_done
+
+findstr /C:"LNK1168: cannot open" "!BUILD_LOG!" >nul 2>&1
+if !errorlevel! equ 0 (
+    if exist "!BUILD_LOG!" del "!BUILD_LOG!"
+    echo [ERROR] Build failed because a running process is locking a build output file.
+    echo         Most commonly this means FreeCAD.exe is still open.
+    echo         Close FreeCAD and rerun the build.
+    exit /b 1
+)
 
 REM Check for MSVC Internal Compiler Error (C1001), commonly caused by ccache + /Z7 + /MP
 findstr /C:"fatal error C1001" "!BUILD_LOG!" >nul 2>&1
