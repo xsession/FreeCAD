@@ -14,6 +14,12 @@ REM and all runtime paths (Qt plugins, Python, PROJ, OpenSSL, OpenCL, etc.)
 setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
+set "DEFAULT_LOG_DIR=%TEMP%\FreeCAD\launcher-logs"
+set "LOG_DIR=%DEFAULT_LOG_DIR%"
+set "AUTO_LOG=1"
+set "DIAGNOSTIC_STARTUP=0"
+set "USER_SUPPLIED_LOG=0"
+set "FC_LOG_FILE="
 
 REM ---- Detect build directory (debug first, then release) ----
 set "BUILD_BIN="
@@ -86,7 +92,7 @@ if exist "!BUILD_DATA!" (
 
 REM ---- Determine which executable to run ----
 set "FC_EXE=FreeCAD.exe"
-set "FC_ARGS="
+set "FC_ARGS=-P "%SCRIPT_DIR%src\Gui""
 
 :parse_args
 if "%~1"=="" goto :launch
@@ -95,20 +101,50 @@ if /i "%~1"=="--console" (
     shift
     goto :parse_args
 )
+if /i "%~1"=="--diagnostic-startup" (
+    set "DIAGNOSTIC_STARTUP=1"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--no-log" (
+    set "AUTO_LOG=0"
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--log-dir" (
+    if "%~2"=="" (
+        echo [ERROR] --log-dir requires a directory path.
+        exit /b 1
+    )
+    set "LOG_DIR=%~2"
+    shift
+    shift
+    goto :parse_args
+)
+if /i "%~1"=="--log-file" set "USER_SUPPLIED_LOG=1"
+if /i "%~1"=="--write-log" set "USER_SUPPLIED_LOG=1"
+if /i "%~1"=="-l" set "USER_SUPPLIED_LOG=1"
 REM Collect remaining args
 set "FC_ARGS=!FC_ARGS! %1"
 shift
 goto :parse_args
 
 :launch
+if "%AUTO_LOG%"=="1" if "%USER_SUPPLIED_LOG%"=="0" call :configure_log_file
+if "%DIAGNOSTIC_STARTUP%"=="1" call :enable_diagnostic_startup
+
 echo [LAUNCHER] Starting !FC_EXE!...
 echo [LAUNCHER] QT_PLUGIN_PATH = !QT_PLUGIN_PATH!
 echo [LAUNCHER] PYTHONHOME     = !PYTHONHOME!
 echo [LAUNCHER] PROJ_DATA      = !PROJ_DATA!
+if defined FC_LOG_FILE echo [LAUNCHER] LOG_FILE       = !FC_LOG_FILE!
+if "%DIAGNOSTIC_STARTUP%"=="1" echo [LAUNCHER] Diagnostic startup logging enabled
 echo.
 
 "!BUILD_BIN!\!FC_EXE!" !FC_ARGS!
 set "FC_EXIT=!errorlevel!"
+
+if defined FC_LOG_FILE call :print_log_summary
 
 if !FC_EXIT! neq 0 (
     echo.
@@ -121,6 +157,34 @@ if !FC_EXIT! neq 0 (
         echo [LAUNCHER] This is STATUS_DLL_INIT_FAILED ? a DLL failed to initialize.
         echo            Check that all pixi dependencies are installed: pixi install
     )
+    call :print_crash_artifacts
 )
 
 exit /b !FC_EXIT!
+
+:configure_log_file
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
+for /f %%I in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd-HHmmss'"') do set "FC_LOG_STAMP=%%I"
+set "FC_LOG_FILE=%LOG_DIR%\%FC_EXE:~0,-4%-%FC_LOG_STAMP%.log"
+set "FC_ARGS=!FC_ARGS! --log-file "!FC_LOG_FILE!""
+goto :eof
+
+:enable_diagnostic_startup
+set "QT_DEBUG_PLUGINS=1"
+set "QT_LOGGING_RULES=qt.qpa.*=true;qt.core.plugin.*=true"
+set "FC_LAUNCH_DIAGNOSTIC_STARTUP=1"
+goto :eof
+
+:print_log_summary
+if not exist "!FC_LOG_FILE!" goto :eof
+echo [LAUNCHER] Recent log summary:
+powershell -NoProfile -Command "$p='!FC_LOG_FILE!'; $patterns='^(Err:|Wrn:|Log: .*failed|Log: Traceback|Log: .*ModuleNotFoundError|Log: .*ImportError)'; $lines=Get-Content $p | Where-Object { $_ -match $patterns } | Select-Object -Last 12; if ($lines) { $lines | ForEach-Object { $_ } } else { '[LAUNCHER]   no warning/error lines captured' }"
+goto :eof
+
+:print_crash_artifacts
+for %%D in ("%APPDATA%\FreeCAD" "%APPDATA%\FreeCAD\v1-2") do (
+    if exist %%~fD (
+        powershell -NoProfile -Command "$dir='%%~fD'; $items=Get-ChildItem $dir -Filter 'crash.*' -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 4; if ($items) { '[LAUNCHER] Crash artifacts:'; $items | ForEach-Object { '[LAUNCHER]   ' + $_.FullName } }"
+    )
+)
+goto :eof

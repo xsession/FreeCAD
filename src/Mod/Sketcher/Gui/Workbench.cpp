@@ -25,6 +25,7 @@
 
 #include "Utils.h"
 #include "Workbench.h"
+#include <QtGlobal>
 #include <Base/Console.h>
 #include <Gui/Application.h>
 #include <Gui/Document.h>
@@ -79,6 +80,11 @@ void registerSketchContextualPanel(const QString& panelName,
             .arg(panelName)
             .arg(order),
         commands);
+}
+
+bool sketchContextualRibbonEnabled()
+{
+    return !qEnvironmentVariableIsSet("FREECAD_DISABLE_SKETCHER_CONTEXT_RIBBON");
 }
 }  // namespace
 
@@ -166,30 +172,36 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
     visual->setCommand("Visual Helpers");
     addSketcherWorkbenchVisual(*visual);
 
-    Gui::ToolBarItem sketcherContext;
-    addSketcherWorkbenchSketchEditModeActions(sketcherContext);
-    registerSketchContextualPanel(QStringLiteral("Sketch"), 10, toolbarCommands(sketcherContext));
+    if (sketchContextualRibbonEnabled()) {
+        Gui::ToolBarItem sketcherContext;
+        addSketcherWorkbenchSketchEditModeActions(sketcherContext);
+        registerSketchContextualPanel(QStringLiteral("Sketch"), 10, toolbarCommands(sketcherContext));
 
-    Gui::ToolBarItem geometryContext;
-    addSketcherWorkbenchGeometries(geometryContext);
-    registerSketchContextualPanel(QStringLiteral("Geometry"), 20, toolbarCommands(geometryContext));
+        Gui::ToolBarItem geometryContext;
+        addSketcherWorkbenchGeometries(geometryContext);
+        registerSketchContextualPanel(QStringLiteral("Geometry"), 20, toolbarCommands(geometryContext));
 
-    Gui::ToolBarItem constraintsContext;
-    addSketcherWorkbenchConstraints(constraintsContext);
-    registerSketchContextualPanel(
-        QStringLiteral("Constraints"), 30, toolbarCommands(constraintsContext));
+        Gui::ToolBarItem constraintsContext;
+        addSketcherWorkbenchConstraints(constraintsContext);
+        registerSketchContextualPanel(
+            QStringLiteral("Constraints"), 30, toolbarCommands(constraintsContext));
 
-    Gui::ToolBarItem toolsContext;
-    addSketcherWorkbenchTools(toolsContext);
-    registerSketchContextualPanel(QStringLiteral("Tools"), 40, toolbarCommands(toolsContext));
+        Gui::ToolBarItem toolsContext;
+        addSketcherWorkbenchTools(toolsContext);
+        registerSketchContextualPanel(QStringLiteral("Tools"), 40, toolbarCommands(toolsContext));
 
-    Gui::ToolBarItem bsplineContext;
-    addSketcherWorkbenchBSplines(bsplineContext);
-    registerSketchContextualPanel(QStringLiteral("B-Spline"), 50, toolbarCommands(bsplineContext));
+        Gui::ToolBarItem bsplineContext;
+        addSketcherWorkbenchBSplines(bsplineContext);
+        registerSketchContextualPanel(QStringLiteral("B-Spline"), 50, toolbarCommands(bsplineContext));
 
-    Gui::ToolBarItem visualContext;
-    addSketcherWorkbenchVisual(visualContext);
-    registerSketchContextualPanel(QStringLiteral("Visual"), 60, toolbarCommands(visualContext));
+        Gui::ToolBarItem visualContext;
+        addSketcherWorkbenchVisual(visualContext);
+        registerSketchContextualPanel(QStringLiteral("Visual"), 60, toolbarCommands(visualContext));
+    }
+    else {
+        Base::Console().Warning(
+            "Sketcher contextual ribbon panels disabled by FREECAD_DISABLE_SKETCHER_CONTEXT_RIBBON.\n");
+    }
 
     return root;
 }

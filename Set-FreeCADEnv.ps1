@@ -16,12 +16,17 @@
 param(
     [switch]$Launch,
     [switch]$Console,
-    [switch]$Quiet
+    [switch]$Quiet,
+    [switch]$DetailedLogging,
+    [switch]$NoLog,
+    [string]$LogDir
 )
 
 $ErrorActionPreference = 'Stop'
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 if (-not $ScriptDir) { $ScriptDir = $PWD.Path }
+$DefaultLogDir = Join-Path $env:TEMP 'FreeCAD\launcher-logs'
+if (-not $LogDir) { $LogDir = $DefaultLogDir }
 
 # ---- Detect build directory ----
 $BuildBin = $null
@@ -95,6 +100,7 @@ if (-not $Quiet) {
     Write-Host "  QT_PLUGIN_PATH: $env:QT_PLUGIN_PATH" -ForegroundColor DarkGray
     Write-Host "  PYTHONHOME:     $env:PYTHONHOME" -ForegroundColor DarkGray
     Write-Host "  PROJ_DATA:      $env:PROJ_DATA" -ForegroundColor DarkGray
+    Write-Host "  LogDir:         $LogDir" -ForegroundColor DarkGray
     Write-Host ""
     if (-not $Launch -and -not $Console) {
         Write-Host "  Run FreeCAD with:  FreeCAD.exe" -ForegroundColor Yellow
@@ -103,12 +109,58 @@ if (-not $Quiet) {
     }
 }
 
+function New-FreeCADLaunchArgs {
+    param(
+        [string]$ExecutableName
+    )
+
+    $args = @('-P', (Join-Path $ScriptDir 'src\Gui'))
+    if (-not $NoLog) {
+        New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+        $timestamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+        $logFile = Join-Path $LogDir ("{0}-{1}.log" -f [IO.Path]::GetFileNameWithoutExtension($ExecutableName), $timestamp)
+        $script:LastFreeCADLogFile = $logFile
+        $args += @('--log-file', $logFile)
+    }
+    if ($DetailedLogging) {
+        $env:QT_DEBUG_PLUGINS = '1'
+        $env:QT_LOGGING_RULES = 'qt.qpa.*=true;qt.core.plugin.*=true'
+    }
+    return $args
+}
+
+function Show-FreeCADLogSummary {
+    if (-not $script:LastFreeCADLogFile -or -not (Test-Path $script:LastFreeCADLogFile)) {
+        return
+    }
+
+    Write-Host "[FreeCAD] Recent log summary:" -ForegroundColor Cyan
+    $patterns = '^(Err:|Wrn:|Log: .*failed|Log: Traceback|Log: .*ModuleNotFoundError|Log: .*ImportError)'
+    $lines = Get-Content $script:LastFreeCADLogFile | Where-Object { $_ -match $patterns } | Select-Object -Last 12
+    if ($lines) {
+        $lines | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkYellow }
+    }
+    else {
+        Write-Host "  no warning/error lines captured" -ForegroundColor DarkGray
+    }
+}
+
 # ---- Optional launch ----
 if ($Launch) {
     Write-Host "[FreeCAD] Launching FreeCAD..." -ForegroundColor Green
-    & (Join-Path $BuildBin "FreeCAD.exe")
+    $launchArgs = New-FreeCADLaunchArgs -ExecutableName 'FreeCAD.exe'
+    if ($script:LastFreeCADLogFile -and -not $Quiet) {
+        Write-Host "[FreeCAD] Log file: $script:LastFreeCADLogFile" -ForegroundColor Cyan
+    }
+    & (Join-Path $BuildBin "FreeCAD.exe") @launchArgs
+    Show-FreeCADLogSummary
 }
 elseif ($Console) {
     Write-Host "[FreeCAD] Launching FreeCADCmd..." -ForegroundColor Green
-    & (Join-Path $BuildBin "FreeCADCmd.exe")
+    $launchArgs = New-FreeCADLaunchArgs -ExecutableName 'FreeCADCmd.exe'
+    if ($script:LastFreeCADLogFile -and -not $Quiet) {
+        Write-Host "[FreeCAD] Log file: $script:LastFreeCADLogFile" -ForegroundColor Cyan
+    }
+    & (Join-Path $BuildBin "FreeCADCmd.exe") @launchArgs
+    Show-FreeCADLogSummary
 }

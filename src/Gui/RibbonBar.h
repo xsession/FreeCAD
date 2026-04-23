@@ -241,6 +241,7 @@ Q_SIGNALS:
     void contextualTabHidden(const QString& name);
 
 private:
+    static void scheduleContextualTabsRefresh();
     void setupStyle();
     RibbonPanel* createPanel(const QString& name, ToolBarItem* toolbarItem);
     RibbonPanel* createContextPanel(const QString& title, const QStringList& commandNames);
@@ -276,6 +277,7 @@ private:
     bool previewExpandedWhileMinimized{false};
     bool pendingShowPanelArea{true};
     QVariantAnimation* ribbonHeightAnimation{nullptr};
+    bool contextualTabsRefreshPending{false};
     fastsignals::scoped_connection inEditConnection;
     fastsignals::scoped_connection resetEditConnection;
 

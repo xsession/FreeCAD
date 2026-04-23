@@ -36,7 +36,9 @@
 #include <QPainterPath>
 #include <QLinearGradient>
 #include <QKeyEvent>
+#include <QMetaObject>
 #include <QSignalBlocker>
+#include <QSet>
 #include <QToolBar>
 #include <QStringList>
 #include <QTabBar>
@@ -974,16 +976,16 @@ RibbonBar::RibbonBar(QWidget* parent)
 
     if (auto* mainWindow = getMainWindow()) {
         connect(mainWindow, &MainWindow::workbenchActivated, this, [this](const QString&) {
-            refreshContextualTabs();
+            scheduleContextualTabsRefresh();
         });
     }
 
     inEditConnection = Application::Instance->signalInEdit.connect([this](const ViewProviderDocumentObject&) {
-        refreshContextualTabs();
+        scheduleContextualTabsRefresh();
     });
     resetEditConnection
         = Application::Instance->signalResetEdit.connect([this](const ViewProviderDocumentObject&) {
-              refreshContextualTabs();
+              scheduleContextualTabsRefresh();
           });
 }
 
@@ -996,6 +998,27 @@ RibbonBar::~RibbonBar()
     }
 }
 
+void RibbonBar::scheduleContextualTabsRefresh()
+{
+    if (!_instance || _instance->contextualTabsRefreshPending
+        || (Application::Instance && Application::Instance->isClosing())) {
+        return;
+    }
+
+    _instance->contextualTabsRefreshPending = true;
+    QMetaObject::invokeMethod(
+        _instance,
+        [instance = _instance]() {
+            if (!instance) {
+                return;
+            }
+
+            instance->contextualTabsRefreshPending = false;
+            instance->refreshContextualTabs();
+        },
+        Qt::QueuedConnection);
+}
+
 void RibbonBar::registerContextualRibbonPanel(const QString& name, const QStringList& commandNames)
 {
     if (name.isEmpty()) {
@@ -1003,9 +1026,7 @@ void RibbonBar::registerContextualRibbonPanel(const QString& name, const QString
     }
 
     g_registeredContextualRibbonPanels.insert(name, commandNames);
-    if (_instance) {
-        _instance->refreshContextualTabs();
-    }
+    scheduleContextualTabsRefresh();
 }
 
 void RibbonBar::unregisterContextualRibbonPanel(const QString& name)
@@ -1015,9 +1036,7 @@ void RibbonBar::unregisterContextualRibbonPanel(const QString& name)
     }
 
     g_registeredContextualRibbonPanels.remove(name);
-    if (_instance) {
-        _instance->refreshContextualTabs();
-    }
+    scheduleContextualTabsRefresh();
 }
 
 RibbonBar* RibbonBar::instance()
@@ -1281,6 +1300,8 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
     if (!toolBarItems) {
         return;
     }
+
+    contextualTabsRefreshPending = false;
 
     const QSignalBlocker blocker(tabWidget);
     clear();
@@ -1654,7 +1675,7 @@ RibbonButton* RibbonBar::createButton(const QString& cmdName)
 
 void RibbonBar::refreshContextualTabs()
 {
-    if (!tabWidget) {
+    if (!tabWidget || (Application::Instance && Application::Instance->isClosing())) {
         return;
     }
 
@@ -1700,6 +1721,16 @@ void RibbonBar::refreshContextualTabs()
         }
     }
 
+    QSet<QString> preparedContextualTabs;
+    auto prepareContextualPage = [&](const QString& tabName) {
+        auto* page = showContextualTab(tabName, contextualAccentColors.value(tabName), editVp != nullptr);
+        if (!preparedContextualTabs.contains(tabName)) {
+            page->clearPanels();
+            preparedContextualTabs.insert(tabName);
+        }
+        return page;
+    };
+
     for (auto it = contextualToolbarMap.begin(); it != contextualToolbarMap.end(); ++it) {
         auto& toolbars = it.value();
         std::stable_sort(toolbars.begin(), toolbars.end(), [](ToolBarItem* left, ToolBarItem* right) {
@@ -1708,8 +1739,7 @@ void RibbonBar::refreshContextualTabs()
             return leftOrder < rightOrder;
         });
 
-        auto* page = showContextualTab(it.key(), contextualAccentColors.value(it.key()), editVp != nullptr);
-        page->clearPanels();
+        auto* page = prepareContextualPage(it.key());
         for (ToolBarItem* tbItem : std::as_const(toolbars)) {
             RibbonPanel* panel = createPanel(QString::fromUtf8(tbItem->command().c_str()), tbItem);
             if (panel && panel->buttonCount() > 0) {
@@ -1727,7 +1757,7 @@ void RibbonBar::refreshContextualTabs()
             return left.first.order < right.first.order;
         });
 
-        auto* page = showContextualTab(it.key(), contextualAccentColors.value(it.key()), editVp != nullptr);
+        auto* page = prepareContextualPage(it.key());
         for (const auto& panelEntry : panels) {
             auto* panel = createContextPanel(panelEntry.first.panelName, panelEntry.second);
             if (panel && panel->buttonCount() > 0) {
