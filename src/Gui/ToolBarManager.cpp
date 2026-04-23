@@ -869,6 +869,13 @@ void ToolBarManager::saveState() const
         return !action->isVisible();
     };
 
+    // Ribbon mode hides classic toolbars as a presentation detail. Do not overwrite the
+    // user's classic toolbar visibility preferences while the ribbon is active, or switching
+    // back to the normal layout will appear to forget their previous toolbar choices.
+    if (auto* ribbon = RibbonBar::instance(); ribbon && ribbon->isVisible()) {
+        return;
+    }
+
     QList<ToolBar*> toolbars = toolBars();
     for (const QString& it : toolbarNames) {
         ToolBar* toolbar = findToolBar(toolbars, it);
