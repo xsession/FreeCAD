@@ -37,6 +37,7 @@
 #include <QLinearGradient>
 #include <QKeyEvent>
 #include <QMetaObject>
+#include <QPointer>
 #include <QSignalBlocker>
 #include <QSet>
 #include <QToolBar>
@@ -210,6 +211,12 @@ namespace {
                                   const ViewProviderDocumentObject* editViewProvider)
     {
         if (!metadata.isValid() || !editViewProvider || !editViewProvider->getObject()) {
+            return false;
+        }
+
+        if (metadata.workbenchName.isEmpty()
+            && metadata.tabName.compare(QStringLiteral("Sketch"), Qt::CaseInsensitive) == 0
+            && activeWorkbench.contains(QStringLiteral("SketcherWorkbench"), Qt::CaseInsensitive)) {
             return false;
         }
 
@@ -1001,14 +1008,16 @@ RibbonBar::~RibbonBar()
 void RibbonBar::scheduleContextualTabsRefresh()
 {
     if (!_instance || _instance->contextualTabsRefreshPending
+        || !_instance->isVisible()
         || (Application::Instance && Application::Instance->isClosing())) {
         return;
     }
 
     _instance->contextualTabsRefreshPending = true;
+    QPointer<RibbonBar> instance(_instance);
     QMetaObject::invokeMethod(
         _instance,
-        [instance = _instance]() {
+        [instance]() {
             if (!instance) {
                 return;
             }
@@ -1690,7 +1699,8 @@ RibbonButton* RibbonBar::createButton(const QString& cmdName)
 
 void RibbonBar::refreshContextualTabs()
 {
-    if (!tabWidget || (Application::Instance && Application::Instance->isClosing())) {
+    if (!tabWidget || !isVisible() || QApplication::closingDown()
+        || (Application::Instance && Application::Instance->isClosing())) {
         return;
     }
 

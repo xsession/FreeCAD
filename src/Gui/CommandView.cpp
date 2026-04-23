@@ -4338,6 +4338,9 @@ void StdCmdToggleRibbonBar::activated(int iMsg)
     Workbench* wb = WorkbenchManager::instance()->active();
     if (wb) {
         wb->activate();
+        getMainWindow()->activateWorkbench(QString::fromLatin1(wb->name().c_str()));
+        Application::Instance->signalActivateWorkbench(wb->name().c_str());
+        wb->activated();
     }
 
     // Sync checked state

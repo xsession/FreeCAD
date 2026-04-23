@@ -120,6 +120,7 @@ PyMOD_INIT_FUNC(SketcherGui)
     CreateSketcherCommandsBSpline();
     CreateSketcherCommandsOverlay();
     CreateSketcherCommandsVirtualSpace();
+    SketcherGui::registerSketcherContextualRibbonPanels();
 
     SketcherGui::Workbench::init();
 

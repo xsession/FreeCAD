@@ -1,4 +1,4 @@
-"""GUI smoke test for Sketcher edit-mode toolbar visibility.
+"""GUI smoke test for Sketcher edit-mode ribbon/classic toggle behavior.
 
 Run with the repository launcher:
 
@@ -18,6 +18,18 @@ try:
 except ImportError:
     print("ERROR: This script must run inside FreeCAD GUI.")
     sys.exit(1)
+
+
+REPORT_LINES = []
+
+
+def report(line):
+    REPORT_LINES.append(line)
+
+
+def write_report():
+    with open("C:/GIT/FreeCAD/build/debug/test_sketcher_edit_toolbar_smoke_report.txt", "w", encoding="utf-8") as handle:
+        handle.write("\n".join(REPORT_LINES) + "\n")
 
 
 def process_events(delay=0.05, rounds=6):
@@ -78,13 +90,37 @@ def ribbon_tab_labels(main_window):
     return []
 
 
+def sketch_ribbon_button_count(main_window):
+    for tab_widget in main_window.findChildren(QtGui.QTabWidget):
+        labels = [tab_widget.tabText(index) for index in range(tab_widget.count())]
+        if "Sketch" not in labels:
+            continue
+
+        index = labels.index("Sketch")
+        page = tab_widget.widget(index)
+        if page is None:
+            return 0
+
+        buttons = []
+        for button in page.findChildren(QtGui.QToolButton):
+            if not button.isVisible():
+                continue
+            if button.defaultAction() is None and not button.text():
+                continue
+            buttons.append(button)
+
+        return len(buttons)
+
+    return 0
+
+
 def main():
     prefs = App.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
     original_ribbon = bool(prefs.GetBool("UseRibbonBar", False))
 
     Gui.showMainWindow()
     process_events(0.1, rounds=8)
-    Gui.activateWorkbench("SketcherWorkbench")
+    Gui.activateWorkbench("PartDesignWorkbench")
     process_events(0.1, rounds=8)
 
     doc = App.newDocument("SketcherEditToolbarSmoke")
@@ -103,18 +139,54 @@ def main():
         set_ribbon(True)
         process_events(0.1, rounds=12)
         labels = ribbon_tab_labels(main_window)
+        report("enable-1 tabs=" + ",".join(labels))
         if labels.count("Sketch") > 1:
+            write_report()
             print("FAIL: duplicate Sketch ribbon tabs in edit mode: " + ",".join(labels))
+            return 1
+        if "Sketch" not in labels:
+            write_report()
+            print("FAIL: Sketch ribbon tab missing after enabling ribbon: " + ",".join(labels))
+            return 1
+        button_count = sketch_ribbon_button_count(main_window)
+        report("enable-1 sketch-buttons=" + str(button_count))
+        if button_count <= 0:
+            write_report()
+            print("FAIL: Sketch ribbon tab is empty after enabling ribbon")
             return 1
 
         set_ribbon(False)
         process_events(0.1, rounds=12)
         visible = visible_sketch_toolbars(main_window)
+        report("disable classic-toolbars=" + ",".join(visible))
         if not visible:
+            write_report()
             print("FAIL: no visible Sketcher edit-mode toolbars in classic mode")
             return 1
 
+        set_ribbon(True)
+        process_events(0.1, rounds=12)
+        labels = ribbon_tab_labels(main_window)
+        report("enable-2 tabs=" + ",".join(labels))
+        if labels.count("Sketch") > 1:
+            write_report()
+            print("FAIL: duplicate Sketch ribbon tabs after re-enabling ribbon: " + ",".join(labels))
+            return 1
+        if "Sketch" not in labels:
+            write_report()
+            print("FAIL: Sketch ribbon tab missing after re-enabling ribbon: " + ",".join(labels))
+            return 1
+        button_count = sketch_ribbon_button_count(main_window)
+        report("enable-2 sketch-buttons=" + str(button_count))
+        if button_count <= 0:
+            write_report()
+            print("FAIL: Sketch ribbon tab is empty after re-enabling ribbon")
+            return 1
+
+        write_report()
         print("VISIBLE_SKETCH_TOOLBARS=" + ",".join(visible))
+        print("RIBBON_TABS=" + ",".join(labels))
+        print("SKETCH_RIBBON_BUTTONS=" + str(button_count))
         return 0
     finally:
         try:
