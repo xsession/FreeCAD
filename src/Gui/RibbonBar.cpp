@@ -1467,6 +1467,17 @@ QString RibbonBar::categorizeToolbar(const QString& tbName) const
         return tr("Results");
     }
 
+    if (nameContainsAny(label,
+                        {"Sketch",
+                         "Edit Mode",
+                         "Geometries",
+                         "Constraints",
+                         "Sketcher Tools",
+                         "B-Spline Tools",
+                         "Visual Helpers"})) {
+        return tr("Sketch");
+    }
+
     if (label.contains(QStringLiteral("Sketch"), Qt::CaseInsensitive)) {
         return tr("Sketch");
     }

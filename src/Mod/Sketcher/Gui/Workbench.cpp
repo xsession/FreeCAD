@@ -84,7 +84,8 @@ void registerSketchContextualPanel(const QString& panelName,
 
 bool sketchContextualRibbonEnabled()
 {
-    return !qEnvironmentVariableIsSet("FREECAD_DISABLE_SKETCHER_CONTEXT_RIBBON");
+    return qEnvironmentVariableIsSet("FREECAD_ENABLE_SKETCHER_CONTEXT_RIBBON")
+        && !qEnvironmentVariableIsSet("FREECAD_DISABLE_SKETCHER_CONTEXT_RIBBON");
 }
 }  // namespace
 
@@ -199,8 +200,8 @@ Gui::ToolBarItem* Workbench::setupToolBars() const
         registerSketchContextualPanel(QStringLiteral("Visual"), 60, toolbarCommands(visualContext));
     }
     else {
-        Base::Console().Warning(
-            "Sketcher contextual ribbon panels disabled by FREECAD_DISABLE_SKETCHER_CONTEXT_RIBBON.\n");
+        Base::Console().Log(
+            "Sketcher contextual ribbon panels disabled; set FREECAD_ENABLE_SKETCHER_CONTEXT_RIBBON=1 to enable them.\n");
     }
 
     return root;

@@ -158,6 +158,46 @@ private Q_SLOTS:
         QVERIFY2(ribbonPos < activatePos,
                  "BackstageView hideEvent should restore ribbon visibility before workbench reactivation");
     }
+
+    void test_SketcherToolbarsRouteToSketchTab()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString ribbonPath = repoRoot.filePath(QStringLiteral("src/Gui/RibbonBar.cpp"));
+        QFile file(ribbonPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(ribbonPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString categorizeNeedle = QStringLiteral("QString RibbonBar::categorizeToolbar(const QString& tbName) const");
+        const int categorizePos = source.indexOf(categorizeNeedle);
+        QVERIFY2(categorizePos >= 0, "RibbonBar::categorizeToolbar definition missing");
+
+        const int sketchRulePos = source.indexOf(
+            QStringLiteral("\"Edit Mode\""), categorizePos);
+        QVERIFY2(sketchRulePos >= 0,
+                 "Sketch routing should explicitly cover Sketcher edit-mode toolbar names");
+        QVERIFY2(source.indexOf(QStringLiteral("\"Geometries\""), sketchRulePos) >= 0,
+                 "Sketch routing should explicitly cover Sketcher geometry toolbar names");
+        QVERIFY2(source.indexOf(QStringLiteral("\"Constraints\""), sketchRulePos) >= 0,
+                 "Sketch routing should explicitly cover Sketcher constraint toolbar names");
+        QVERIFY2(source.indexOf(QStringLiteral("\"Sketcher Tools\""), sketchRulePos) >= 0,
+                 "Sketch routing should explicitly cover Sketcher helper toolbar names");
+        QVERIFY2(source.indexOf(QStringLiteral("\"B-Spline Tools\""), sketchRulePos) >= 0,
+                 "Sketch routing should explicitly cover Sketcher B-Spline toolbar names");
+        QVERIFY2(source.indexOf(QStringLiteral("\"Visual Helpers\""), sketchRulePos) >= 0,
+                 "Sketch routing should explicitly cover Sketcher visual toolbar names");
+
+        const int sketchReturnPos = source.indexOf(QStringLiteral("return tr(\"Sketch\");"), sketchRulePos);
+        QVERIFY2(sketchReturnPos >= 0,
+                 "Sketch toolbar routing should resolve to the Sketch ribbon tab");
+
+        const int toolsRulePos = source.indexOf(QStringLiteral("return tr(\"Tools\");"), sketchRulePos);
+        QVERIFY2(toolsRulePos > sketchReturnPos,
+                 "Sketch routing must be evaluated before the generic Tools fallback");
+    }
 };
 
 // NOLINTEND(readability-magic-numbers)

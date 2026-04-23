@@ -802,6 +802,7 @@ void ToolBarManager::setup(ToolBarItem* toolBarItems)
     // If not, ensure ribbon is hidden and classic toolbars are visible.
     RibbonBar* ribbon = RibbonBar::instance();
     if (ribbon) {
+        const bool wasRibbonVisible = ribbon->isVisible();
         if (RibbonBar::isRibbonEnabled()) {
             ribbon->setup(toolBarItems);
             ribbon->show();
@@ -814,6 +815,34 @@ void ToolBarManager::setup(ToolBarItem* toolBarItems)
         else {
             ribbon->hide();
             ribbon->clear();
+
+            bool hasVisibleClassicToolbar = false;
+            QList<ToolBar*> allToolbars = toolBars();
+            for (ToolBarItem* it : items) {
+                if (it->visibilityPolicy == ToolBarItem::DefaultVisibility::Unavailable) {
+                    continue;
+                }
+
+                if (ToolBar* toolbar = findToolBar(allToolbars, QString::fromUtf8(it->command().c_str()));
+                    toolbar && toolbar->toggleViewAction()->isVisible() && toolbar->isVisible()) {
+                    hasVisibleClassicToolbar = true;
+                    break;
+                }
+            }
+
+            if (wasRibbonVisible && !hasVisibleClassicToolbar) {
+                for (ToolBarItem* it : items) {
+                    if (it->visibilityPolicy != ToolBarItem::DefaultVisibility::Visible) {
+                        continue;
+                    }
+
+                    if (ToolBar* toolbar = findToolBar(
+                            allToolbars, QString::fromUtf8(it->command().c_str()))) {
+                        toolbar->toggleViewAction()->setVisible(true);
+                        toolbar->show();
+                    }
+                }
+            }
         }
     }
 }
@@ -1339,11 +1368,11 @@ void ToolBarManager::setState(const QString& name, State state)
         else if (state == State::ForceAvailable) {
             tb->toggleViewAction()->setVisible(true);
 
-            // Unavailable policy defaults to a Visible toolbars when made available
-            auto show = visibility(
-                policy == ToolBarItem::DefaultVisibility::Visible
-                || policy == ToolBarItem::DefaultVisibility::Unavailable
-            );
+            // Unavailable toolbars are controlled by the caller and should become visible when
+            // explicitly forced available, regardless of any stale persisted visibility flag.
+            const bool show = policy == ToolBarItem::DefaultVisibility::Unavailable
+                ? true
+                : visibility(policy == ToolBarItem::DefaultVisibility::Visible);
 
             if (show) {
                 tb->show();
