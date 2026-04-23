@@ -1318,7 +1318,9 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
     }
     tabWidget->tabBar()->setTabTextColor(fileTabIndex, QColor(255, 255, 255));
 
-    configuredToolbarItems = toolBarItems->getItems();
+    delete configuredToolbarRoot;
+    configuredToolbarRoot = toolBarItems->copy();
+    configuredToolbarItems = configuredToolbarRoot ? configuredToolbarRoot->getItems() : QList<ToolBarItem*> {};
     QList<ToolBarItem*> items = configuredToolbarItems;
 
     // Group toolbars into ribbon tabs by category
@@ -1504,6 +1506,8 @@ void RibbonBar::clear()
     }
     tabWidget->clear();
     tabPages.clear();
+    delete configuredToolbarRoot;
+    configuredToolbarRoot = nullptr;
     configuredToolbarItems.clear();
     fileTabIndex = -1;
     lastContentTabIndex = -1;

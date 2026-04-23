@@ -262,6 +262,7 @@ private:
     QLineEdit* searchField{nullptr};
     QTabWidget* tabWidget{nullptr};
     QMap<QString, RibbonTabPage*> tabPages;
+    ToolBarItem* configuredToolbarRoot{nullptr};
     QList<ToolBarItem*> configuredToolbarItems;
     int fileTabIndex{-1};
     int lastContentTabIndex{-1};
