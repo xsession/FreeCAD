@@ -47,6 +47,7 @@
 #include <Gui/BackstageView.h>
 #include <Gui/View3DInventor.h>
 #include <Mod/Sketcher/App/SketchObject.h>
+#include <Mod/Sketcher/Gui/SketchWorkflowController.h>
 #include <Mod/PartDesign/App/Body.h>
 #include <Mod/PartDesign/App/FeatureBoolean.h>
 #include <Mod/PartDesign/App/FeatureGroove.h>
@@ -589,13 +590,7 @@ void CmdPartDesignNewSketch::activated(int iMsg)
 {
     Q_UNUSED(iMsg);
 
-    // Ensure the 3D view is active so body creation and ActiveView.setActiveObject() work
-    if (auto* backstage = Gui::BackstageView::existingInstance()) {
-        if (backstage->isVisible()) {
-            backstage->hide();
-        }
-    }
-    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
+    SketcherGui::SketchWorkflowController::prepareSketchEditViewport(getActiveGuiDocument());
 
     PartDesignGui::SketchWorkflow creator(getActiveGuiDocument());
     creator.createSketch();

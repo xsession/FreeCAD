@@ -181,6 +181,316 @@ private Q_SLOTS:
                  "SketchWorkflow must activate a 3D view before setEdit");
     }
 
+    void test_sketcherEditCommand_routesThroughSketchWorkflowController()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString commandPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/Command.cpp"));
+        QFile file(commandPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(commandPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activatedNeedle
+            = QStringLiteral("void CmdSketcherEditSketch::activated(int iMsg)");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::enterSketchEdit(");
+        const QString directSetEditNeedle
+            = QStringLiteral("Gui.activeDocument().setEdit('%s')");
+
+        const int activatedPos = source.indexOf(activatedNeedle);
+        const int controllerPos = source.indexOf(controllerNeedle, activatedPos);
+        const int nextCommandPos = source.indexOf(QStringLiteral("bool CmdSketcherEditSketch::isActive()"),
+                                                  activatedPos);
+        const int directSetEditPos = source.indexOf(directSetEditNeedle, activatedPos);
+
+        QVERIFY2(activatedPos >= 0, "CmdSketcherEditSketch::activated not found");
+        QVERIFY2(controllerPos >= 0, "CmdSketcherEditSketch should call SketchWorkflowController");
+        QVERIFY2(nextCommandPos >= 0, "CmdSketcherEditSketch::isActive not found");
+        QVERIFY2(controllerPos < nextCommandPos,
+                 "SketchWorkflowController call should be inside CmdSketcherEditSketch::activated");
+        QVERIFY2(directSetEditPos < 0 || directSetEditPos > nextCommandPos,
+                 "CmdSketcherEditSketch should not call Gui.activeDocument().setEdit directly");
+    }
+
+    void test_sketcherReorientCommand_routesThroughSketchWorkflowController()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString commandPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/Command.cpp"));
+        QFile file(commandPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(commandPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activatedNeedle
+            = QStringLiteral("void CmdSketcherReorientSketch::activated(int iMsg)");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::enterSketchEdit(");
+        const QString directSetEditNeedle
+            = QStringLiteral("Gui.ActiveDocument.setEdit('%s')");
+
+        const int activatedPos = source.indexOf(activatedNeedle);
+        const int controllerPos = source.indexOf(controllerNeedle, activatedPos);
+        const int nextCommandPos = source.indexOf(
+            QStringLiteral("bool CmdSketcherReorientSketch::isActive()"), activatedPos);
+        const int directSetEditPos = source.indexOf(directSetEditNeedle, activatedPos);
+
+        QVERIFY2(activatedPos >= 0, "CmdSketcherReorientSketch::activated not found");
+        QVERIFY2(controllerPos >= 0,
+                 "CmdSketcherReorientSketch should call SketchWorkflowController");
+        QVERIFY2(nextCommandPos >= 0, "CmdSketcherReorientSketch::isActive not found");
+        QVERIFY2(controllerPos < nextCommandPos,
+                 "SketchWorkflowController call should be inside CmdSketcherReorientSketch::activated");
+        QVERIFY2(directSetEditPos < 0 || directSetEditPos > nextCommandPos,
+                 "CmdSketcherReorientSketch should not call Gui.ActiveDocument.setEdit directly");
+    }
+
+    void test_sketcherNewSketch_routesCreatedSketchThroughSketchWorkflowController()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString commandPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/Command.cpp"));
+        QFile file(commandPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(commandPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activatedNeedle
+            = QStringLiteral("void CmdSketcherNewSketch::activated(int iMsg)");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::enterSketchEdit(");
+        const QString nextCommandNeedle = QStringLiteral("bool CmdSketcherNewSketch::isActive()");
+        const QString directSetEditNeedle
+            = QStringLiteral("Gui.activeDocument().setEdit('%s')");
+
+        const int activatedPos = source.indexOf(activatedNeedle);
+        const int firstControllerPos = source.indexOf(controllerNeedle, activatedPos);
+        const int secondControllerPos = source.indexOf(controllerNeedle, firstControllerPos + 1);
+        const int nextCommandPos = source.indexOf(nextCommandNeedle, activatedPos);
+        const int directSetEditPos = source.indexOf(directSetEditNeedle, activatedPos);
+
+        QVERIFY2(activatedPos >= 0, "CmdSketcherNewSketch::activated not found");
+        QVERIFY2(firstControllerPos >= 0,
+                 "CmdSketcherNewSketch should route sketch entry through SketchWorkflowController");
+        QVERIFY2(secondControllerPos >= 0,
+                 "CmdSketcherNewSketch should route both attached and detached sketch paths through SketchWorkflowController");
+        QVERIFY2(nextCommandPos >= 0, "CmdSketcherNewSketch::isActive not found");
+        QVERIFY2(firstControllerPos < nextCommandPos && secondControllerPos < nextCommandPos,
+                 "SketchWorkflowController calls should be inside CmdSketcherNewSketch::activated");
+        QVERIFY2(directSetEditPos < 0 || directSetEditPos > nextCommandPos,
+                 "CmdSketcherNewSketch should not call Gui.activeDocument().setEdit directly");
+    }
+
+    void test_sketcherDoubleClick_routesThroughSketchWorkflowController()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString providerPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/ViewProviderSketch.cpp"));
+        QFile file(providerPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(providerPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString doubleClickedNeedle = QStringLiteral("bool ViewProviderSketch::doubleClicked()");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::enterSketchEdit(");
+        const QString directSetEditNeedle
+            = QStringLiteral("activeDocument()->setEdit(this)");
+        const QString nextMethodNeedle = QStringLiteral("float ViewProviderSketch::getScaleFactor() const");
+
+        const int doubleClickedPos = source.indexOf(doubleClickedNeedle);
+        const int controllerPos = source.indexOf(controllerNeedle, doubleClickedPos);
+        const int nextMethodPos = source.indexOf(nextMethodNeedle, doubleClickedPos);
+        const int directSetEditPos = source.indexOf(directSetEditNeedle, doubleClickedPos);
+
+        QVERIFY2(doubleClickedPos >= 0, "ViewProviderSketch::doubleClicked not found");
+        QVERIFY2(controllerPos >= 0,
+                 "ViewProviderSketch::doubleClicked should call SketchWorkflowController");
+        QVERIFY2(nextMethodPos >= 0, "ViewProviderSketch::getScaleFactor not found");
+        QVERIFY2(controllerPos < nextMethodPos,
+                 "SketchWorkflowController call should be inside ViewProviderSketch::doubleClicked");
+        QVERIFY2(directSetEditPos < 0 || directSetEditPos > nextMethodPos,
+                 "ViewProviderSketch::doubleClicked should not call setEdit directly");
+    }
+
+    void test_sketchWorkflowController_sourceNormalizesBackstageAnd3DView()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString controllerPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/SketchWorkflowController.cpp"));
+        QFile file(controllerPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(controllerPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString helperNeedle = QStringLiteral("void normalizeSketchIntentViewport(");
+        const QString backstageNeedle = QStringLiteral("backstage->hide();");
+        const QString setActiveViewNeedle
+            = QStringLiteral("setActiveView(nullptr, Gui::View3DInventor::getClassTypeId())");
+        const QString activateNeedle
+            = QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), true)");
+
+        const int helperPos = source.indexOf(helperNeedle);
+        const int backstagePos = source.indexOf(backstageNeedle, helperPos);
+        const int setActiveViewPos = source.indexOf(setActiveViewNeedle, helperPos);
+        const int activatePos = source.indexOf(activateNeedle, helperPos);
+
+        QVERIFY2(helperPos >= 0, "normalizeSketchIntentViewport helper not found");
+        QVERIFY2(backstagePos >= 0,
+                 "SketchWorkflowController should hide backstage before entering sketch edit");
+        QVERIFY2(setActiveViewPos >= 0,
+                 "SketchWorkflowController should force a 3D document view before entering sketch edit");
+        QVERIFY2(activatePos >= 0,
+                 "SketchWorkflowController should activate a 3D view before entering sketch edit");
+        QVERIFY2(backstagePos < setActiveViewPos,
+                 "Backstage should be hidden before forcing the 3D document view");
+        QVERIFY2(setActiveViewPos < activatePos,
+                 "SketchWorkflowController should choose a 3D document view before activating it");
+    }
+
+    void test_partDesignSetEdit_usesSketchWorkflowViewportNormalization()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString utilsPath = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/Utils.cpp"));
+        QFile file(utilsPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(utilsPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString setEditNeedle = QStringLiteral("bool setEdit(App::DocumentObject* obj, PartDesign::Body* body)");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(guiDocument);");
+        const QString activateWorkbenchNeedle
+            = QStringLiteral("activateWorkbench(\"SketcherWorkbench\")");
+
+        const int setEditPos = source.indexOf(setEditNeedle);
+        const int controllerPos = source.indexOf(controllerNeedle, setEditPos);
+        const int activateWorkbenchPos = source.indexOf(activateWorkbenchNeedle, setEditPos);
+
+        QVERIFY2(setEditPos >= 0, "PartDesignGui::setEdit not found in Utils.cpp");
+        QVERIFY2(controllerPos >= 0,
+                 "PartDesignGui::setEdit should use SketchWorkflowController viewport normalization");
+        QVERIFY2(activateWorkbenchPos >= 0,
+                 "PartDesignGui::setEdit should explicitly activate SketcherWorkbench for sketch targets");
+        QVERIFY2(controllerPos < activateWorkbenchPos,
+                 "Viewport normalization should happen before sketch workbench activation");
+    }
+
+    void test_partDesignNewSketchCommand_usesSketchWorkflowViewportNormalization()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString commandPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/Command.cpp"));
+        QFile file(commandPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(commandPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString activatedNeedle
+            = QStringLiteral("void CmdPartDesignNewSketch::activated(int iMsg)");
+        const QString controllerNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(getActiveGuiDocument())");
+        const QString createWorkflowNeedle
+            = QStringLiteral("PartDesignGui::SketchWorkflow creator(getActiveGuiDocument());");
+
+        const int activatedPos = source.indexOf(activatedNeedle);
+        const int controllerPos = source.indexOf(controllerNeedle, activatedPos);
+        const int createWorkflowPos = source.indexOf(createWorkflowNeedle, activatedPos);
+
+        QVERIFY2(activatedPos >= 0, "CmdPartDesignNewSketch::activated not found");
+        QVERIFY2(controllerPos >= 0,
+                 "CmdPartDesignNewSketch should use SketchWorkflowController viewport normalization");
+        QVERIFY2(createWorkflowPos >= 0, "PartDesign sketch workflow creation call not found");
+        QVERIFY2(controllerPos < createWorkflowPos,
+                 "Viewport normalization should happen before PartDesign sketch creation begins");
+    }
+
+    void test_partDesignPythonCommands_useSketchWorkflowPythonBridge()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const auto verifyPythonBridge = [&repoRoot](const QString& relativePath) {
+            const QString filePath = repoRoot.filePath(relativePath);
+            QFile file(filePath);
+            QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(filePath));
+            const QString source = QString::fromUtf8(file.readAll());
+
+            QVERIFY2(source.contains(QStringLiteral("FreeCADGui.addModule(\"SketcherGui\")")),
+                     qPrintable(relativePath + QStringLiteral(" should import SketcherGui for canonical sketch entry")));
+            QVERIFY2(source.contains(QStringLiteral("SketcherGui.enterSketchEdit(App.ActiveDocument.ActiveObject.Name)")),
+                     qPrintable(relativePath + QStringLiteral(" should use SketcherGui.enterSketchEdit for canonical sketch entry")));
+            QVERIFY2(!source.contains(QStringLiteral("Gui.activeDocument().setEdit(App.ActiveDocument.ActiveObject.Name,0)")),
+                     qPrintable(relativePath + QStringLiteral(" should not call Gui.activeDocument().setEdit directly")));
+        };
+
+        verifyPythonBridge(QStringLiteral("src/Mod/PartDesign/SprocketFeature.py"));
+        verifyPythonBridge(QStringLiteral("src/Mod/PartDesign/InvoluteGearFeature.py"));
+    }
+
+    void test_sketcherGuiModule_exposesCanonicalPythonSketchBridge()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString modulePath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/AppSketcherGui.cpp"));
+        QFile file(modulePath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(modulePath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        QVERIFY2(source.contains(QStringLiteral("add_varargs_method(")),
+                 "SketcherGui module should expose Python-callable methods");
+        QVERIFY2(source.contains(QStringLiteral("\"enterSketchEdit\"")),
+                 "SketcherGui module should expose enterSketchEdit");
+        QVERIFY2(source.contains(QStringLiteral("SketchWorkflowEntryPoint::PythonBridge")),
+                 "SketcherGui.enterSketchEdit should route through the canonical sketch workflow controller");
+    }
+
     void test_applicationActivateView_sourceSetsCreatedViewActive()  // NOLINT
     {
         QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));

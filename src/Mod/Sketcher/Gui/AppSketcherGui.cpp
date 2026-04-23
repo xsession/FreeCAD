@@ -26,12 +26,14 @@
 #include <Base/Console.h>
 #include <Base/Interpreter.h>
 #include <Base/PyObjectBase.h>
+#include <App/Document.h>
 #include <Gui/Application.h>
 #include <Gui/BitmapFactory.h>
 #include <Gui/Language/Translator.h>
 #include <Gui/WidgetFactory.h>
 
 #include "PropertyConstraintListItem.h"
+#include "SketchWorkflowController.h"
 #include "SketcherSettings.h"
 #include "SoZoomTranslation.h"
 #include "ViewProviderPython.h"
@@ -67,11 +69,47 @@ public:
     Module()
         : Py::ExtensionModule<Module>("SketcherGui")
     {
+        add_varargs_method(
+            "enterSketchEdit",
+            &Module::enterSketchEdit,
+            "enterSketchEdit(objectName)\n"
+            "-- Enter sketch edit mode through the canonical sketch workflow controller."
+        );
         initialize("This module is the SketcherGui module.");  // register with Python
     }
 
     ~Module() override
     {}
+
+    Py::Object enterSketchEdit(const Py::Tuple& args)
+    {
+        char* objectName = nullptr;
+        if (!PyArg_ParseTuple(args.ptr(), "s", &objectName)) {
+            throw Py::Exception();
+        }
+
+        auto* guiDocument = Gui::Application::Instance->activeDocument();
+        if (!guiDocument) {
+            throw Py::RuntimeError("No active GUI document");
+        }
+
+        auto* appDocument = guiDocument->getDocument();
+        if (!appDocument) {
+            throw Py::RuntimeError("No active application document");
+        }
+
+        auto* object = appDocument->getObject(objectName);
+        if (!object) {
+            throw Py::RuntimeError(std::string("No such object found in document: '") + objectName + "'");
+        }
+
+        const bool ok = SketcherGui::SketchWorkflowController::enterSketchEdit(
+            guiDocument,
+            object,
+            SketchWorkflowEntryPoint::PythonBridge
+        );
+        return Py::Boolean(ok);
+    }
 
 private:
 };

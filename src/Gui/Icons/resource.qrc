@@ -69,6 +69,7 @@
         <file>DrawStyleShaded.svg</file>
         <file>DrawStyleWireFrame.svg</file>
         <file>edge-selection.svg</file>
+        <file>edit-find.svg</file>
         <file>edit_Cancel.svg</file>
         <file>edit_OK.svg</file>
         <file>edit-cleartext.svg</file>
@@ -181,6 +182,7 @@
         <file>sel-bbox.svg</file>
         <file>sel-forward.svg</file>
         <file>sel-instance.svg</file>
+        <file>solid-selection.svg</file>
         <file>spaceball_button.svg</file>
         <file>SpNav-PanLR.svg</file>
         <file>SpNav-PanUD.svg</file>

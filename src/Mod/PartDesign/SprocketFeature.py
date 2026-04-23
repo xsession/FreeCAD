@@ -73,8 +73,9 @@ class CommandSprocket:
 
         FreeCAD.ActiveDocument.openTransaction("Create Sprocket")
         FreeCADGui.addModule("SprocketFeature")
+        FreeCADGui.addModule("SketcherGui")
         FreeCADGui.doCommand("SprocketFeature.makeSprocket('Sprocket')")
-        FreeCADGui.doCommand("Gui.activeDocument().setEdit(App.ActiveDocument.ActiveObject.Name,0)")
+        FreeCADGui.doCommand("SketcherGui.enterSketchEdit(App.ActiveDocument.ActiveObject.Name)")
 
     def IsActive(self):
         if FreeCAD.ActiveDocument:

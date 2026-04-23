@@ -76,6 +76,7 @@
 #include "EditDatumDialog.h"
 #include "EditTextDialog.h"
 #include "EditModeCoinManager.h"
+#include "SketchWorkflowController.h"
 #include "SnapManager.h"
 #include "StyleParameters.h"
 #include "TaskDlgEditSketch.h"
@@ -3096,8 +3097,11 @@ bool ViewProviderSketch::selectAll()
 
 bool ViewProviderSketch::doubleClicked()
 {
-    Gui::Application::Instance->activeDocument()->setEdit(this);
-    return true;
+    return SketchWorkflowController::enterSketchEdit(
+        getDocument(),
+        getObject(),
+        SketchWorkflowEntryPoint::TreeDoubleClick
+    );
 }
 
 float ViewProviderSketch::getScaleFactor() const

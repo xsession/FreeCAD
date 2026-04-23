@@ -48,6 +48,7 @@
 #endif
 
 #include <chrono>
+#include <set>
 #include "ExportOCAFGui.h"
 #include "ImportOCAFGui.h"
 #include "OCAFBrowser.h"
@@ -61,6 +62,7 @@
 #include <Gui/Command.h>
 #include <Gui/Document.h>
 #include <Gui/MainWindow.h>
+#include <Gui/ViewProviderDocumentObject.h>
 #include <Gui/ViewProviderLink.h>
 #include <Mod/Import/App/ReaderGltf.h>
 #include <Mod/Import/App/ReaderIges.h>
@@ -356,8 +358,33 @@ private:
             if (mode >= 0) {
                 ocaf.setMode(mode);
             }
+
+            std::set<App::DocumentObject*> existingObjs(
+                pcDoc->getObjects().begin(), pcDoc->getObjects().end());
+
             auto ret = ocaf.loadShapes();
             hApp->Close(hDoc);
+
+            std::vector<App::DocumentObject*> importedObjs;
+            for (auto* obj : pcDoc->getObjects()) {
+                if (existingObjs.find(obj) == existingObjs.end()) {
+                    importedObjs.push_back(obj);
+                }
+            }
+
+            if (!importedObjs.empty()) {
+                App::GetApplication().setActiveDocument(pcDoc);
+                if (auto* gdoc = Gui::Application::Instance->getDocument(pcDoc)) {
+                    gdoc->setActiveView();
+                    for (auto* obj : importedObjs) {
+                        auto* viewProvider = dynamic_cast<Gui::ViewProviderDocumentObject*>(
+                            gdoc->getViewProvider(obj));
+                        if (viewProvider && viewProvider->Visibility.getValue()) {
+                            viewProvider->updateView();
+                        }
+                    }
+                }
+            }
 
             if (ret) {
                 App::GetApplication().setActiveDocument(pcDoc);

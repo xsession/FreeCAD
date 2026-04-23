@@ -56,6 +56,7 @@
 
 #include "SketchMirrorDialog.h"
 #include "SketchOrientationDialog.h"
+#include "SketchWorkflowController.h"
 #include "TaskSketcherValidation.h"
 #include "Utils.h"
 #include "ViewProviderSketch.h"
@@ -258,8 +259,6 @@ void CmdSketcherNewSketch::activated(int iMsg)
             Gui, "App.activeDocument().%s.AttachmentSupport = %s", FeatName.c_str(), supportString.c_str());
         doCommand(Gui, "App.activeDocument().recompute()");// recompute the sketch placement based
                                                            // on its support
-        doCommand(Gui, "Gui.activeDocument().setEdit('%s')", FeatName.c_str());
-
         Part::Feature* part = static_cast<Part::Feature*>(
             support.getValue());// if multi-part support, this will return 0
         if (part) {
@@ -271,6 +270,12 @@ void CmdSketcherNewSketch::activated(int iMsg)
                           FeatName.c_str());
             }
         }
+        auto* sketch = App::GetApplication().getActiveDocument()->getObject(FeatName.c_str());
+        SketchWorkflowController::enterSketchEdit(
+            getActiveGuiDocument(),
+            sketch,
+            SketchWorkflowEntryPoint::SketcherCreateCommand
+        );
         commitCommand();
     }
     else {
@@ -313,7 +318,12 @@ void CmdSketcherNewSketch::activated(int iMsg)
                   "App.activeDocument().%s.MapMode = \"%s\"",
                   FeatName.c_str(),
                   AttachEngine::getModeName(Attacher::mmDeactivated).c_str());
-        doCommand(Gui, "Gui.activeDocument().setEdit('%s')", FeatName.c_str());
+        auto* sketch = App::GetApplication().getActiveDocument()->getObject(FeatName.c_str());
+        SketchWorkflowController::enterSketchEdit(
+            getActiveGuiDocument(),
+            sketch,
+            SketchWorkflowEntryPoint::SketcherCreateCommand
+        );
         commitCommand();
     }
 }
@@ -348,7 +358,11 @@ void CmdSketcherEditSketch::activated(int iMsg)
     if (SketchFilter.match()) {
         Sketcher::SketchObject* Sketch =
             static_cast<Sketcher::SketchObject*>(SketchFilter.Result[0][0].getObject());
-        doCommand(Gui, "Gui.activeDocument().setEdit('%s')", Sketch->getNameInDocument());
+        SketchWorkflowController::enterSketchEdit(
+            getActiveGuiDocument(),
+            Sketch,
+            SketchWorkflowEntryPoint::SketcherEditCommand
+        );
     }
 }
 
@@ -560,7 +574,11 @@ void CmdSketcherReorientSketch::activated(int iMsg)
         r[1],
         r[2],
         r[3]);
-    doCommand(Gui, "Gui.ActiveDocument.setEdit('%s')", sketch->getNameInDocument());
+    SketchWorkflowController::enterSketchEdit(
+        getActiveGuiDocument(),
+        sketch,
+        SketchWorkflowEntryPoint::SketcherEditCommand
+    );
     commitCommand();
 }
 

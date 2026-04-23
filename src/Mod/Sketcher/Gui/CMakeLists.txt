@@ -39,6 +39,8 @@ SET(SketcherGui_SRCS
     GeometryCreationMode.h
     Command.h
     Command.cpp
+    SketchWorkflowController.h
+    SketchWorkflowController.cpp
     AutoConstraint.h
     Utils.h
     Utils.cpp

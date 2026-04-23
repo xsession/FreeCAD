@@ -41,6 +41,7 @@
 #include <Mod/PartDesign/App/Feature.h>
 #include <Mod/PartDesign/App/FeatureSketchBased.h>
 #include <Mod/Sketcher/App/SketchObject.h>
+#include <Mod/Sketcher/Gui/SketchWorkflowController.h>
 
 #include "Utils.h"
 #include "DlgActiveBody.h"
@@ -89,15 +90,11 @@ bool setEdit(App::DocumentObject* obj, PartDesign::Body* body)
         }
     }
 
-    // If the ribbon File backstage is open, close it before entering sketch edit.
-    // The backstage overlay can visually "bounce back" over the sketch task panel.
-    if (auto* backstage = Gui::BackstageView::existingInstance(); backstage && backstage->isVisible()) {
-        backstage->hide();
+    auto* guiDocument = Gui::Application::Instance->getDocument(obj->getDocument());
+    SketcherGui::SketchWorkflowController::prepareSketchEditViewport(guiDocument);
+    if (dynamic_cast<Sketcher::SketchObject*>(obj)) {
+        Gui::Application::Instance->activateWorkbench("SketcherWorkbench");
     }
-
-    // Ensure a 3D view is active, not the Start page or any non-3D MDI window.
-    // Without this, setEdit silently fails when a non-3D UI surface has focus.
-    Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
 
     auto* activeView = Gui::Application::Instance->activeView();
     if (!activeView) {

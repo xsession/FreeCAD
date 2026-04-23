@@ -69,8 +69,9 @@ class CommandInvoluteGear:
     def Activated(self):
         FreeCAD.ActiveDocument.openTransaction("Create involute gear")
         FreeCADGui.addModule("InvoluteGearFeature")
+        FreeCADGui.addModule("SketcherGui")
         FreeCADGui.doCommand("InvoluteGearFeature.makeInvoluteGear('InvoluteGear')")
-        FreeCADGui.doCommand("Gui.activeDocument().setEdit(App.ActiveDocument.ActiveObject.Name,0)")
+        FreeCADGui.doCommand("SketcherGui.enterSketchEdit(App.ActiveDocument.ActiveObject.Name)")
 
     def IsActive(self):
         if FreeCAD.ActiveDocument:
