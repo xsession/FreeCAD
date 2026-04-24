@@ -340,6 +340,94 @@ class _CmdElectronicsCoolingStudy:
         _show_project_cockpit()
 
 
+class _CmdCoolingChannelStudy:
+    """Create a cooling-channel-focused CHT study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Cooling Channel Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a steady cooling-channel conjugate heat transfer starter with multi-region defaults",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Cooling Channel Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeSolidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_cooling_channel_defaults
+
+        analysis = makeAnalysis(name="CoolingChannelAnalysis")
+        physics = makePhysicsModel(name="CoolingChannelPhysics")
+        fluid_material = makeFluidMaterial(name="CoolingChannelFluid")
+        solid_material = makeSolidMaterial(name="CoolingChannelSolid")
+        initial_conditions = makeInitialConditions(name="CoolingChannelInitialConditions")
+        solver = makeSolver(name="CoolingChannelSolver")
+        mesh = makeMeshGmsh(name="CoolingChannelMesh")
+        post = makePostPipeline(name="CoolingChannelPost")
+        inlet = makeBCInlet(name="CoolingChannelInlet")
+        outlet = makeBCOutlet(name="CoolingChannelOutlet")
+        walls = makeBCWall(name="CoolingChannelWalls")
+        result_plot = makeResultPlot(name="CoolingChannelTemperaturePlot", plot_kind="Cut Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            solid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            walls,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_cooling_channel_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solid_material=solid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            inlet_bc=inlet,
+            outlet_bc=outlet,
+            wall_bc=walls,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        try:
+            inlet.InletType = "Velocity"
+            outlet.OutletType = "Static Pressure"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
 class _CmdExternalAeroStudy:
     """Create a reusable external-aerodynamics CFD study scaffold."""
 
@@ -416,6 +504,366 @@ class _CmdExternalAeroStudy:
             outlet.StaticPressure = 0.0
             ground.BCLabel = "ground"
             ground.WallType = "Moving Wall"
+            symmetry.BCLabel = "symmetry"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdBuildingsStudy:
+    """Create a buildings-focused external-flow CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Buildings Wind Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a wind-around-buildings external-flow starter with atmospheric-style defaults and a primary wake plot",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Buildings Wind Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeBCSymmetry,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_buildings_defaults
+
+        analysis = makeAnalysis(name="BuildingsWindAnalysis")
+        physics = makePhysicsModel(name="BuildingsWindPhysics")
+        fluid_material = makeFluidMaterial(name="BuildingsAir")
+        initial_conditions = makeInitialConditions(name="BuildingsInitialConditions")
+        solver = makeSolver(name="BuildingsWindSolver")
+        mesh = makeMeshGmsh(name="BuildingsWindMesh")
+        post = makePostPipeline(name="BuildingsWindPost")
+        inlet = makeBCInlet(name="AtmosphericInlet")
+        outlet = makeBCOutlet(name="BuildingsOutlet")
+        ground = makeBCWall(name="UrbanGround")
+        symmetry = makeBCSymmetry(name="FarFieldSymmetry")
+        result_plot = makeResultPlot(name="BuildingsWindPlot", plot_kind="Cut Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            ground,
+            symmetry,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_buildings_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        try:
+            inlet.BCLabel = "atmospheric_inlet"
+            inlet.InletType = "Velocity"
+            inlet.VelocityMagnitude = 8.0
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            ground.BCLabel = "ground"
+            ground.WallType = "Stationary Wall"
+            symmetry.BCLabel = "symmetry"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdAirfoilStudy:
+    """Create an airfoil-focused external-flow CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Airfoil Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a NACA-style airfoil external-flow starter with pressure-coefficient-focused defaults",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Airfoil Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeBCSymmetry,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_airfoil_defaults
+
+        analysis = makeAnalysis(name="AirfoilAnalysis")
+        physics = makePhysicsModel(name="AirfoilPhysics")
+        fluid_material = makeFluidMaterial(name="AirfoilAir")
+        initial_conditions = makeInitialConditions(name="AirfoilInitialConditions")
+        solver = makeSolver(name="AirfoilSolver")
+        mesh = makeMeshGmsh(name="AirfoilMesh")
+        post = makePostPipeline(name="AirfoilPost")
+        inlet = makeBCInlet(name="AirfoilInlet")
+        outlet = makeBCOutlet(name="AirfoilOutlet")
+        airfoil_wall = makeBCWall(name="AirfoilWall")
+        symmetry = makeBCSymmetry(name="FarFieldSymmetry")
+        result_plot = makeResultPlot(name="AirfoilCpPlot", plot_kind="Surface Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            airfoil_wall,
+            symmetry,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_airfoil_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        try:
+            inlet.BCLabel = "inlet"
+            inlet.InletType = "Velocity"
+            inlet.VelocityMagnitude = 30.0
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            airfoil_wall.BCLabel = "airfoil"
+            airfoil_wall.WallType = "Stationary Wall"
+            symmetry.BCLabel = "symmetry"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdTeslaValveStudy:
+    """Create a Tesla-valve-focused internal-flow CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Tesla Valve Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a Tesla valve internal-flow starter with pressure-drop-focused defaults and a primary pressure plot",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Tesla Valve Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_tesla_valve_defaults
+
+        analysis = makeAnalysis(name="TeslaValveAnalysis")
+        physics = makePhysicsModel(name="TeslaValvePhysics")
+        fluid_material = makeFluidMaterial(name="TeslaValveFluid")
+        initial_conditions = makeInitialConditions(name="TeslaValveInitialConditions")
+        solver = makeSolver(name="TeslaValveSolver")
+        mesh = makeMeshGmsh(name="TeslaValveMesh")
+        post = makePostPipeline(name="TeslaValvePost")
+        inlet = makeBCInlet(name="TeslaValveInlet")
+        outlet = makeBCOutlet(name="TeslaValveOutlet")
+        walls = makeBCWall(name="TeslaValveWalls")
+        result_plot = makeResultPlot(name="TeslaValvePressurePlot", plot_kind="Cut Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            walls,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_tesla_valve_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        try:
+            inlet.BCLabel = "forward_inlet"
+            inlet.InletType = "Velocity"
+            inlet.VelocityMagnitude = 1.5
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            walls.BCLabel = "walls"
+            walls.ThermalType = "Adiabatic"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdVonKarmanStudy:
+    """Create a Von-Karman-focused transient validation CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Von Karman Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a transient Von Karman validation starter with vorticity-focused defaults and a primary wake plot",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Von Karman Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeBCSymmetry,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_von_karman_defaults
+
+        analysis = makeAnalysis(name="VonKarmanAnalysis")
+        physics = makePhysicsModel(name="VonKarmanPhysics")
+        fluid_material = makeFluidMaterial(name="VonKarmanAir")
+        initial_conditions = makeInitialConditions(name="VonKarmanInitialConditions")
+        solver = makeSolver(name="VonKarmanSolver")
+        mesh = makeMeshGmsh(name="VonKarmanMesh")
+        post = makePostPipeline(name="VonKarmanPost")
+        inlet = makeBCInlet(name="VonKarmanInlet")
+        outlet = makeBCOutlet(name="VonKarmanOutlet")
+        body_wall = makeBCWall(name="CylinderWall")
+        symmetry = makeBCSymmetry(name="FarFieldSymmetry")
+        result_plot = makeResultPlot(name="VonKarmanVorticityPlot", plot_kind="Cut Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            body_wall,
+            symmetry,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_von_karman_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        try:
+            inlet.BCLabel = "inlet"
+            inlet.InletType = "Velocity"
+            inlet.VelocityMagnitude = 2.0
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            body_wall.BCLabel = "cylinder"
+            body_wall.WallType = "Stationary Wall"
             symmetry.BCLabel = "symmetry"
         except Exception:
             pass
@@ -3227,7 +3675,12 @@ class _CmdLeakTracking:
 # --- Analysis creation (one per domain) ---
 FreeCADGui.addCommand("FlowStudio_Analysis", _CmdAnalysis())
 FreeCADGui.addCommand("FlowStudio_ElectronicsCoolingStudy", _CmdElectronicsCoolingStudy())
+FreeCADGui.addCommand("FlowStudio_CoolingChannelStudy", _CmdCoolingChannelStudy())
 FreeCADGui.addCommand("FlowStudio_ExternalAeroStudy", _CmdExternalAeroStudy())
+FreeCADGui.addCommand("FlowStudio_BuildingsStudy", _CmdBuildingsStudy())
+FreeCADGui.addCommand("FlowStudio_AirfoilStudy", _CmdAirfoilStudy())
+FreeCADGui.addCommand("FlowStudio_TeslaValveStudy", _CmdTeslaValveStudy())
+FreeCADGui.addCommand("FlowStudio_VonKarmanStudy", _CmdVonKarmanStudy())
 FreeCADGui.addCommand("FlowStudio_PipeFlowStudy", _CmdPipeFlowStudy())
 FreeCADGui.addCommand("FlowStudio_StaticMixerStudy", _CmdStaticMixerStudy())
 FreeCADGui.addCommand("FlowStudio_StructuralAnalysis", _CmdStructuralAnalysis())

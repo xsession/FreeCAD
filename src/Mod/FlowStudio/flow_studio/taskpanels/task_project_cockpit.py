@@ -43,7 +43,12 @@ class ProjectCockpitPanel:
 
     EXAMPLE_LABELS = {
         "FlowStudio_ElectronicsCoolingStudy": "EC Study",
+        "FlowStudio_CoolingChannelStudy": "Cool Ch",
         "FlowStudio_ExternalAeroStudy": "Aero Study",
+        "FlowStudio_BuildingsStudy": "Bldg Study",
+        "FlowStudio_AirfoilStudy": "Airfoil",
+        "FlowStudio_TeslaValveStudy": "Tesla",
+        "FlowStudio_VonKarmanStudy": "V-Karman",
         "FlowStudio_PipeFlowStudy": "Pipe Study",
         "FlowStudio_StaticMixerStudy": "Mixer Study",
         "FlowStudio_StructuralBracketExample": "Struct Ex",
@@ -144,7 +149,7 @@ class ProjectCockpitPanel:
         actions_layout.addWidget(self.btn_stop, control_row, 0, 1, 2)
 
         self.btn_results = QtGui.QPushButton("Open Results")
-        self.btn_results.clicked.connect(lambda: self._run_command("FlowStudio_PostPipeline"))
+        self.btn_results.clicked.connect(self._open_results)
         actions_layout.addWidget(self.btn_results, control_row, 2, 1, 2)
         layout.addWidget(actions_group)
 
@@ -175,8 +180,41 @@ class ProjectCockpitPanel:
     def _run_command(self, command_name):
         if not command_name:
             return
+        if command_name == "FlowStudio_PostPipeline":
+            self._open_results()
+            return
         try:
             FreeCADGui.runCommand(command_name)
+        finally:
+            QtCore.QTimer.singleShot(250, self._refresh)
+
+    def _preferred_result_object(self, analysis):
+        if analysis is None:
+            return None
+
+        result_plot = None
+        post_pipeline = None
+        for child in getattr(analysis, "Group", []):
+            flow_type = getattr(child, "FlowType", "")
+            if flow_type == "FlowStudio::ResultPlot" and result_plot is None:
+                result_plot = child
+            elif flow_type == "FlowStudio::PostPipeline" and post_pipeline is None:
+                post_pipeline = child
+
+        return result_plot or post_pipeline
+
+    def _open_results(self):
+        analysis = get_active_analysis()
+        target = self._preferred_result_object(analysis)
+        if target is None:
+            FreeCADGui.runCommand("FlowStudio_PostPipeline")
+            QtCore.QTimer.singleShot(250, self._refresh)
+            return
+
+        try:
+            FreeCADGui.ActiveDocument.setEdit(target.Name)
+        except Exception:
+            FreeCADGui.runCommand("FlowStudio_PostPipeline")
         finally:
             QtCore.QTimer.singleShot(250, self._refresh)
 
@@ -346,8 +384,13 @@ class ProjectCockpitPanel:
         self.runtime_log.setPlainText("\n".join(log_tail) if log_tail else "No live log output yet.")
         self.runtime_log.verticalScrollBar().setValue(self.runtime_log.verticalScrollBar().maximum())
 
+        preferred_result = self._preferred_result_object(analysis)
         self.btn_stop.setEnabled(status == "RUNNING")
-        self.btn_results.setEnabled(bool(result_path))
+        self.btn_results.setEnabled(preferred_result is not None or bool(result_path))
+        if getattr(preferred_result, "FlowType", "") == "FlowStudio::ResultPlot":
+            self.btn_results.setText("Open Primary Plot")
+        else:
+            self.btn_results.setText("Open Results")
 
     def accept(self):
         self._timer.stop()

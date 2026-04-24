@@ -177,6 +177,160 @@ def apply_static_mixer_defaults(
         post_pipeline.Label = "Static Mixer Post"
 
 
+def apply_tesla_valve_defaults(
+    analysis,
+    *,
+    physics_model=None,
+    fluid_material=None,
+    solver=None,
+    initial_conditions=None,
+    mesh=None,
+    post_pipeline=None,
+    result_plot=None,
+):
+    """Apply a Tesla-valve-focused internal-flow starter setup."""
+    apply_pipe_flow_defaults(
+        analysis,
+        physics_model=physics_model,
+        fluid_material=fluid_material,
+        solver=solver,
+        initial_conditions=initial_conditions,
+        mesh=mesh,
+        post_pipeline=post_pipeline,
+    )
+
+    if analysis is not None:
+        if hasattr(analysis, "StudyRecipeKey"):
+            analysis.StudyRecipeKey = "cfd-tesla-valve"
+        if hasattr(analysis, "Label"):
+            analysis.Label = "Tesla Valve Study"
+
+    if physics_model is not None:
+        if hasattr(physics_model, "TurbulenceModel"):
+            physics_model.TurbulenceModel = "kOmegaSST"
+
+    if solver is not None:
+        if hasattr(solver, "MaxIterations"):
+            solver.MaxIterations = 700
+
+    if initial_conditions is not None:
+        if hasattr(initial_conditions, "Ux"):
+            initial_conditions.Ux = 1.5
+        if hasattr(initial_conditions, "Pressure"):
+            initial_conditions.Pressure = 0.0
+
+    if mesh is not None:
+        if hasattr(mesh, "CharacteristicLength"):
+            mesh.CharacteristicLength = 4.0
+        if hasattr(mesh, "MinElementSize"):
+            mesh.MinElementSize = 0.2
+        if hasattr(mesh, "MaxElementSize"):
+            mesh.MaxElementSize = 8.0
+        if hasattr(mesh, "GrowthRate"):
+            mesh.GrowthRate = 1.08
+
+    if post_pipeline is not None:
+        if hasattr(post_pipeline, "Label"):
+            post_pipeline.Label = "Tesla Valve Post"
+        if hasattr(post_pipeline, "AvailableFields"):
+            post_pipeline.AvailableFields = ["Velocity Magnitude", "Pressure", "Pressure Drop"]
+        if hasattr(post_pipeline, "ActiveField"):
+            post_pipeline.ActiveField = "Pressure"
+        if hasattr(post_pipeline, "VisualizationType"):
+            post_pipeline.VisualizationType = "Contour (Slice)"
+
+    if result_plot is not None:
+        if hasattr(result_plot, "Label"):
+            result_plot.Label = "TeslaValvePressurePlot"
+        if hasattr(result_plot, "PlotKind"):
+            result_plot.PlotKind = "Cut Plot"
+        if hasattr(result_plot, "Field"):
+            result_plot.Field = "Pressure"
+        if hasattr(result_plot, "CutPlane"):
+            result_plot.CutPlane = "XY Plane"
+        if hasattr(result_plot, "Contours"):
+            result_plot.Contours = True
+
+
+def apply_von_karman_defaults(
+    analysis,
+    *,
+    physics_model=None,
+    fluid_material=None,
+    solver=None,
+    initial_conditions=None,
+    mesh=None,
+    post_pipeline=None,
+    result_plot=None,
+):
+    """Apply a Von-Karman-focused transient validation starter setup."""
+    apply_external_aero_defaults(
+        analysis,
+        physics_model=physics_model,
+        fluid_material=fluid_material,
+        solver=solver,
+        initial_conditions=initial_conditions,
+        mesh=mesh,
+        post_pipeline=post_pipeline,
+    )
+
+    if analysis is not None:
+        if hasattr(analysis, "StudyRecipeKey"):
+            analysis.StudyRecipeKey = "cfd-von-karman-vortex-street"
+        if hasattr(analysis, "Label"):
+            analysis.Label = "Von Karman Vortex Study"
+
+    if physics_model is not None:
+        if hasattr(physics_model, "TimeModel"):
+            physics_model.TimeModel = "Transient"
+        if hasattr(physics_model, "TurbulenceModel"):
+            physics_model.TurbulenceModel = "kOmegaSST"
+
+    if solver is not None:
+        if hasattr(solver, "OpenFOAMSolver"):
+            solver.OpenFOAMSolver = "pimpleFoam"
+        if hasattr(solver, "MaxIterations"):
+            solver.MaxIterations = 1200
+
+    if initial_conditions is not None:
+        if hasattr(initial_conditions, "UsePotentialFlow"):
+            initial_conditions.UsePotentialFlow = False
+        if hasattr(initial_conditions, "Ux"):
+            initial_conditions.Ux = 2.0
+
+    if mesh is not None:
+        if hasattr(mesh, "CharacteristicLength"):
+            mesh.CharacteristicLength = 8.0
+        if hasattr(mesh, "MinElementSize"):
+            mesh.MinElementSize = 0.15
+        if hasattr(mesh, "MaxElementSize"):
+            mesh.MaxElementSize = 16.0
+        if hasattr(mesh, "GrowthRate"):
+            mesh.GrowthRate = 1.08
+
+    if post_pipeline is not None:
+        if hasattr(post_pipeline, "Label"):
+            post_pipeline.Label = "Von Karman Post"
+        if hasattr(post_pipeline, "AvailableFields"):
+            post_pipeline.AvailableFields = ["Velocity Magnitude", "Vorticity", "Pressure"]
+        if hasattr(post_pipeline, "ActiveField"):
+            post_pipeline.ActiveField = "Vorticity"
+        if hasattr(post_pipeline, "VisualizationType"):
+            post_pipeline.VisualizationType = "Contour (Slice)"
+
+    if result_plot is not None:
+        if hasattr(result_plot, "Label"):
+            result_plot.Label = "VonKarmanVorticityPlot"
+        if hasattr(result_plot, "PlotKind"):
+            result_plot.PlotKind = "Cut Plot"
+        if hasattr(result_plot, "Field"):
+            result_plot.Field = "Vorticity"
+        if hasattr(result_plot, "CutPlane"):
+            result_plot.CutPlane = "YZ Plane"
+        if hasattr(result_plot, "Contours"):
+            result_plot.Contours = True
+
+
 def apply_external_aero_defaults(
     analysis,
     *,
@@ -254,6 +408,156 @@ def apply_external_aero_defaults(
 
     if post_pipeline is not None and hasattr(post_pipeline, "Label"):
         post_pipeline.Label = "External Aero Post"
+
+
+def apply_buildings_defaults(
+    analysis,
+    *,
+    physics_model=None,
+    fluid_material=None,
+    solver=None,
+    initial_conditions=None,
+    mesh=None,
+    post_pipeline=None,
+    result_plot=None,
+):
+    """Apply a buildings-focused atmospheric external-flow starter setup."""
+    apply_external_aero_defaults(
+        analysis,
+        physics_model=physics_model,
+        fluid_material=fluid_material,
+        solver=solver,
+        initial_conditions=initial_conditions,
+        mesh=mesh,
+        post_pipeline=post_pipeline,
+    )
+
+    if analysis is not None:
+        if hasattr(analysis, "StudyRecipeKey"):
+            analysis.StudyRecipeKey = "cfd-buildings"
+        if hasattr(analysis, "Label"):
+            analysis.Label = "Wind Around Buildings Study"
+
+    if physics_model is not None:
+        if hasattr(physics_model, "TurbulenceModel"):
+            physics_model.TurbulenceModel = "kEpsilon"
+
+    if solver is not None:
+        if hasattr(solver, "MaxIterations"):
+            solver.MaxIterations = 400
+
+    if initial_conditions is not None:
+        if hasattr(initial_conditions, "Ux"):
+            initial_conditions.Ux = 8.0
+        if hasattr(initial_conditions, "Uy"):
+            initial_conditions.Uy = 0.0
+        if hasattr(initial_conditions, "Uz"):
+            initial_conditions.Uz = 0.0
+
+    if mesh is not None:
+        if hasattr(mesh, "CharacteristicLength"):
+            mesh.CharacteristicLength = 150.0
+        if hasattr(mesh, "MinElementSize"):
+            mesh.MinElementSize = 10.0
+        if hasattr(mesh, "MaxElementSize"):
+            mesh.MaxElementSize = 250.0
+
+    if post_pipeline is not None:
+        if hasattr(post_pipeline, "Label"):
+            post_pipeline.Label = "Buildings Wind Post"
+        if hasattr(post_pipeline, "AvailableFields"):
+            post_pipeline.AvailableFields = ["Velocity Magnitude", "Pressure", "Turbulent Kinetic Energy"]
+        if hasattr(post_pipeline, "ActiveField"):
+            post_pipeline.ActiveField = "Velocity Magnitude"
+        if hasattr(post_pipeline, "VisualizationType"):
+            post_pipeline.VisualizationType = "Contour (Slice)"
+
+    if result_plot is not None:
+        if hasattr(result_plot, "Label"):
+            result_plot.Label = "WindSpeedClipPlot"
+        if hasattr(result_plot, "PlotKind"):
+            result_plot.PlotKind = "Cut Plot"
+        if hasattr(result_plot, "Field"):
+            result_plot.Field = "Velocity Magnitude"
+        if hasattr(result_plot, "CutPlane"):
+            result_plot.CutPlane = "YZ Plane"
+        if hasattr(result_plot, "Contours"):
+            result_plot.Contours = True
+
+
+def apply_airfoil_defaults(
+    analysis,
+    *,
+    physics_model=None,
+    fluid_material=None,
+    solver=None,
+    initial_conditions=None,
+    mesh=None,
+    post_pipeline=None,
+    result_plot=None,
+):
+    """Apply an airfoil-focused external-flow starter setup."""
+    apply_external_aero_defaults(
+        analysis,
+        physics_model=physics_model,
+        fluid_material=fluid_material,
+        solver=solver,
+        initial_conditions=initial_conditions,
+        mesh=mesh,
+        post_pipeline=post_pipeline,
+    )
+
+    if analysis is not None:
+        if hasattr(analysis, "StudyRecipeKey"):
+            analysis.StudyRecipeKey = "cfd-airfoil-naca-0012"
+        if hasattr(analysis, "Label"):
+            analysis.Label = "NACA 0012 Airfoil Study"
+
+    if physics_model is not None:
+        if hasattr(physics_model, "TurbulenceModel"):
+            physics_model.TurbulenceModel = "kOmegaSST"
+
+    if solver is not None:
+        if hasattr(solver, "MaxIterations"):
+            solver.MaxIterations = 500
+
+    if initial_conditions is not None:
+        if hasattr(initial_conditions, "Ux"):
+            initial_conditions.Ux = 30.0
+        if hasattr(initial_conditions, "Uy"):
+            initial_conditions.Uy = 0.0
+        if hasattr(initial_conditions, "Uz"):
+            initial_conditions.Uz = 0.0
+
+    if mesh is not None:
+        if hasattr(mesh, "CharacteristicLength"):
+            mesh.CharacteristicLength = 40.0
+        if hasattr(mesh, "MinElementSize"):
+            mesh.MinElementSize = 0.5
+        if hasattr(mesh, "MaxElementSize"):
+            mesh.MaxElementSize = 80.0
+        if hasattr(mesh, "GrowthRate"):
+            mesh.GrowthRate = 1.1
+
+    if post_pipeline is not None:
+        if hasattr(post_pipeline, "Label"):
+            post_pipeline.Label = "Airfoil Pressure Post"
+        if hasattr(post_pipeline, "AvailableFields"):
+            post_pipeline.AvailableFields = ["Pressure Coefficient", "Velocity Magnitude", "Wall Shear Stress"]
+        if hasattr(post_pipeline, "ActiveField"):
+            post_pipeline.ActiveField = "Pressure Coefficient"
+        if hasattr(post_pipeline, "VisualizationType"):
+            post_pipeline.VisualizationType = "Contour (Surface)"
+
+    if result_plot is not None:
+        if hasattr(result_plot, "Label"):
+            result_plot.Label = "AirfoilCpPlot"
+        if hasattr(result_plot, "PlotKind"):
+            result_plot.PlotKind = "Surface Plot"
+        if hasattr(result_plot, "Field"):
+            result_plot.Field = "Pressure Coefficient"
+        if hasattr(result_plot, "Contours"):
+            result_plot.Contours = True
 
 
 def apply_electronics_cooling_defaults(
@@ -358,6 +662,112 @@ def apply_electronics_cooling_defaults(
 
     if post_pipeline is not None and hasattr(post_pipeline, "Label"):
         post_pipeline.Label = "Electronics Cooling Post"
+
+
+def apply_cooling_channel_defaults(
+    analysis,
+    *,
+    physics_model=None,
+    fluid_material=None,
+    solid_material=None,
+    solver=None,
+    initial_conditions=None,
+    mesh=None,
+    inlet_bc=None,
+    outlet_bc=None,
+    wall_bc=None,
+    post_pipeline=None,
+    result_plot=None,
+):
+    """Apply a cooling-channel-focused steady CHT starter setup."""
+    apply_electronics_cooling_defaults(
+        analysis,
+        physics_model=physics_model,
+        fluid_material=fluid_material,
+        solid_material=solid_material,
+        solver=solver,
+        initial_conditions=initial_conditions,
+        mesh=mesh,
+        post_pipeline=post_pipeline,
+    )
+
+    if analysis is not None:
+        if hasattr(analysis, "StudyRecipeKey"):
+            analysis.StudyRecipeKey = "cfd-cooling-channel"
+        if hasattr(analysis, "Label"):
+            analysis.Label = "Cooling Channel Study"
+
+    if physics_model is not None:
+        if hasattr(physics_model, "TurbulenceModel"):
+            physics_model.TurbulenceModel = "kOmegaSST"
+
+    if solid_material is not None:
+        if hasattr(solid_material, "MaterialPreset"):
+            solid_material.MaterialPreset = "Aluminum 6061-T6"
+
+    if solver is not None:
+        if hasattr(solver, "OpenFOAMSolver"):
+            solver.OpenFOAMSolver = "chtMultiRegionSimpleFoam"
+        if hasattr(solver, "MaxIterations"):
+            solver.MaxIterations = 900
+
+    if initial_conditions is not None:
+        if hasattr(initial_conditions, "Temperature"):
+            initial_conditions.Temperature = 300.15
+        if hasattr(initial_conditions, "UsePotentialFlow"):
+            initial_conditions.UsePotentialFlow = False
+
+    if mesh is not None:
+        if hasattr(mesh, "CharacteristicLength"):
+            mesh.CharacteristicLength = 4.0
+        if hasattr(mesh, "MinElementSize"):
+            mesh.MinElementSize = 0.25
+        if hasattr(mesh, "MaxElementSize"):
+            mesh.MaxElementSize = 6.0
+        if hasattr(mesh, "GrowthRate"):
+            mesh.GrowthRate = 1.12
+
+    if inlet_bc is not None:
+        if hasattr(inlet_bc, "BCLabel"):
+            inlet_bc.BCLabel = "channel_inlet"
+        if hasattr(inlet_bc, "VelocityMagnitude"):
+            inlet_bc.VelocityMagnitude = 1.2
+        if hasattr(inlet_bc, "InletTemperature"):
+            inlet_bc.InletTemperature = 300.15
+
+    if outlet_bc is not None:
+        if hasattr(outlet_bc, "BCLabel"):
+            outlet_bc.BCLabel = "channel_outlet"
+        if hasattr(outlet_bc, "StaticPressure"):
+            outlet_bc.StaticPressure = 0.0
+
+    if wall_bc is not None:
+        if hasattr(wall_bc, "BCLabel"):
+            wall_bc.BCLabel = "channel_walls"
+        if hasattr(wall_bc, "ThermalType"):
+            wall_bc.ThermalType = "Convection"
+
+    if post_pipeline is not None:
+        if hasattr(post_pipeline, "Label"):
+            post_pipeline.Label = "Cooling Channel Post"
+        if hasattr(post_pipeline, "AvailableFields"):
+            post_pipeline.AvailableFields = ["Temperature", "Velocity Magnitude", "Heat Flux"]
+        if hasattr(post_pipeline, "ActiveField"):
+            post_pipeline.ActiveField = "Temperature"
+        if hasattr(post_pipeline, "VisualizationType"):
+            post_pipeline.VisualizationType = "Contour (Slice)"
+
+    if result_plot is not None:
+        if hasattr(result_plot, "Label"):
+            result_plot.Label = "CoolingChannelTemperaturePlot"
+        if hasattr(result_plot, "PlotKind"):
+            result_plot.PlotKind = "Cut Plot"
+        if hasattr(result_plot, "Field"):
+            result_plot.Field = "Temperature"
+        if hasattr(result_plot, "CutPlane"):
+            result_plot.CutPlane = "YZ Plane"
+        if hasattr(result_plot, "Contours"):
+            result_plot.Contours = True
 
 
 def apply_structural_bracket_defaults(
@@ -837,6 +1247,49 @@ _ELECTRONICS_COOLING_RECIPE = StudyRecipe(
 )
 
 
+_COOLING_CHANNEL_RECIPE = StudyRecipe(
+    key="cfd-cooling-channel",
+    domain_key="CFD",
+    study_keys=("cfd-cooling-channel",),
+    analysis_types=("Conjugate Heat Transfer",),
+    label="Cooling Channel CHT Starter",
+    summary=(
+        "Guided steady conjugate-heat-transfer starter for a cooling-channel study with channel inlet/outlet setup, solid-wall heat transfer, "
+        "and temperature-focused inspection."
+    ),
+    focus_workflows=("Cooling channel", "Steady CHT", "Temperature inspection"),
+    milestones=(
+        "Import or model the channel and surrounding solid region and keep inlet, outlet, and heated walls identifiable.",
+        "Use steady conjugate heat transfer with fluid and solid materials appropriate for a channel-cooling baseline.",
+        "Assign inlet, outlet, and wall thermal boundaries for the baseline cooling pass.",
+        "Inspect temperature and heat-flux distributions through the channel and adjacent solid walls.",
+    ),
+    key_parameters=(
+        "Starter inlet velocity baseline 1.2 m/s and inlet temperature 300.15 K.",
+        "Use chtMultiRegionSimpleFoam as the starter solver posture for this multi-zone steady CHT workflow.",
+        "Primary result surface is a temperature cut plot through the channel cross-section.",
+    ),
+    reference_url="https://help.sim-flow.com/tutorials/cooling-channel",
+    step_overrides={
+        2: {
+            "name": "Prepare Channel And Solid Region",
+            "description": "Import or model the coolant channel and the adjacent solid region that participates in heat transfer.",
+            "hint": "Keep channel_inlet, channel_outlet, and heated wall regions easy to identify before assigning BCs.",
+        },
+        5: {
+            "name": "Assign Channel Thermal Boundaries",
+            "description": "Configure the coolant inlet/outlet and the wall heat-transfer boundaries for the baseline cooling pass.",
+            "hint": "This starter stays in the steady CHT lane and avoids more advanced transient or resistance modeling.",
+        },
+        9: {
+            "name": "Inspect Channel Temperature Field",
+            "description": "Review temperature and heat-flux behavior through the cooling channel and nearby solid walls.",
+            "hint": "Start with the temperature cut plot before refining wall models or channel geometry.",
+        },
+    },
+)
+
+
 _PIPE_FLOW_RECIPE = StudyRecipe(
     key="cfd-pipe-flow",
     domain_key="CFD",
@@ -928,6 +1381,92 @@ _EXTERNAL_AERO_RECIPE = StudyRecipe(
 )
 
 
+_BUILDINGS_RECIPE = StudyRecipe(
+    key="cfd-buildings",
+    domain_key="CFD",
+    study_keys=("cfd-buildings",),
+    analysis_types=("External Flow",),
+    label="Buildings Atmospheric Wind Starter",
+    summary=(
+        "Guided external-flow starter for urban wind studies with atmospheric-style inlet defaults, ground/wall handling, "
+        "and velocity-focused wake inspection around building clusters."
+    ),
+    focus_workflows=("Atmospheric flow", "Buildings wind", "Wake inspection"),
+    milestones=(
+        "Import the building massing and create a roomy external domain sized for the downstream wake.",
+        "Use air material, steady external-flow physics, and a starter atmospheric inlet velocity baseline.",
+        "Create inlet, outlet, ground, and far-field symmetry placeholders around the urban geometry.",
+        "Inspect velocity acceleration, recirculation zones, and pressure loading around the building faces.",
+    ),
+    key_parameters=(
+        "Starter inlet velocity baseline Ux = 8 m/s with a steady incompressible turbulent flow model.",
+        "Use k-epsilon as the safer urban-flow default before more specific atmospheric profiles are added.",
+        "Primary result surface is a velocity cut plot for wake and street-canyon inspection.",
+    ),
+    reference_url="https://help.sim-flow.com/tutorials/buildings",
+    step_overrides={
+        2: {
+            "name": "Prepare Buildings And Wind Domain",
+            "description": "Import the building blockout and create a surrounding external-flow domain with clear inlet, outlet, and side boundaries.",
+            "hint": "Leave enough downstream length to inspect the wake behind the buildings before refining the atmospheric profile model.",
+        },
+        5: {
+            "name": "Assign Atmospheric-Style Boundaries",
+            "description": "Set the inlet, outlet, ground wall, and far-field symmetry boundaries needed for the urban wind baseline.",
+            "hint": "This starter is deliberately simple: uniform inlet now, richer atmospheric profile support later.",
+        },
+        9: {
+            "name": "Inspect Urban Wake And Surface Loading",
+            "description": "Review wind-speed acceleration, recirculation, and face pressures around the building cluster.",
+            "hint": "Use the primary velocity cut plot first, then inspect surface pressure on the windward faces.",
+        },
+    },
+)
+
+
+_AIRFOIL_RECIPE = StudyRecipe(
+    key="cfd-airfoil-naca-0012",
+    domain_key="CFD",
+    study_keys=("cfd-airfoil-naca-0012",),
+    analysis_types=("External Flow",),
+    label="NACA 0012 Airfoil Starter",
+    summary=(
+        "Guided external-flow starter for a 2D-style NACA 0012 airfoil validation setup with pressure-coefficient inspection "
+        "and angle-of-attack-ready baseline controls."
+    ),
+    focus_workflows=("Airfoil validation", "Pressure coefficients", "External aerodynamics"),
+    milestones=(
+        "Import the airfoil profile or section body and create a compact wind-tunnel domain around it.",
+        "Use steady external-flow physics with air material and potential-flow initialization for robust startup.",
+        "Create inlet, outlet, symmetry, and airfoil wall boundaries suitable for lift and pressure studies.",
+        "Inspect pressure-coefficient distribution and wake structure before running angle-of-attack variations.",
+    ),
+    key_parameters=(
+        "Starter inlet velocity baseline Ux = 30 m/s with steady incompressible external flow.",
+        "Use k-omega SST as the airfoil-safe turbulence default and keep potential-flow initialization enabled.",
+        "Primary result surface is a surface pressure-coefficient plot on the airfoil body.",
+    ),
+    reference_url="https://help.sim-flow.com/tutorials/airfoil-naca-0012",
+    step_overrides={
+        2: {
+            "name": "Prepare Airfoil And Wind Tunnel",
+            "description": "Import the airfoil section and size a wind-tunnel domain that preserves clean upstream and downstream spacing.",
+            "hint": "This starter is meant to make lift/pressure studies straightforward, not to automate airfoil generation yet.",
+        },
+        5: {
+            "name": "Assign Airfoil Boundary Set",
+            "description": "Configure inlet, outlet, symmetry, and airfoil wall boundaries for the external-flow starter case.",
+            "hint": "Keep the airfoil wall separate from the far-field boundaries so surface pressure inspection stays clean.",
+        },
+        9: {
+            "name": "Inspect Pressure Coefficients And Wake",
+            "description": "Review the starter pressure-coefficient surface and one wake view before sweeping angle of attack.",
+            "hint": "This guided starter is the baseline for later angle-of-attack and lift/drag comparison tooling.",
+        },
+    },
+)
+
+
 _STATIC_MIXER_RECIPE = StudyRecipe(
     key="cfd-static-mixer",
     domain_key="CFD",
@@ -965,6 +1504,92 @@ _STATIC_MIXER_RECIPE = StudyRecipe(
             "name": "Inspect Mixing Quality",
             "description": "Visualize scalar slices and streamlines to verify how the two inlet streams mix through the static blades.",
             "hint": "Passive scalar is the main result field for this recipe, not pressure or temperature.",
+        },
+    },
+)
+
+
+_TESLA_VALVE_RECIPE = StudyRecipe(
+    key="cfd-tesla-valve",
+    domain_key="CFD",
+    study_keys=("cfd-tesla-valve",),
+    analysis_types=("Internal Flow",),
+    label="Tesla Valve Starter",
+    summary=(
+        "Guided internal-flow starter for a Tesla valve baseline with pressure-focused post-processing and placeholder forward/reverse boundary setup "
+        "before full periodic-interface automation is introduced."
+    ),
+    focus_workflows=("Internal flow", "Pressure drop", "Tesla valve comparison"),
+    milestones=(
+        "Import the Tesla valve channel and keep the forward and reverse driving faces identifiable.",
+        "Use a steady incompressible internal-flow setup with water-like material and pressure/velocity baseline controls.",
+        "Prepare inlet, outlet, and wall boundaries for a starter forward-flow pressure-drop run.",
+        "Inspect pressure distribution and velocity guidance through the valve before adding reverse-flow comparisons.",
+    ),
+    key_parameters=(
+        "Starter inlet velocity baseline Ux = 1.5 m/s with steady incompressible internal flow.",
+        "Primary result surface is a pressure cut plot to highlight the valve pressure-drop behavior.",
+        "Periodic or AMI-specific workflow automation is still pending beyond this starter scaffold.",
+    ),
+    reference_url="https://help.sim-flow.com/tutorials/tesla-valve",
+    step_overrides={
+        2: {
+            "name": "Prepare Tesla Valve Channel",
+            "description": "Import or model the Tesla valve channel and keep the forward-flow inlet and outlet faces identifiable.",
+            "hint": "The guided starter establishes one baseline direction first; richer forward/reverse automation still comes later.",
+        },
+        5: {
+            "name": "Assign Valve Boundary Set",
+            "description": "Configure inlet, outlet, and wall conditions for a baseline Tesla-valve pressure-drop run.",
+            "hint": "Treat periodic and interface-specific workflow support as future refinement, not part of the current starter.",
+        },
+        9: {
+            "name": "Inspect Pressure Drop And Guidance",
+            "description": "Review pressure and velocity behavior through the valve path before setting up comparison directions.",
+            "hint": "Use the pressure plot first, then compare streamline steering through the main and side channels.",
+        },
+    },
+)
+
+
+_VON_KARMAN_RECIPE = StudyRecipe(
+    key="cfd-von-karman-vortex-street",
+    domain_key="CFD",
+    study_keys=("cfd-von-karman-vortex-street",),
+    analysis_types=("External Flow",),
+    label="Von Karman Validation Starter",
+    summary=(
+        "Guided transient external-flow starter for a Von Karman vortex street benchmark with vorticity-focused inspection and a validation-case posture "
+        "before richer parameterized geometry tooling is added."
+    ),
+    focus_workflows=("Transient CFD", "Vorticity inspection", "Validation case"),
+    milestones=(
+        "Import the cylinder or bluff-body geometry and size a wake-resolving external domain around it.",
+        "Use transient external-flow controls with air material and a low-speed validation-style inlet baseline.",
+        "Configure inlet, outlet, wall, and far-field boundaries appropriate for vortex shedding observation.",
+        "Inspect vorticity shedding patterns and wake development before adding benchmark comparison tooling.",
+    ),
+    key_parameters=(
+        "Starter inlet velocity baseline Ux = 2.0 m/s with transient incompressible external flow.",
+        "Primary result surface is a vorticity cut plot for wake-shedding inspection.",
+        "Parameterized geometry and benchmark comparison automation are still pending beyond this starter scaffold.",
+    ),
+    reference_url="https://help.sim-flow.com/tutorials/von-karman-vortex-street",
+    step_overrides={
+        2: {
+            "name": "Prepare Bluff Body And Wake Domain",
+            "description": "Import the cylinder or bluff-body geometry and create an external domain with enough downstream length for wake development.",
+            "hint": "The starter focuses on wake inspection and transient setup, not on automating the validation geometry itself.",
+        },
+        5: {
+            "name": "Assign Validation Boundary Set",
+            "description": "Configure inlet, outlet, body wall, and far-field boundaries for the transient wake benchmark.",
+            "hint": "Keep the cylinder wall separate from the far-field surfaces so wake and force analysis stay clean.",
+        },
+        9: {
+            "name": "Inspect Vortex Shedding",
+            "description": "Review vorticity and wake shedding behavior before extending into frequency or force-history comparisons.",
+            "hint": "The vorticity cut plot is the primary starter result for confirming the shedding pattern.",
         },
     },
 )
@@ -1187,9 +1812,14 @@ _OPTICAL_LENS_RECIPE = StudyRecipe(
 
 _RECIPES = (
     _ELECTRONICS_COOLING_RECIPE,
+    _COOLING_CHANNEL_RECIPE,
     _PIPE_FLOW_RECIPE,
     _EXTERNAL_AERO_RECIPE,
+    _BUILDINGS_RECIPE,
+    _AIRFOIL_RECIPE,
     _STATIC_MIXER_RECIPE,
+    _TESLA_VALVE_RECIPE,
+    _VON_KARMAN_RECIPE,
     _STRUCTURAL_BRACKET_RECIPE,
     _ELECTROSTATIC_CAPACITOR_RECIPE,
     _ELECTROMAGNETIC_COIL_RECIPE,

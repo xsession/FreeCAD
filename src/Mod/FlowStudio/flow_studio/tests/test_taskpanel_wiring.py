@@ -54,7 +54,7 @@ TASKPANEL_FILES = {
     "task_project_cockpit.py": [
         'button.clicked.connect(lambda _checked=False, c=command_name: self._run_command(c))',
         "self.btn_stop.clicked.connect(self._stop_run)",
-        'self.btn_results.clicked.connect(lambda: self._run_command("FlowStudio_PostPipeline"))',
+        "self.btn_results.clicked.connect(self._open_results)",
         "self._timer.timeout.connect(self._refresh)",
     ],
     "task_flowefd_features.py": [
@@ -277,6 +277,20 @@ class TestTaskPanelWiring(unittest.TestCase):
             f"Workbench should expose example starters through grouped domain menus: {initgui_path}",
         )
 
+    def test_cooling_channel_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_cooling_channel_defaults', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="CoolingChannelTemperaturePlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_cooling_channel_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_CoolingChannelStudy", _CmdCoolingChannelStudy())',
+            commands_source,
+            f"Missing cooling channel study command registration: {commands_path}",
+        )
+
     def test_examples_toolbar_is_separate_from_analysis_toolbar(self):
         initgui_path, initgui_source = self._read_source("../InitGui.py")
 
@@ -300,6 +314,62 @@ class TestTaskPanelWiring(unittest.TestCase):
             'FreeCADGui.addCommand("FlowStudio_ExternalAeroStudy", _CmdExternalAeroStudy())',
             commands_source,
             f"Missing external aero study command registration: {commands_path}",
+        )
+
+    def test_buildings_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_buildings_defaults', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="BuildingsWindPlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_buildings_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_BuildingsStudy", _CmdBuildingsStudy())',
+            commands_source,
+            f"Missing buildings study command registration: {commands_path}",
+        )
+
+    def test_airfoil_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_airfoil_defaults', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="AirfoilCpPlot", plot_kind="Surface Plot")', commands_source, commands_path)
+        self.assertIn('apply_airfoil_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_AirfoilStudy", _CmdAirfoilStudy())',
+            commands_source,
+            f"Missing airfoil study command registration: {commands_path}",
+        )
+
+    def test_tesla_valve_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_tesla_valve_defaults', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="TeslaValvePressurePlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_tesla_valve_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_TeslaValveStudy", _CmdTeslaValveStudy())',
+            commands_source,
+            f"Missing Tesla valve study command registration: {commands_path}",
+        )
+
+    def test_von_karman_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_von_karman_defaults', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="VonKarmanVorticityPlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_von_karman_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_VonKarmanStudy", _CmdVonKarmanStudy())',
+            commands_source,
+            f"Missing Von Karman study command registration: {commands_path}",
         )
 
     def test_pipe_flow_study_command_is_exposed_in_workbench_surface(self):
@@ -416,6 +486,35 @@ class TestTaskPanelWiring(unittest.TestCase):
             'starter_group = QtGui.QGroupBox("Starter Examples")',
             cockpit_source,
             f"Cockpit should render a dedicated starter examples area: {cockpit_path}",
+        )
+
+    def test_project_cockpit_prioritizes_primary_result_objects(self):
+        cockpit_path, cockpit_source = self._read_source(os.path.join("taskpanels", "task_project_cockpit.py"))
+
+        self.assertIn(
+            'if command_name == "FlowStudio_PostPipeline":',
+            cockpit_source,
+            f"Post actions should route through the cockpit result resolver: {cockpit_path}",
+        )
+        self.assertIn(
+            "def _preferred_result_object(self, analysis):",
+            cockpit_source,
+            f"Cockpit should resolve a preferred result object before opening results: {cockpit_path}",
+        )
+        self.assertIn(
+            'flow_type == "FlowStudio::ResultPlot"',
+            cockpit_source,
+            f"Cockpit should prefer starter result plots when available: {cockpit_path}",
+        )
+        self.assertIn(
+            "FreeCADGui.ActiveDocument.setEdit(target.Name)",
+            cockpit_source,
+            f"Cockpit should open the preferred result object directly: {cockpit_path}",
+        )
+        self.assertIn(
+            'self.btn_results.setEnabled(preferred_result is not None or bool(result_path))',
+            cockpit_source,
+            f"Open Results should stay enabled when a starter result object already exists: {cockpit_path}",
         )
 
     def test_connected_self_methods_exist(self):

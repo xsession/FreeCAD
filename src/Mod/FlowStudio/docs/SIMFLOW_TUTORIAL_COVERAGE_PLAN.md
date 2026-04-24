@@ -70,14 +70,14 @@ Verified current gaps:
 
 - no master tutorial catalog exists in-product yet
 - no broad study-recipe coverage beyond the electronics-cooling pilot
-- no comprehensive family-level scaffold layer for airfoil, external aero, rotating machinery, free-surface, or reacting flow examples
+- no comprehensive family-level scaffold layer yet for rotating machinery, free-surface, or reacting-flow examples, and deeper helper automation is still pending for several CFD tutorial families
 - advanced solver-specific backends such as dynamic mesh, MRF orchestration, multiphase region conversion, species transport, spray, MPPIC, and density-based compressible export still need deliberate implementation work
 
 Updated gap assessment after recent implementation:
 
 - the machine-readable catalog now exists, but it still acts mainly as a planning registry rather than an interactive in-product launcher
-- study-recipe coverage now extends beyond electronics cooling into multiple CFD families and all non-CFD example starters, but more tutorial-family coverage is still needed
-- starter examples now exist across all built-in physics domains, but runtime smoke validation of those starters is still missing
+- study-recipe coverage now extends beyond electronics cooling into multiple CFD families, a dedicated Cooling Channel CHT starter, Buildings/Airfoil/Tesla/Von-Karman starters, and all non-CFD example starters, but more tutorial-family coverage is still needed
+- starter examples now have runtime smoke coverage for the built-in non-CFD domains, and cockpit/results surfaces now prefer starter primary result objects before falling back to the generic post-pipeline entry point
 - results scaffolding exists for all built-in-domain starters, but benchmark-grade report templates and comparison tooling remain largely future work
 
 ## Capability Families
@@ -222,13 +222,13 @@ Outcome:
 | Internal Pipe Flow | Foundation CFD | steady incompressible internal flow | family scaffold implemented | Phase 0 |
 | Wing | Foundation CFD | steady external aero | family scaffold implemented | Phase 0 |
 | Car | Foundation CFD | steady external aero with moving ground | family scaffold implemented | Phase 0 |
-| Wind around Buildings | Foundation CFD | steady atmospheric external flow | partial capability, needs atmospheric inlet workflow | Phase 0 |
-| Airfoil (NACA 0012) | Foundation CFD | 2D airfoil external flow | partial capability, needs dedicated airfoil helper | Phase 0 |
+| Wind around Buildings | Foundation CFD | steady atmospheric external flow | starter scaffold implemented, atmospheric profile refinement still pending | Phase 0 |
+| Airfoil (NACA 0012) | Foundation CFD | 2D airfoil external flow | starter scaffold implemented, richer airfoil automation still pending | Phase 0 |
 | Static Mixer | Foundation CFD | transient single-phase + passive scalar | family scaffold implemented | Phase 0 |
-| Tesla Valve | Foundation CFD | steady internal flow + periodic AMI | partial capability, needs periodic-interface workflow | Phase 0 |
-| Von Karman Vortex Street | Foundation CFD | transient 2D validation case | partial capability, needs validation recipe | Phase 0 |
+| Tesla Valve | Foundation CFD | steady internal flow + periodic AMI | starter scaffold implemented, periodic-interface workflow still pending | Phase 0 |
+| Von Karman Vortex Street | Foundation CFD | transient 2D validation case | starter scaffold implemented, richer validation automation still pending | Phase 0 |
 | Electronics Cooling | Thermal / CHT | steady CHT + radiation comparison | pilot scaffold already implemented | Phase 1 |
-| Cooling Channel | Thermal / CHT | steady CHT multi-zone | partial capability | Phase 1 |
+| Cooling Channel | Thermal / CHT | steady CHT multi-zone | starter scaffold implemented, richer multi-region automation still pending | Phase 1 |
 | Heat Exchanger | Thermal / CHT | steady CHT with thermal resistances | partial capability | Phase 1 |
 | Cylinder Cooling | Thermal / CHT | transient CHT | partial capability | Phase 1 |
 | Catalytic Converter | Advanced Internal / Environmental | porous internal flow | partial capability | Phase 2 |
@@ -278,10 +278,8 @@ Outcome:
 
 The next implementation steps should be:
 
-1. add runtime smoke tests that execute every built-in starter example and verify the created object graph, `StudyRecipeKey`, `PostPipeline`, and primary `ResultPlot`
-2. teach the cockpit and results surfaces to prioritize the starter example's primary result object instead of only the generic post pipeline command
-3. continue Phase 0 by adding dedicated helper coverage for `Wind around Buildings`, `Airfoil`, `Tesla Valve`, and `Von Karman Vortex Street`
-4. continue Phase 1 by extending the electronics-cooling pilot pattern into `Cooling Channel`, `Heat Exchanger`, and `Cylinder Cooling`
+1. continue Phase 1 by extending the electronics-cooling pilot pattern into `Heat Exchanger` and `Cylinder Cooling`
+2. deepen the new `Cooling Channel`, `Tesla Valve`, and `Von Karman Vortex Street` starters with richer multi-region automation, periodic-interface orchestration, parameterized validation geometry, and benchmark comparison tooling
 
 ## Current Execution Snapshot
 
@@ -289,10 +287,13 @@ Completed since the original roadmap draft:
 
 - machine-readable tutorial coverage registry
 - Phase 0 study-family recipes for `Pipe Flow`, `External Aerodynamics`, and `Static Mixer`
+- dedicated Phase 0 starter scaffolds for `Wind around Buildings`, `Airfoil (NACA 0012)`, `Tesla Valve`, and `Von Karman Vortex Street`
+- dedicated Phase 1 starter scaffold for `Cooling Channel`
 - generic scaffold commands for those Phase 0 CFD families
 - all-domain starter examples for built-in non-CFD physics domains
 - grouped example UI surfaces sourced from physics-domain metadata
 - non-CFD workflow recipe overlays and starter result scaffolds
+- runtime smoke coverage for the built-in non-CFD starter examples
 
 The roadmap focus has therefore shifted from proving the study-family architecture to hardening it with runtime validation and filling out the remaining tutorial families.
 

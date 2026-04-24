@@ -134,7 +134,12 @@ CFD = PhysicsDomain(
     physics_model_type="FlowStudio::PhysicsModel",
     example_commands=[
         "FlowStudio_ElectronicsCoolingStudy",
+        "FlowStudio_CoolingChannelStudy",
         "FlowStudio_ExternalAeroStudy",
+        "FlowStudio_BuildingsStudy",
+        "FlowStudio_AirfoilStudy",
+        "FlowStudio_TeslaValveStudy",
+        "FlowStudio_VonKarmanStudy",
         "FlowStudio_PipeFlowStudy",
         "FlowStudio_StaticMixerStudy",
     ],

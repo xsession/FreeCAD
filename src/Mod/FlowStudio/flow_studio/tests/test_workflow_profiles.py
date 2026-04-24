@@ -210,6 +210,56 @@ class TestWorkflowProfiles(unittest.TestCase):
         self.assertEqual(context["study_recipe"].key, "cfd-external-aero")
         self.assertEqual(context["profile"].steps[1].name, "Prepare External Domain")
 
+    def test_buildings_recipe_is_selected_by_study_key(self):
+        from flow_studio.workflow_guide import get_workflow_context
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="External Flow", StudyRecipeKey="cfd-buildings")
+        context = get_workflow_context(analysis)
+
+        self.assertIsNotNone(context["study_recipe"])
+        self.assertEqual(context["study_recipe"].key, "cfd-buildings")
+        self.assertEqual(context["study_recipe"].reference_url, "https://help.sim-flow.com/tutorials/buildings")
+
+    def test_cooling_channel_recipe_is_selected_by_study_key(self):
+        from flow_studio.workflow_guide import get_workflow_context
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Conjugate Heat Transfer", StudyRecipeKey="cfd-cooling-channel")
+        context = get_workflow_context(analysis)
+
+        self.assertIsNotNone(context["study_recipe"])
+        self.assertEqual(context["study_recipe"].key, "cfd-cooling-channel")
+        self.assertEqual(context["study_recipe"].reference_url, "https://help.sim-flow.com/tutorials/cooling-channel")
+
+    def test_airfoil_recipe_is_selected_by_study_key(self):
+        from flow_studio.workflow_guide import get_workflow_context
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="External Flow", StudyRecipeKey="cfd-airfoil-naca-0012")
+        context = get_workflow_context(analysis)
+
+        self.assertIsNotNone(context["study_recipe"])
+        self.assertEqual(context["study_recipe"].key, "cfd-airfoil-naca-0012")
+        self.assertEqual(context["study_recipe"].reference_url, "https://help.sim-flow.com/tutorials/airfoil-naca-0012")
+
+    def test_tesla_valve_recipe_is_selected_by_study_key(self):
+        from flow_studio.workflow_guide import get_workflow_context
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Internal Flow", StudyRecipeKey="cfd-tesla-valve")
+        context = get_workflow_context(analysis)
+
+        self.assertIsNotNone(context["study_recipe"])
+        self.assertEqual(context["study_recipe"].key, "cfd-tesla-valve")
+        self.assertEqual(context["study_recipe"].reference_url, "https://help.sim-flow.com/tutorials/tesla-valve")
+
+    def test_von_karman_recipe_is_selected_by_study_key(self):
+        from flow_studio.workflow_guide import get_workflow_context
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="External Flow", StudyRecipeKey="cfd-von-karman-vortex-street")
+        context = get_workflow_context(analysis)
+
+        self.assertIsNotNone(context["study_recipe"])
+        self.assertEqual(context["study_recipe"].key, "cfd-von-karman-vortex-street")
+        self.assertEqual(context["study_recipe"].reference_url, "https://help.sim-flow.com/tutorials/von-karman-vortex-street")
+
     def test_internal_flow_recipe_does_not_auto_select_without_study_key(self):
         from flow_studio.workflows.studies import get_study_recipe
 
@@ -248,6 +298,169 @@ class TestWorkflowProfiles(unittest.TestCase):
         self.assertEqual(initial.Uz, 0.0)
         self.assertEqual(solver.OpenFOAMSolver, "simpleFoam")
         self.assertEqual(mesh.MeshFormat, "OpenFOAM (polyMesh)")
+
+    def test_buildings_defaults_apply_expected_baseline_values(self):
+        from flow_studio.workflows.studies import apply_buildings_defaults
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Internal Flow", StudyRecipeKey="", Label="")
+        physics = types.SimpleNamespace(TurbulenceModel="kOmegaSST")
+        fluid = types.SimpleNamespace(Preset="Custom", MaterialName="", ReferenceTemperature=0.0)
+        solver = types.SimpleNamespace(MaxIterations=0, OpenFOAMSolver="pimpleFoam")
+        initial = types.SimpleNamespace(Ux=0.0, Uy=1.0, Uz=2.0)
+        mesh = types.SimpleNamespace(CharacteristicLength=0.0, MinElementSize=0.0, MaxElementSize=0.0)
+        post = types.SimpleNamespace(Label="", AvailableFields=[], ActiveField="", VisualizationType="")
+        plot = types.SimpleNamespace(Label="", PlotKind="Surface Plot", Field="", CutPlane="XY Plane", Contours=False)
+
+        apply_buildings_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid,
+            solver=solver,
+            initial_conditions=initial,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=plot,
+        )
+
+        self.assertEqual(analysis.StudyRecipeKey, "cfd-buildings")
+        self.assertEqual(analysis.Label, "Wind Around Buildings Study")
+        self.assertEqual(physics.TurbulenceModel, "kEpsilon")
+        self.assertEqual(initial.Ux, 8.0)
+        self.assertEqual(post.ActiveField, "Velocity Magnitude")
+        self.assertEqual(plot.Field, "Velocity Magnitude")
+        self.assertEqual(plot.CutPlane, "YZ Plane")
+
+    def test_cooling_channel_defaults_apply_expected_baseline_values(self):
+        from flow_studio.workflows.studies import apply_cooling_channel_defaults
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Internal Flow", StudyRecipeKey="", Label="")
+        physics = types.SimpleNamespace(TurbulenceModel="kEpsilon")
+        fluid = types.SimpleNamespace(Preset="Custom", MaterialName="", ReferenceTemperature=0.0)
+        solid = types.SimpleNamespace(MaterialPreset="", MaterialName="")
+        solver = types.SimpleNamespace(OpenFOAMSolver="simpleFoam", MaxIterations=0)
+        initial = types.SimpleNamespace(Temperature=0.0, UsePotentialFlow=True)
+        mesh = types.SimpleNamespace(CharacteristicLength=0.0, MinElementSize=0.0, MaxElementSize=0.0, GrowthRate=0.0)
+        inlet = types.SimpleNamespace(BCLabel="", VelocityMagnitude=0.0, InletTemperature=0.0)
+        outlet = types.SimpleNamespace(BCLabel="", StaticPressure=1.0)
+        wall = types.SimpleNamespace(BCLabel="", ThermalType="Adiabatic")
+        post = types.SimpleNamespace(Label="", AvailableFields=[], ActiveField="", VisualizationType="")
+        plot = types.SimpleNamespace(Label="", PlotKind="Surface Plot", Field="", CutPlane="XY Plane", Contours=False)
+
+        apply_cooling_channel_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid,
+            solid_material=solid,
+            solver=solver,
+            initial_conditions=initial,
+            mesh=mesh,
+            inlet_bc=inlet,
+            outlet_bc=outlet,
+            wall_bc=wall,
+            post_pipeline=post,
+            result_plot=plot,
+        )
+
+        self.assertEqual(analysis.StudyRecipeKey, "cfd-cooling-channel")
+        self.assertEqual(analysis.Label, "Cooling Channel Study")
+        self.assertEqual(solver.OpenFOAMSolver, "chtMultiRegionSimpleFoam")
+        self.assertEqual(initial.Temperature, 300.15)
+        self.assertEqual(inlet.BCLabel, "channel_inlet")
+        self.assertEqual(post.ActiveField, "Temperature")
+        self.assertEqual(plot.Field, "Temperature")
+
+    def test_airfoil_defaults_apply_expected_baseline_values(self):
+        from flow_studio.workflows.studies import apply_airfoil_defaults
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Internal Flow", StudyRecipeKey="", Label="")
+        physics = types.SimpleNamespace(TurbulenceModel="kEpsilon")
+        fluid = types.SimpleNamespace(Preset="Custom", MaterialName="", ReferenceTemperature=0.0)
+        solver = types.SimpleNamespace(MaxIterations=0, OpenFOAMSolver="pimpleFoam")
+        initial = types.SimpleNamespace(Ux=0.0, Uy=1.0, Uz=2.0)
+        mesh = types.SimpleNamespace(CharacteristicLength=0.0, MinElementSize=0.0, MaxElementSize=0.0, GrowthRate=0.0)
+        post = types.SimpleNamespace(Label="", AvailableFields=[], ActiveField="", VisualizationType="")
+        plot = types.SimpleNamespace(Label="", PlotKind="Cut Plot", Field="", Contours=False)
+
+        apply_airfoil_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid,
+            solver=solver,
+            initial_conditions=initial,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=plot,
+        )
+
+        self.assertEqual(analysis.StudyRecipeKey, "cfd-airfoil-naca-0012")
+        self.assertEqual(analysis.Label, "NACA 0012 Airfoil Study")
+        self.assertEqual(physics.TurbulenceModel, "kOmegaSST")
+        self.assertEqual(initial.Ux, 30.0)
+        self.assertEqual(post.ActiveField, "Pressure Coefficient")
+        self.assertEqual(plot.Field, "Pressure Coefficient")
+        self.assertEqual(plot.PlotKind, "Surface Plot")
+
+    def test_tesla_valve_defaults_apply_expected_baseline_values(self):
+        from flow_studio.workflows.studies import apply_tesla_valve_defaults
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="External Flow", StudyRecipeKey="", Label="")
+        physics = types.SimpleNamespace(TurbulenceModel="kEpsilon")
+        fluid = types.SimpleNamespace(Preset="Custom", MaterialName="", ReferenceTemperature=0.0)
+        solver = types.SimpleNamespace(MaxIterations=0, OpenFOAMSolver="pimpleFoam")
+        initial = types.SimpleNamespace(Ux=0.0, Uy=1.0, Uz=2.0, Pressure=99.0)
+        mesh = types.SimpleNamespace(CharacteristicLength=0.0, MinElementSize=0.0, MaxElementSize=0.0, GrowthRate=0.0)
+        post = types.SimpleNamespace(Label="", AvailableFields=[], ActiveField="", VisualizationType="")
+        plot = types.SimpleNamespace(Label="", PlotKind="Surface Plot", Field="", CutPlane="YZ Plane", Contours=False)
+
+        apply_tesla_valve_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid,
+            solver=solver,
+            initial_conditions=initial,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=plot,
+        )
+
+        self.assertEqual(analysis.StudyRecipeKey, "cfd-tesla-valve")
+        self.assertEqual(analysis.Label, "Tesla Valve Study")
+        self.assertEqual(initial.Ux, 1.5)
+        self.assertEqual(post.ActiveField, "Pressure")
+        self.assertEqual(plot.Field, "Pressure")
+        self.assertEqual(plot.CutPlane, "XY Plane")
+
+    def test_von_karman_defaults_apply_expected_baseline_values(self):
+        from flow_studio.workflows.studies import apply_von_karman_defaults
+
+        analysis = types.SimpleNamespace(PhysicsDomain="CFD", AnalysisType="Internal Flow", StudyRecipeKey="", Label="")
+        physics = types.SimpleNamespace(TimeModel="Steady", TurbulenceModel="kEpsilon")
+        fluid = types.SimpleNamespace(Preset="Custom", MaterialName="", ReferenceTemperature=0.0)
+        solver = types.SimpleNamespace(MaxIterations=0, OpenFOAMSolver="simpleFoam")
+        initial = types.SimpleNamespace(Ux=0.0, Uy=1.0, Uz=2.0, UsePotentialFlow=True)
+        mesh = types.SimpleNamespace(CharacteristicLength=0.0, MinElementSize=0.0, MaxElementSize=0.0, GrowthRate=0.0)
+        post = types.SimpleNamespace(Label="", AvailableFields=[], ActiveField="", VisualizationType="")
+        plot = types.SimpleNamespace(Label="", PlotKind="Surface Plot", Field="", CutPlane="XY Plane", Contours=False)
+
+        apply_von_karman_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid,
+            solver=solver,
+            initial_conditions=initial,
+            mesh=mesh,
+            post_pipeline=post,
+            result_plot=plot,
+        )
+
+        self.assertEqual(analysis.StudyRecipeKey, "cfd-von-karman-vortex-street")
+        self.assertEqual(analysis.Label, "Von Karman Vortex Study")
+        self.assertEqual(physics.TimeModel, "Transient")
+        self.assertEqual(solver.OpenFOAMSolver, "pimpleFoam")
+        self.assertFalse(initial.UsePotentialFlow)
+        self.assertEqual(post.ActiveField, "Vorticity")
+        self.assertEqual(plot.Field, "Vorticity")
+        self.assertEqual(plot.CutPlane, "YZ Plane")
 
     def test_pipe_flow_defaults_apply_expected_baseline_values(self):
         from flow_studio.workflows.studies import apply_pipe_flow_defaults
@@ -487,6 +700,24 @@ class TestWorkflowProfiles(unittest.TestCase):
         self.assertEqual(get_tutorial_coverage("wing").current_posture, "family-scaffold-implemented")
         self.assertEqual(get_tutorial_coverage("static-mixer").current_posture, "family-scaffold-implemented")
         self.assertIn("study-recipe", get_tutorial_coverage("pipe-flow").capabilities)
+
+    def test_phase_zero_dedicated_starters_are_tracked_in_coverage_catalog(self):
+        from flow_studio.workflows.tutorial_coverage import get_tutorial_coverage
+
+        self.assertEqual(get_tutorial_coverage("buildings").current_posture, "starter-scaffold-implemented")
+        self.assertEqual(get_tutorial_coverage("airfoil-naca-0012").current_posture, "starter-scaffold-implemented")
+        self.assertEqual(get_tutorial_coverage("tesla-valve").current_posture, "starter-scaffold-implemented")
+        self.assertEqual(get_tutorial_coverage("von-karman-vortex-street").current_posture, "starter-scaffold-implemented")
+        self.assertIn("study-recipe", get_tutorial_coverage("buildings").capabilities)
+        self.assertIn("study-recipe", get_tutorial_coverage("airfoil-naca-0012").capabilities)
+        self.assertIn("study-recipe", get_tutorial_coverage("tesla-valve").capabilities)
+        self.assertIn("study-recipe", get_tutorial_coverage("von-karman-vortex-street").capabilities)
+
+    def test_phase_one_cooling_channel_starter_is_tracked_in_coverage_catalog(self):
+        from flow_studio.workflows.tutorial_coverage import get_tutorial_coverage
+
+        self.assertEqual(get_tutorial_coverage("cooling-channel").current_posture, "starter-scaffold-implemented")
+        self.assertIn("study-recipe", get_tutorial_coverage("cooling-channel").capabilities)
 
     def test_simflow_tutorial_coverage_phase_zero_contains_foundation_cases(self):
         from flow_studio.workflows.tutorial_coverage import tutorial_coverage_by_phase

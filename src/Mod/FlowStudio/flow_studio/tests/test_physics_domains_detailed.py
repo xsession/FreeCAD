@@ -113,7 +113,12 @@ class TestCFDDomain(unittest.TestCase):
 
     def test_example_commands(self):
         self.assertIn("FlowStudio_ElectronicsCoolingStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_CoolingChannelStudy", CFD.example_commands)
         self.assertIn("FlowStudio_ExternalAeroStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_BuildingsStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_AirfoilStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_TeslaValveStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_VonKarmanStudy", CFD.example_commands)
 
 
 class TestStructuralDomain(unittest.TestCase):
@@ -298,7 +303,12 @@ class TestDomainRegistration(unittest.TestCase):
             all_example_commands(),
             [
                 "FlowStudio_ElectronicsCoolingStudy",
+                "FlowStudio_CoolingChannelStudy",
                 "FlowStudio_ExternalAeroStudy",
+                "FlowStudio_BuildingsStudy",
+                "FlowStudio_AirfoilStudy",
+                "FlowStudio_TeslaValveStudy",
+                "FlowStudio_VonKarmanStudy",
                 "FlowStudio_PipeFlowStudy",
                 "FlowStudio_StaticMixerStudy",
                 "FlowStudio_StructuralBracketExample",
@@ -315,7 +325,12 @@ class TestDomainRegistration(unittest.TestCase):
             (
                 ("CFD", "CFD (Fluid Dynamics)", (
                     "FlowStudio_ElectronicsCoolingStudy",
+                    "FlowStudio_CoolingChannelStudy",
                     "FlowStudio_ExternalAeroStudy",
+                    "FlowStudio_BuildingsStudy",
+                    "FlowStudio_AirfoilStudy",
+                    "FlowStudio_TeslaValveStudy",
+                    "FlowStudio_VonKarmanStudy",
                     "FlowStudio_PipeFlowStudy",
                     "FlowStudio_StaticMixerStudy",
                 )),

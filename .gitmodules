@@ -10,3 +10,12 @@
 [submodule "src/Mod/AddonManager"]
 	path = src/Mod/AddonManager
 	url = https://github.com/FreeCAD/AddonManager.git
+[submodule "src/Mod/FlowStudio/solver_repos/openfoam"]
+	path = src/Mod/FlowStudio/solver_repos/openfoam
+	url = https://github.com/OpenFOAM/OpenFOAM-dev.git
+[submodule "src/Mod/FlowStudio/solver_repos/elmerfem"]
+	path = src/Mod/FlowStudio/solver_repos/elmerfem
+	url = https://github.com/ElmerCSC/elmerfem.git
+[submodule "src/Mod/FlowStudio/solver_repos/fluidx3d"]
+	path = src/Mod/FlowStudio/solver_repos/fluidx3d
+	url = https://github.com/ProjectPhysX/FluidX3D.git
