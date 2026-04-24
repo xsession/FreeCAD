@@ -64,6 +64,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     ANALYSIS_COMMANDS = [
         "FlowStudio_Analysis",
+        "FlowStudio_ProjectCockpit",
         "FlowStudio_StructuralAnalysis",
         "FlowStudio_ElectrostaticAnalysis",
         "FlowStudio_ElectromagneticAnalysis",
@@ -76,6 +77,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_FluidMaterial",
         "FlowStudio_EngineeringDatabase",
         "FlowStudio_InitialConditions",
+        "FlowStudio_ImportStep",
         "FlowStudio_CheckGeometry",
         "FlowStudio_ShowFluidVolume",
         "FlowStudio_LeakTracking",
@@ -89,6 +91,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
     ]
 
     GEOMETRY_COMMANDS = [
+        "FlowStudio_ImportStep",
         "FlowStudio_CheckGeometry",
         "FlowStudio_ShowFluidVolume",
         "FlowStudio_LeakTracking",
@@ -100,6 +103,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_BoundaryLayer",
         "FlowStudio_SolverSettings",
         "FlowStudio_RunSolver",
+        "FlowStudio_StopSolver",
     ]
 
     POST_COMMANDS = [
@@ -248,6 +252,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "Setup", "Setup", "Home", order=20, home_priority="primary"
                 ),
                 [
+                    "FlowStudio_ProjectCockpit",
                     "FlowStudio_PhysicsModel",
                     "FlowStudio_FluidMaterial",
                     "FlowStudio_EngineeringDatabase",
@@ -284,6 +289,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 [
                     "FlowStudio_SolverSettings",
                     "FlowStudio_RunSolver",
+                    "FlowStudio_StopSolver",
                 ],
             )
             self.appendToolbar(
@@ -366,6 +372,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                     "FlowStudio_MeshRegion",
                     "FlowStudio_SolverSettings",
                     "FlowStudio_RunSolver",
+                    "FlowStudio_StopSolver",
                 ],
             )
             register_contextual_ribbon_panel(

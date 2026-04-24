@@ -141,6 +141,13 @@ class TaskCheckGeometry(_SimpleTaskPanel):
                 "Use Check to confirm the current model is closed enough for fluid setup.",
             )
 
+        if getattr(self.last_result, "errors", None):
+            return (
+                "warning",
+                "Geometry blocks meshing",
+                "Resolve the reported topology errors before generating the mesh or starting the solver.",
+            )
+
         if getattr(self.last_result, "issues", None):
             return (
                 "warning",
@@ -253,14 +260,21 @@ class TaskCheckGeometry(_SimpleTaskPanel):
             f"Analysis type: {self.last_result.analysis_type}",
             f"Fluid volume: {_format_volume(self.last_result.fluid_volume)}",
             f"Solid volume: {_format_volume(self.last_result.solid_volume)}",
+            f"Mesh readiness: {'ready' if getattr(self.last_result, 'mesh_ready', False) else 'blocked'}",
         ]
         for info in self.last_result.objects:
             lines.append(
                 f"{info.label}: {info.solids} solids, {info.shells} shells, "
                 f"{info.faces} faces, volume {_format_volume(info.volume)}"
             )
+        if getattr(self.last_result, "errors", None):
+            lines.append("Errors:")
+            lines.extend(f"- {issue}" for issue in self.last_result.errors)
+        if getattr(self.last_result, "warnings", None):
+            lines.append("Warnings:")
+            lines.extend(f"- {issue}" for issue in self.last_result.warnings)
         if self.last_result.issues:
-            lines.append("Issues:")
+            lines.append("Issues summary:")
             lines.extend(f"- {issue}" for issue in self.last_result.issues)
         else:
             lines.append("All checked bodies look closed enough for setup.")
@@ -405,4 +419,3 @@ class TaskLeakTracking(_SimpleTaskPanel):
         FreeCAD.Console.PrintMessage("[FlowStudio] Leak Tracking completed.\n")
         for line in lines:
             FreeCAD.Console.PrintMessage(f"{line}\n")
-

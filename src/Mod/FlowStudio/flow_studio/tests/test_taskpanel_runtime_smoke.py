@@ -938,6 +938,9 @@ class TestTaskPanelRuntimeSmoke(unittest.TestCase):
             analysis_type="Internal",
             fluid_volume=0.125,
             solid_volume=1.0,
+            mesh_ready=True,
+            errors=[],
+            warnings=[],
             objects=[types.SimpleNamespace(label="Box", solids=1, shells=0, faces=6, volume=1.0)],
             issues=[],
         )
@@ -969,6 +972,7 @@ class TestTaskPanelRuntimeSmoke(unittest.TestCase):
 
             panel._check()
             self.assertIn("Status: SUCCESSFUL", panel.results.toPlainText())
+            self.assertIn("Mesh readiness: ready", panel.results.toPlainText())
             self.assertIn("All checked bodies look closed enough for setup.", panel.results.toPlainText())
             self.assertEqual(panel.taskview_validation_title, "Geometry looks ready")
 

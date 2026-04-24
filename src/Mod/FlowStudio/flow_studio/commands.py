@@ -124,6 +124,30 @@ def _selected_geometry_references():
     return refs
 
 
+def _selected_geometry_objects():
+    """Return selected non-FlowStudio geometry objects."""
+    return [ref_obj for ref_obj, _sub_names in _selected_geometry_references()]
+
+
+def _pick_primary_geometry_object():
+    """Return a preferred geometry object for mesh/link workflows."""
+    selected = _selected_geometry_objects()
+    if selected:
+        return selected[0]
+
+    document = FreeCAD.ActiveDocument
+    if document is None:
+        return None
+
+    for obj in getattr(document, "Objects", []):
+        flow_type = getattr(obj, "FlowType", "")
+        if isinstance(flow_type, str) and flow_type.startswith("FlowStudio::"):
+            continue
+        if hasattr(obj, "Shape"):
+            return obj
+    return None
+
+
 def _assign_current_selection(obj, message_prefix="FlowStudio"):
     """Assign current part/face selection to a FlowStudio object if supported."""
     if obj is None:
@@ -165,6 +189,19 @@ def _open_task_panel(obj):
     except Exception as exc:
         FreeCAD.Console.PrintLog(
             f"FlowStudio: task panel not available for {getattr(obj, 'Name', obj)} ({exc})\n"
+        )
+
+
+def _show_project_cockpit():
+    if not FreeCAD.GuiUp:
+        return
+    try:
+        from flow_studio.taskpanels.task_project_cockpit import ProjectCockpitPanel
+
+        FreeCADGui.Control.showDialog(ProjectCockpitPanel())
+    except Exception as exc:
+        FreeCAD.Console.PrintWarning(
+            f"FlowStudio: project cockpit could not be opened ({exc})\n"
         )
 
 
@@ -584,9 +621,94 @@ class _CmdMeshGmsh:
         FreeCAD.ActiveDocument.openTransaction("Add CFD Mesh")
         from flow_studio.ObjectsFlowStudio import makeMeshGmsh
         obj = makeMeshGmsh()
+        geometry_obj = _pick_primary_geometry_object()
+        if geometry_obj is not None:
+            try:
+                obj.Part = geometry_obj
+                FreeCAD.Console.PrintMessage(
+                    f"FlowStudio Mesh: linked geometry {getattr(geometry_obj, 'Label', geometry_obj.Name)}\n"
+                )
+            except Exception:
+                pass
         _add_to_analysis(obj)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+        _open_task_panel(obj)
+
+
+class _CmdImportStep:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioMeshRegion.svg"),
+            "MenuText": translate("FlowStudio", "Import STEP Geometry"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Import a STEP model with FlowStudio topology analysis and optional auto-repair"
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None or FreeCAD.GuiUp
+
+    def Activated(self):
+        if not FreeCAD.GuiUp:
+            FreeCAD.Console.PrintWarning(
+                "FlowStudio: STEP import requires the GUI file picker.\n"
+            )
+            return
+
+        from PySide import QtWidgets
+        from flow_studio.geometry_tools import import_step_optimized
+
+        selected_path, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            None,
+            translate("FlowStudio", "Import STEP Geometry"),
+            os.path.expanduser("~"),
+            translate("FlowStudio", "STEP Files (*.step *.stp);;All Files (*)"),
+        )
+        if not selected_path:
+            return
+
+        document = FreeCAD.ActiveDocument
+        if document is None:
+            document = FreeCAD.newDocument("FlowStudio")
+
+        document.openTransaction("Import STEP Geometry")
+        try:
+            result = import_step_optimized(selected_path, document=document, repair=True)
+            document.commitTransaction()
+        except Exception as exc:
+            document.abortTransaction()
+            _show_warning_dialog(
+                translate("FlowStudio", "STEP Import"),
+                translate("FlowStudio", f"Failed to import STEP file:\n\n{exc}"),
+            )
+            raise
+
+        topology = result.topology
+        summary_lines = [
+            f"Imported: {os.path.basename(selected_path)}",
+            f"Faces: {topology.face_count}",
+            f"Solids: {topology.solid_count}",
+            f"Free edges: {topology.free_edge_count}",
+            f"Boundary loops: {len(topology.boundary_loops)}",
+        ]
+        if result.repair_applied:
+            summary_lines.append(f"Automatic lids created: {result.created_lids}")
+        if result.issues:
+            summary_lines.append("Issues:")
+            summary_lines.extend(f"- {issue}" for issue in result.issues)
+        else:
+            summary_lines.append("Topology analysis completed without blocking issues.")
+
+        FreeCAD.Console.PrintMessage("[FlowStudio] STEP import completed.\n")
+        for line in summary_lines:
+            FreeCAD.Console.PrintMessage(f"{line}\n")
+
+        _show_info_dialog(
+            translate("FlowStudio", "STEP Import"),
+            "\n".join(summary_lines),
+        )
 
 
 class _CmdMeshRegion:
@@ -800,7 +922,19 @@ class _CmdRunSolver:
                 FreeCAD.Console.PrintError(f"FlowStudio: {e}\n")
             return
         runner.write_case()
-        runner.run()
+        launched = runner.run()
+        if not launched:
+            FreeCAD.Console.PrintError("FlowStudio: Solver launch failed.\n")
+            return
+
+        try:
+            from flow_studio.runtime_monitor import register_run
+
+            register_run(analysis, solver_obj, runner)
+        except Exception as exc:
+            FreeCAD.Console.PrintWarning(
+                f"FlowStudio: live runtime monitor unavailable ({exc})\n"
+            )
 
         # Clear dirty flags after successful case write + run launch
         try:
@@ -809,6 +943,7 @@ class _CmdRunSolver:
             analysis.NeedsMeshRerun = False
         except AttributeError:
             pass
+        _show_project_cockpit()
 
     def _try_enterprise_run(self, analysis):
         """Submit supported backends through the enterprise runtime."""
@@ -2053,11 +2188,11 @@ class _CmdWorkflowGuide:
     def GetResources(self):
         return {
             "Pixmap": _icon("FlowStudioWorkflow.svg"),
-            "MenuText": translate("FlowStudio", "Workflow Guide"),
+            "MenuText": translate("FlowStudio", "Project Cockpit"),
             "Accel": "C, W",
             "ToolTip": translate(
                 "FlowStudio",
-                "Show step-by-step simulation workflow checklist"
+                "Open the color-coded project cockpit for the full simulation workflow"
             ),
         }
 
@@ -2126,10 +2261,32 @@ class _CmdWorkflowGuide:
         # If FreeCAD GUI is available, also show the task panel
         if FreeCAD.GuiUp:
             try:
-                panel = _WorkflowGuidePanel(steps, context)
-                FreeCADGui.Control.showDialog(panel)
+                _show_project_cockpit()
             except Exception:
                 pass  # Fall back to console-only output
+
+
+class _CmdStopSolver:
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioRunSolver.svg"),
+            "MenuText": translate("FlowStudio", "Stop Solver"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Terminate the active legacy solver run from the project cockpit"
+            ),
+        }
+
+    def IsActive(self):
+        return has_analysis()
+
+    def Activated(self):
+        from flow_studio.runtime_monitor import terminate_run
+
+        if terminate_run(_get_active_analysis()):
+            FreeCAD.Console.PrintWarning("FlowStudio: Stop requested for active solver run.\n")
+        else:
+            FreeCAD.Console.PrintWarning("FlowStudio: No active solver run to stop.\n")
 
 
 class _WorkflowGuidePanel:
@@ -2398,6 +2555,7 @@ FreeCADGui.addCommand("FlowStudio_EngineeringDatabase", _CmdEngineeringDatabase(
 FreeCADGui.addCommand("FlowStudio_CheckGeometry", _CmdCheckGeometry())
 FreeCADGui.addCommand("FlowStudio_ShowFluidVolume", _CmdShowFluidVolume())
 FreeCADGui.addCommand("FlowStudio_LeakTracking", _CmdLeakTracking())
+FreeCADGui.addCommand("FlowStudio_ImportStep", _CmdImportStep())
 
 # --- CFD BCs ---
 FreeCADGui.addCommand("FlowStudio_BC_Wall", _CmdBCWall())
@@ -2483,4 +2641,6 @@ FreeCADGui.addCommand("FlowStudio_GenerateParaviewScript", _CmdGenerateParaviewS
 
 # --- Workflow ---
 FreeCADGui.addCommand("FlowStudio_WorkflowGuide", _CmdWorkflowGuide())
+FreeCADGui.addCommand("FlowStudio_ProjectCockpit", _CmdWorkflowGuide())
 FreeCADGui.addCommand("FlowStudio_CheckWorkflow", _CmdCheckWorkflow())
+FreeCADGui.addCommand("FlowStudio_StopSolver", _CmdStopSolver())

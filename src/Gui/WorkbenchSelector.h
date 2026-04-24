@@ -66,6 +66,26 @@ private:
 };
 
 
+class GuiExport WorkbenchComboWidget: public QWidget
+{
+    Q_OBJECT  // NOLINT
+
+public:
+    explicit WorkbenchComboWidget(WorkbenchGroup* aGroup, QWidget* parent = nullptr);
+    ~WorkbenchComboWidget() override = default;
+
+public Q_SLOTS:
+    void refreshList(QList<QAction*> actions);
+
+private:
+    WorkbenchGroup* wbActionGroup;
+    WorkbenchComboBox* comboBox;
+    QToolButton* moreButton;
+
+    Q_DISABLE_COPY(WorkbenchComboWidget)
+};
+
+
 class GuiExport WorkbenchTabWidget: public QWidget
 {
     Q_OBJECT  // NOLINT

@@ -450,6 +450,34 @@ private Q_SLOTS:
                  "Viewport normalization should happen before PartDesign sketch creation begins");
     }
 
+    void test_partDesignWorkbench_taskWatchers_requireActiveBodyMembership()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString workbenchPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/Workbench.cpp"));
+        QFile file(workbenchPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(workbenchPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        QVERIFY2(source.contains(QStringLiteral("class ActiveBodySelectionWatcher")),
+             "PartDesign workbench should define an active-body-aware selection watcher");
+        QVERIFY2(source.contains(QStringLiteral("PartDesignGui::getBody(false)")),
+                 "ActiveBodySelectionWatcher should resolve the active PartDesign body");
+        QVERIFY2(source.contains(QStringLiteral("PartDesign::Body::findBodyOf(sel.pObject) != activeBody")),
+                 "ActiveBodySelectionWatcher should reject selections outside the active body");
+        QVERIFY2(source.contains(QStringLiteral("new ActiveBodySelectionWatcher("))
+                 && source.contains(QStringLiteral("\"SELECT Sketcher::SketchObject COUNT 1\"")),
+                 "Single-sketch modeling tools should require active-body membership");
+        QVERIFY2(source.contains(QStringLiteral("\"SELECT PartDesign::SketchBased\"")),
+                 "Transformation tools should require active-body membership");
+    }
+
     void test_partDesignAttachmentSketchFlow_usesSketchWorkflowViewportNormalization()  // NOLINT
     {
         QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));

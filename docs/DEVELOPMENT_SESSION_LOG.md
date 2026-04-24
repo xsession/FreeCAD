@@ -238,6 +238,129 @@ This bypasses C++20 parenthesized aggregate initialization entirely — the comp
 
 ## Phase 5 — VS Code Debug Configuration
 
+---
+
+## April 2026 — Inventor-Style UX Review And Product Backlog
+
+### Overview
+
+This follow-up session reviewed the FreeCAD frontend from a professional UI/UX perspective with the specific goal of making the environment more productive and comfortable for mechanical engineering work, comparable in day-to-day usability to Autodesk Inventor.
+
+The review covered:
+- GUI shell architecture
+- ribbon and backstage behavior
+- workbench switching
+- task panels and property editing
+- model-tree and workflow-state visibility
+- startup experience
+- assembly workflow UX
+
+### Main Finding
+
+FreeCAD already contains many of the right primitives for a modern CAD shell, especially in:
+- `src/Gui/RibbonBar.*`
+- `src/Gui/TaskView/TaskView.*`
+- `src/Gui/MainWindow.*`
+- `src/Gui/WorkbenchSelector.*`
+- `src/Gui/Selection/*`
+
+The main UX weakness is not missing infrastructure. It is fragmented workflow behavior across workbenches and entry points.
+
+### Documents Added
+
+| File | Purpose |
+|------|---------|
+| `docs/INVENTOR_PRODUCTIVE_UI_UX_PLAN.md` | high-level strategy for making FreeCAD feel like a coherent, comfortable mechanical CAD environment |
+| `docs/architecture/inventor-productive-ux-backlog.md` | execution backlog with epics, milestones, priorities, and recommended first slices |
+
+### Execution Direction
+
+The recommended implementation order is:
+
+1. shell-state governance and workflow consistency
+2. human-centered workbench navigation and adaptive `Home` behavior
+3. unified right-side editing surface
+4. stronger workflow-state visibility in tree and viewport
+5. first-class PartDesign and Assembly workflow passes
+6. task-oriented start surface and professional default visual comfort
+
+### Immediate Next Slice
+
+The best next implementation slice is the shell wayfinding pass:
+- workbench purpose metadata
+- searchable workbench overflow
+- favorites and recents tuning
+
+This is the lowest-risk, highest-visibility step toward a more Inventor-like experience.
+
+### Follow-Up Audit
+
+A later code-level audit of `src/Gui/Action.cpp` and `src/Gui/WorkbenchSelector.cpp` showed that this first slice is already partially implemented in the current frontend:
+- purpose metadata exists
+- favorites and recents persistence already exist
+- searchable overflow already exists for the tabbed selector path
+
+That changed the execution plan from “build the first slice” to “refine and complete it.”
+
+### Refinement Documents Added
+
+| File | Purpose |
+|------|---------|
+| `docs/architecture/inventor-productive-ux-backlog.md` | updated to reflect current selector implementation status |
+| `docs/architecture/inventor-ux-slice-01-shell-wayfinding.md` | sprint-ready implementation spec for the remaining shell-wayfinding gaps |
+
+### Revised Immediate Next Slice
+
+The actual next implementation target is now:
+- selector-mode parity between combo-box and tabbed workbench selectors
+- visible purpose text, not tooltip-only guidance
+- category/grouping cues in overflow surfaces
+- clearer favorite-management feedback
+
+### Implemented First Step
+
+The first concrete shell-wayfinding change has now been implemented in the GUI layer:
+
+- combo-box selector mode now includes the same searchable overflow and pinned-workbench management surface that previously existed only in the tabbed selector path
+
+Touched files:
+
+| File | Change |
+|------|--------|
+| `src/Gui/WorkbenchSelector.h` | added a combo-mode wrapper widget for selector + overflow actions |
+| `src/Gui/WorkbenchSelector.cpp` | extracted shared overflow-menu builder and reused it for combo and tabbed selectors |
+| `src/Gui/Action.cpp` | switched combo-mode toolbar path to the new selector widget |
+
+This moves the selector refinement from planning into implementation and narrows the remaining work to richer visible guidance rather than basic parity.
+
+### Implemented Second Step
+
+The selector overflow surfaces have now been upgraded from tooltip-dependent lists to more self-explanatory discovery surfaces:
+
+- visible one-line workbench purpose text is now shown directly in overflow entries
+- workbenches are grouped by high-level category in overflow menus
+
+Touched files:
+
+| File | Change |
+|------|--------|
+| `src/Gui/Action.cpp` | added workbench category metadata to actions |
+| `src/Gui/WorkbenchSelector.cpp` | added richer overflow entry rendering and category grouping |
+
+This narrows the remaining shell-wayfinding work to polish and stronger favorite-state communication rather than missing information architecture.
+
+### Implemented Third Step
+
+Favorite management in the selector overflow is now more explicit:
+
+- the pin-management submenu now explains that pinned workbenches remain visible for one-click switching and act as the primary tabs or primary visible modes
+
+Touched file:
+
+| File | Change |
+|------|--------|
+| `src/Gui/WorkbenchSelector.cpp` | clarified pinning behavior directly inside the pinned-workbench submenu |
+
 Created complete VS Code development environment:
 
 | File | Purpose |

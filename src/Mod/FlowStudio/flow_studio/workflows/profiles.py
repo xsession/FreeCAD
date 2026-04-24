@@ -31,7 +31,7 @@ class WorkflowProfile:
 def _base_steps() -> tuple[WorkflowStepProfile, ...]:
     return (
         WorkflowStepProfile(1, "analysis", "Create Analysis", "Create the study container and its default child objects.", "FlowStudio_Analysis", "Use FlowStudio → New Analysis to start the study."),
-        WorkflowStepProfile(2, "geometry", "Import / Create Geometry", "Bring CAD bodies into the document and keep the model recompute-ready.", "", "Import or create the bodies that define the study geometry."),
+        WorkflowStepProfile(2, "geometry", "Import / Create Geometry", "Bring CAD bodies into the document and keep the model recompute-ready.", "FlowStudio_ImportStep", "Import or create the bodies that define the study geometry."),
         WorkflowStepProfile(3, "physics", "Configure Physics Model", "Choose the governing equations, time behavior, and solver-facing physics settings.", "FlowStudio_PhysicsModel", "Double-click the physics model to configure the study."),
         WorkflowStepProfile(4, "materials", "Assign Material Properties", "Attach the relevant material model to each participating body or region.", "FlowStudio_FluidMaterial", "Assign at least one material to the participating regions."),
         WorkflowStepProfile(5, "boundaries", "Define Boundary Conditions", "Add the sources, loads, ports, boundaries, or contacts that drive the study.", "FlowStudio_BC_Inlet", "Create the boundary and excitation objects needed by this study."),

@@ -7,6 +7,8 @@
 
 import FreeCAD
 from PySide import QtGui
+
+from flow_studio.geometry_tools import generate_mesh_from_geometry
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
 
 
@@ -97,9 +99,23 @@ class TaskMeshGmsh(BaseTaskPanel):
         return widget
 
     def _run_mesh(self):
-        """Trigger mesh generation (placeholder – actual GMSH call)."""
+        """Validate geometry and launch mesh generation."""
+        self._store()
+        result = generate_mesh_from_geometry(self.obj)
+        if result.status != "SUCCESSFUL":
+            issues = list(result.issues) or ["Unknown mesh generation error."]
+            message = "FlowStudio: Mesh generation blocked:\n- " + "\n- ".join(issues)
+            self.lbl_stats.setText("Mesh blocked by geometry issues")
+            FreeCAD.Console.PrintWarning(message + "\n")
+            QtGui.QMessageBox.warning(None, "FlowStudio Mesh Generation", message)
+            return
+
+        self.lbl_stats.setText(f"Cells: {result.num_cells} | Points: {result.num_points}")
         FreeCAD.Console.PrintMessage(
-            "FlowStudio: Mesh generation triggered (GMSH integration pending)\n"
+            "FlowStudio: Mesh generated successfully\n"
+            f"  file: {result.mesh_file}\n"
+            f"  cells: {result.num_cells}\n"
+            f"  points: {result.num_points}\n"
         )
 
     def _store(self):

@@ -23,6 +23,7 @@
 #include <QAbstractItemView>
 #include <QActionGroup>
 #include <QApplication>
+#include <QFont>
 #include <QLineEdit>
 #include <QMenuBar>
 #include <QScreen>
@@ -71,11 +72,189 @@ bool actionMatchesWorkbenchFilter(QAction* action, const QString& filter)
     return haystack.contains(needle);
 }
 
+QAction* createWorkbenchOverflowAction(QAction* sourceAction,
+                                      WorkbenchGroup* wbActionGroup,
+                                      QObject* owner)
+{
+    if (!sourceAction || !wbActionGroup || !owner) {
+        return nullptr;
+    }
+
+    const QString purpose = sourceAction->property("workbenchPurpose").toString().trimmed();
+    const QString category = sourceAction->property("workbenchCategory").toString().trimmed();
+    const bool isPinned = wbActionGroup->isFavoriteWorkbench(sourceAction->objectName());
+    QString text = sourceAction->text();
+
+    if (isPinned) {
+        text += QObject::tr(" (Pinned)");
+    }
+
+    if (!purpose.isEmpty()) {
+        text += QLatin1Char('\n');
+        text += purpose;
+    }
+
+    auto* action = new QAction(sourceAction->icon(), text, owner);
+    QString toolTip = sourceAction->toolTip();
+    if (isPinned) {
+        if (!toolTip.isEmpty()) {
+            toolTip += QLatin1String("\n\n");
+        }
+        toolTip += QObject::tr("Pinned workbench: stays visible as a primary switching mode.");
+    }
+    action->setToolTip(toolTip);
+    action->setStatusTip(sourceAction->statusTip());
+    action->setProperty("workbenchPurpose", purpose);
+    action->setProperty("workbenchCategory", category);
+    action->setProperty("workbenchName", sourceAction->objectName());
+    action->setProperty("workbenchPinned", isPinned);
+
+    QObject::connect(action, &QAction::triggered, owner, [sourceAction]() {
+        sourceAction->trigger();
+    });
+
+    return action;
+}
+
+void addWorkbenchCategorySection(QMenu* menu,
+                                 const QList<QAction*>& sourceActions,
+                                 const QString& category,
+                                 QList<QAction*>& filterableActions,
+                                 WorkbenchGroup* wbActionGroup,
+                                 QObject* owner)
+{
+    QList<QAction*> categoryActions;
+    for (auto* action : sourceActions) {
+        if (action && action->property("workbenchCategory").toString() == category) {
+            categoryActions.push_back(action);
+        }
+    }
+
+    if (categoryActions.isEmpty()) {
+        return;
+    }
+
+    auto* section = menu->addSection(category);
+    QFont font = section->font();
+    font.setBold(true);
+    section->setFont(font);
+
+    for (auto* action : categoryActions) {
+        if (auto* overflowAction = createWorkbenchOverflowAction(action, wbActionGroup, owner)) {
+            menu->addAction(overflowAction);
+            filterableActions.push_back(overflowAction);
+        }
+    }
+
+    menu->addSeparator();
+}
+
 void applyWorkbenchMenuFilter(const QList<QAction*>& actions, const QString& filter)
 {
     for (auto* action : actions) {
         action->setVisible(actionMatchesWorkbenchFilter(action, filter));
     }
+}
+
+void buildWorkbenchOverflowMenu(QMenu* menu, WorkbenchGroup* wbActionGroup, QObject* owner)
+{
+    if (!menu || !wbActionGroup || !owner) {
+        return;
+    }
+
+    menu->clear();
+
+    auto* searchAction = new QWidgetAction(menu);
+    auto* searchEdit = new QLineEdit(menu);
+    searchEdit->setPlaceholderText(QObject::tr("Find workbench"));
+    searchEdit->setClearButtonEnabled(true);
+    searchAction->setDefaultWidget(searchEdit);
+    menu->addAction(searchAction);
+    menu->addSeparator();
+
+    QList<QAction*> filterableActions;
+    const QStringList categories {
+        QObject::tr("Getting Started"),
+        QObject::tr("Modeling"),
+        QObject::tr("Assembly"),
+        QObject::tr("Simulation"),
+        QObject::tr("Documentation"),
+        QObject::tr("Manufacturing"),
+        QObject::tr("Data and Utility"),
+        QObject::tr("Other")
+    };
+
+    const auto overflowActions = wbActionGroup->getOverflowWbActions();
+    if (!overflowActions.isEmpty()) {
+        for (const auto& category : categories) {
+            addWorkbenchCategorySection(
+                menu,
+                overflowActions,
+                category,
+                filterableActions,
+                wbActionGroup,
+                owner
+            );
+        }
+    }
+
+    QList<QAction*> disabledActions;
+    for (auto* action : wbActionGroup->getDisabledWbActions()) {
+        if (action && action->text() != QStringLiteral("<none>")) {
+            disabledActions.push_back(action);
+        }
+    }
+
+    if (!disabledActions.isEmpty()) {
+        menu->addSection(QObject::tr("Disabled Workbenches"));
+        for (const auto& category : categories) {
+            addWorkbenchCategorySection(
+                menu,
+                disabledActions,
+                category,
+                filterableActions,
+                wbActionGroup,
+                owner
+            );
+        }
+    }
+
+    menu->addSeparator();
+
+    auto favoritesMenu = menu->addMenu(QObject::tr("Pinned Workbenches (Primary Tabs)"));
+    auto* pinInfoAction = favoritesMenu->addAction(
+        QObject::tr("Pinned workbenches stay visible for one-click switching.")
+    );
+    pinInfoAction->setEnabled(false);
+    favoritesMenu->addSeparator();
+    for (auto* action : wbActionGroup->getEnabledWbActions()) {
+        auto* favoriteAction = favoritesMenu->addAction(action->icon(), action->text());
+        favoriteAction->setCheckable(true);
+        favoriteAction->setChecked(wbActionGroup->isFavoriteWorkbench(action->objectName()));
+        favoriteAction->setToolTip(action->toolTip());
+
+        QObject::connect(favoriteAction, &QAction::toggled, owner, [wbActionGroup, action](bool checked) {
+            wbActionGroup->setWorkbenchFavorite(action->objectName(), checked);
+        });
+    }
+
+    menu->addSeparator();
+
+    QAction* preferencesAction = menu->addAction(QObject::tr("Preferences"));
+    QObject::connect(preferencesAction, &QAction::triggered, owner, []() {
+        Gui::Dialog::DlgPreferencesImp cDlg(getMainWindow());
+        cDlg.activateGroupPage(QStringLiteral("Workbenches"), 0);
+        cDlg.exec();
+    });
+
+    QObject::connect(searchEdit, &QLineEdit::textChanged, menu, [filterableActions](const QString& text) {
+        applyWorkbenchMenuFilter(filterableActions, text);
+    });
+    QObject::connect(menu, &QMenu::aboutToShow, searchEdit, [searchEdit]() {
+        searchEdit->clear();
+        searchEdit->setFocus();
+        searchEdit->selectAll();
+    });
 }
 }
 
@@ -141,6 +320,42 @@ void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
             this->setCurrentIndex(this->count() - 1);
         }
     }
+}
+
+WorkbenchComboWidget::WorkbenchComboWidget(WorkbenchGroup* aGroup, QWidget* parent)
+    : QWidget(parent)
+    , wbActionGroup(aGroup)
+{
+    setToolTip(aGroup->toolTip());
+    setStatusTip(aGroup->action()->statusTip());
+    setWhatsThis(aGroup->action()->whatsThis());
+    setObjectName(QStringLiteral("WbComboSelector"));
+
+    auto* layout = new QHBoxLayout(this);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(2);
+
+    comboBox = new WorkbenchComboBox(aGroup, this);
+    moreButton = new QToolButton(this);
+
+    moreButton->setIcon(Gui::BitmapFactory().iconFromTheme("list-add"));
+    moreButton->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    moreButton->setPopupMode(QToolButton::InstantPopup);
+    moreButton->setMenu(new QMenu(moreButton));
+    moreButton->setObjectName(QStringLiteral("WbComboMore"));
+    moreButton->setToolTip(tr("Browse, search, and pin workbenches"));
+
+    layout->addWidget(comboBox, 1);
+    layout->addWidget(moreButton);
+
+    refreshList(aGroup->getEnabledWbActions());
+    connect(aGroup, &WorkbenchGroup::workbenchListRefreshed, this, &WorkbenchComboWidget::refreshList);
+}
+
+void WorkbenchComboWidget::refreshList(QList<QAction*> actions)
+{
+    Q_UNUSED(actions)
+    buildWorkbenchOverflowMenu(moreButton->menu(), wbActionGroup, this);
 }
 
 WorkbenchTabWidget::WorkbenchTabWidget(WorkbenchGroup* aGroup, QWidget* parent)
@@ -458,71 +673,7 @@ void WorkbenchTabWidget::setToolBarArea(Gui::ToolBarArea area)
 
 void WorkbenchTabWidget::buildPrefMenu()
 {
-    auto menu = moreButton->menu();
-
-    menu->clear();
-
-    auto* searchAction = new QWidgetAction(menu);
-    auto* searchEdit = new QLineEdit(menu);
-    searchEdit->setPlaceholderText(tr("Find workbench"));
-    searchEdit->setClearButtonEnabled(true);
-    searchAction->setDefaultWidget(searchEdit);
-    menu->addAction(searchAction);
-    menu->addSeparator();
-
-    QList<QAction*> filterableActions;
-
-    const auto overflowActions = wbActionGroup->getOverflowWbActions();
-    if (!overflowActions.isEmpty()) {
-        for (auto* action : overflowActions) {
-            menu->addAction(action);
-            filterableActions.push_back(action);
-        }
-
-        menu->addSeparator();
-    }
-
-    // Add disabled workbenches, sorted alphabetically.
-    for (auto action : wbActionGroup->getDisabledWbActions()) {
-        if (action->text() == QStringLiteral("<none>")) {
-            continue;
-        }
-
-        menu->addAction(action);
-        filterableActions.push_back(action);
-    }
-
-    menu->addSeparator();
-
-    auto favoritesMenu = menu->addMenu(tr("Pinned Workbenches"));
-    for (auto* action : wbActionGroup->getEnabledWbActions()) {
-        auto* favoriteAction = favoritesMenu->addAction(action->icon(), action->text());
-        favoriteAction->setCheckable(true);
-        favoriteAction->setChecked(wbActionGroup->isFavoriteWorkbench(action->objectName()));
-        favoriteAction->setToolTip(action->toolTip());
-
-        connect(favoriteAction, &QAction::toggled, this, [this, action](bool checked) {
-            wbActionGroup->setWorkbenchFavorite(action->objectName(), checked);
-        });
-    }
-
-    menu->addSeparator();
-
-    QAction* preferencesAction = menu->addAction(tr("Preferences"));
-    connect(preferencesAction, &QAction::triggered, this, []() {
-        Gui::Dialog::DlgPreferencesImp cDlg(getMainWindow());
-        cDlg.activateGroupPage(QStringLiteral("Workbenches"), 0);
-        cDlg.exec();
-    });
-
-    connect(searchEdit, &QLineEdit::textChanged, menu, [filterableActions](const QString& text) {
-        applyWorkbenchMenuFilter(filterableActions, text);
-    });
-    connect(menu, &QMenu::aboutToShow, searchEdit, [searchEdit]() {
-        searchEdit->clear();
-        searchEdit->setFocus();
-        searchEdit->selectAll();
-    });
+    buildWorkbenchOverflowMenu(moreButton->menu(), wbActionGroup, this);
 }
 
 void WorkbenchTabWidget::adjustSize()

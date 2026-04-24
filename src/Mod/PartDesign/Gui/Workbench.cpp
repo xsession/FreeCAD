@@ -28,6 +28,7 @@
 #include <Gui/Command.h>
 #include <Gui/Control.h>
 #include <Gui/MDIView.h>
+#include <Gui/Selection.h>
 #include <Mod/Sketcher/Gui/Workbench.h>
 #include <Mod/PartDesign/App/Body.h>
 #include <Mod/PartDesign/App/FeatureMultiTransform.h>
@@ -65,6 +66,45 @@ namespace sp = std::placeholders;
     qApp->translate("Workbench", "Part Design Helper");
     qApp->translate("Workbench", "Part Design Modeling");
 #endif
+
+namespace
+{
+class ActiveBodySelectionWatcher: public Gui::TaskView::TaskWatcherCommands
+{
+public:
+    ActiveBodySelectionWatcher(const char* filter,
+                               const char* commands[],
+                               const char* name,
+                               const char* pixmap)
+        : Gui::TaskView::TaskWatcherCommands(filter, commands, name, pixmap)
+    {}
+
+    bool shouldShow() override
+    {
+        if (!Gui::TaskView::TaskWatcherCommands::shouldShow()) {
+            return false;
+        }
+
+        auto* activeBody = PartDesignGui::getBody(false);
+        if (!activeBody) {
+            return false;
+        }
+
+        const auto selection = Gui::Selection().getSelection();
+        if (selection.empty()) {
+            return false;
+        }
+
+        for (const auto& sel : selection) {
+            if (!sel.pObject || PartDesign::Body::findBodyOf(sel.pObject) != activeBody) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+}
 
 /// @namespace PartDesignGui @class Workbench
 TYPESYSTEM_SOURCE(PartDesignGui::Workbench, Gui::StdWorkbench)
@@ -383,7 +423,7 @@ void Workbench::activated()
         "PartDesign_SubtractiveHelix",
         nullptr
     };
-    Watcher.push_back(new Gui::TaskView::TaskWatcherCommands(
+    Watcher.push_back(new ActiveBodySelectionWatcher(
         "SELECT Sketcher::SketchObject COUNT 1",
         Sketch,
         "Modeling Tools",
@@ -397,7 +437,7 @@ void Workbench::activated()
         "PartDesign_SubtractivePipe",
         nullptr
     };
-    Watcher.push_back(new Gui::TaskView::TaskWatcherCommands(
+    Watcher.push_back(new ActiveBodySelectionWatcher(
         "SELECT Sketcher::SketchObject COUNT 2..",
         Sketches,
         "Modeling tools",
@@ -415,7 +455,7 @@ void Workbench::activated()
         "PartDesign_SubtractivePipe",
         nullptr
     };
-    Watcher.push_back(new Gui::TaskView::TaskWatcherCommands(
+    Watcher.push_back(new ActiveBodySelectionWatcher(
         "SELECT PartDesign::ShapeBinder COUNT 1",
         ShapeBinder,
         "Modeling tools",
@@ -433,7 +473,7 @@ void Workbench::activated()
         "PartDesign_SubtractivePipe",
         nullptr
     };
-    Watcher.push_back(new Gui::TaskView::TaskWatcherCommands(
+    Watcher.push_back(new ActiveBodySelectionWatcher(
         "SELECT PartDesign::SubShapeBinder COUNT 1",
         SubShapeBinder,
         "Modeling tools",
@@ -447,7 +487,7 @@ void Workbench::activated()
         "PartDesign_MultiTransform",
         nullptr
     };
-    Watcher.push_back(new Gui::TaskView::TaskWatcherCommands(
+    Watcher.push_back(new ActiveBodySelectionWatcher(
         "SELECT PartDesign::SketchBased",
         Transformed,
         "Transformation Tools",

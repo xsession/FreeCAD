@@ -190,6 +190,27 @@ QString workbenchPurpose(const QString& wbName)
     return purposes.value(wbName);
 }
 
+QString workbenchCategory(const QString& wbName)
+{
+    static const QMap<QString, QString> categories {
+        {QStringLiteral("StartWorkbench"), QObject::tr("Getting Started")},
+        {QStringLiteral("PartDesignWorkbench"), QObject::tr("Modeling")},
+        {QStringLiteral("SketcherWorkbench"), QObject::tr("Modeling")},
+        {QStringLiteral("PartWorkbench"), QObject::tr("Modeling")},
+        {QStringLiteral("DraftWorkbench"), QObject::tr("Modeling")},
+        {QStringLiteral("SurfaceWorkbench"), QObject::tr("Modeling")},
+        {QStringLiteral("AssemblyWorkbench"), QObject::tr("Assembly")},
+        {QStringLiteral("TechDrawWorkbench"), QObject::tr("Documentation")},
+        {QStringLiteral("FlowStudioWorkbench"), QObject::tr("Simulation")},
+        {QStringLiteral("FemWorkbench"), QObject::tr("Simulation")},
+        {QStringLiteral("CAMWorkbench"), QObject::tr("Manufacturing")},
+        {QStringLiteral("PathWorkbench"), QObject::tr("Manufacturing")},
+        {QStringLiteral("MeshWorkbench"), QObject::tr("Data and Utility")},
+    };
+
+    return categories.value(wbName, QObject::tr("Other"));
+}
+
 QString composeWorkbenchToolTip(const QString& wbName, const QString& originalTip)
 {
     const QString purpose = workbenchPurpose(wbName).trimmed();
@@ -831,7 +852,7 @@ void WorkbenchGroup::addTo(QWidget* widget)
 
         QWidget* workbenchSelectorWidget;
         if (hGrp->GetInt("WorkbenchSelectorType", 0) == 0) {
-            workbenchSelectorWidget = new WorkbenchComboBox(this, widget);
+            workbenchSelectorWidget = new WorkbenchComboWidget(this, widget);
         }
         else {
             workbenchSelectorWidget = new WorkbenchTabWidget(this, widget);
@@ -883,6 +904,7 @@ void WorkbenchGroup::refreshWorkbenchList()
         action->setIcon(px);
         action->setToolTip(tip);
         action->setProperty("workbenchPurpose", workbenchPurpose(wbName));
+        action->setProperty("workbenchCategory", workbenchCategory(wbName));
         action->setStatusTip(tr("Selects the '%1' workbench").arg(name));
         if (index < 9) {
             action->setShortcut(QKeySequence(QStringLiteral("W,%1").arg(index + 1)));
@@ -912,6 +934,7 @@ void WorkbenchGroup::refreshWorkbenchList()
         action->setIcon(px);
         action->setToolTip(tip);
         action->setProperty("workbenchPurpose", workbenchPurpose(wbName));
+        action->setProperty("workbenchCategory", workbenchCategory(wbName));
         action->setStatusTip(tr("Select the '%1' workbench").arg(name));
         if (wbName.toStdString() == activeWbName) {
             action->setChecked(true);

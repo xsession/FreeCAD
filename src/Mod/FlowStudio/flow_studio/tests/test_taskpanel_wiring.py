@@ -51,6 +51,12 @@ TASKPANEL_FILES = {
         "self.btn_use_a.clicked.connect(self._use_selection_a)",
         "self.btn_use_b.clicked.connect(self._use_selection_b)",
     ],
+    "task_project_cockpit.py": [
+        'button.clicked.connect(lambda _checked=False, c=command_name: self._run_command(c))',
+        "self.btn_stop.clicked.connect(self._stop_run)",
+        'self.btn_results.clicked.connect(lambda: self._run_command("FlowStudio_PostPipeline"))',
+        "self._timer.timeout.connect(self._refresh)",
+    ],
     "task_flowefd_features.py": [
         "self.btn_use_selection.clicked.connect(self._use_current_selection)",
         "self.btn_clear_selection.clicked.connect(self._clear_selection)",
@@ -217,6 +223,36 @@ class TestTaskPanelWiring(unittest.TestCase):
             'FreeCADGui.addCommand("FlowStudio_ImportGeant4Result", _CmdImportGeant4Result())',
             commands_source,
             f"Missing Geant4 import command registration: {commands_path}",
+        )
+
+    def test_step_import_command_is_exposed_in_geometry_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn(
+            '"FlowStudio_ImportStep"',
+            initgui_source,
+            f"Missing STEP import command in geometry surfaces: {initgui_path}",
+        )
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ImportStep", _CmdImportStep())',
+            commands_source,
+            f"Missing STEP import command registration: {commands_path}",
+        )
+
+    def test_project_cockpit_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn(
+            '"FlowStudio_ProjectCockpit"',
+            initgui_source,
+            f"Missing project cockpit command in workbench surfaces: {initgui_path}",
+        )
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ProjectCockpit", _CmdWorkflowGuide())',
+            commands_source,
+            f"Missing project cockpit command registration: {commands_path}",
         )
 
     def test_connected_self_methods_exist(self):

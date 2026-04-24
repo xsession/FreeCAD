@@ -61,6 +61,7 @@
 #include "MainWindow.h"
 #include "RibbonGallery.h"
 #include "RibbonKeyTip.h"
+#include "Selection/Selection.h"
 #include "ViewProviderDocumentObject.h"
 #include "WorkbenchManager.h"
 
@@ -238,6 +239,224 @@ namespace {
         }
 
         return false;
+    }
+    QString toolbarLabelForHeuristics(const QString& toolbarName);
+    int toolbarOrderForMetadata(const QString& toolbarName);
+    int toolbarHomePriorityForMetadata(const QString& toolbarName);
+    bool nameContainsAny(const QString& source, std::initializer_list<const char*> keywords);
+
+    bool activeWorkbenchMatches(const QString& activeWorkbench, const QString& workbenchName)
+    {
+        return activeWorkbench.contains(workbenchName, Qt::CaseInsensitive);
+    }
+
+    QString activeEditObjectTypeName(const ViewProviderDocumentObject* editViewProvider)
+    {
+        if (!editViewProvider || !editViewProvider->getObject()) {
+            return {};
+        }
+
+        return QString::fromLatin1(editViewProvider->getObject()->getTypeId().getName());
+    }
+
+    bool selectionContainsObjectType(const QString& typeName)
+    {
+        for (const auto& selection : Gui::Selection().getSelection()) {
+            if (selection.pObject
+                && QString::fromLatin1(selection.pObject->getTypeId().getName()).contains(
+                    typeName,
+                    Qt::CaseInsensitive)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    int adaptiveHomePriorityForToolbar(const QString& toolbarName,
+                                       const QString& activeWorkbench,
+                                       const ViewProviderDocumentObject* editViewProvider)
+    {
+        const QString label = toolbarLabelForHeuristics(toolbarName);
+        const QString editTypeName = activeEditObjectTypeName(editViewProvider);
+        const int metadataPriority = toolbarHomePriorityForMetadata(toolbarName) * 100;
+        const bool sketchSelectedWithoutEdit = editTypeName.isEmpty()
+            && selectionContainsObjectType(QStringLiteral("Sketcher::SketchObject"));
+
+        if (activeWorkbenchMatches(activeWorkbench, QStringLiteral("PartDesignWorkbench"))) {
+            if (label.contains(QStringLiteral("Helper"), Qt::CaseInsensitive)) {
+                return metadataPriority;
+            }
+
+            if (editTypeName.contains(QStringLiteral("Sketcher::SketchObject"), Qt::CaseInsensitive)
+                && label.contains(QStringLiteral("Modeling"), Qt::CaseInsensitive)) {
+                return metadataPriority + 5;
+            }
+
+            if (editTypeName.contains(QStringLiteral("DressUp"), Qt::CaseInsensitive)
+                && label.contains(QStringLiteral("Dress-Up"), Qt::CaseInsensitive)) {
+                return metadataPriority + 10;
+            }
+
+            if ((editTypeName.contains(QStringLiteral("Transformed"), Qt::CaseInsensitive)
+                 || editTypeName.contains(QStringLiteral("MultiTransform"), Qt::CaseInsensitive))
+                && label.contains(QStringLiteral("Transformation"), Qt::CaseInsensitive)) {
+                return metadataPriority + 10;
+            }
+
+            if (sketchSelectedWithoutEdit
+                && label.contains(QStringLiteral("Modeling"), Qt::CaseInsensitive)) {
+                return metadataPriority + 80;
+            }
+
+            if (label.contains(QStringLiteral("Modeling"), Qt::CaseInsensitive)) {
+                return metadataPriority + 20;
+            }
+
+            if (label.contains(QStringLiteral("Dress-Up"), Qt::CaseInsensitive)) {
+                return metadataPriority + 30;
+            }
+
+            if (label.contains(QStringLiteral("Transformation"), Qt::CaseInsensitive)) {
+                return metadataPriority + 40;
+            }
+        }
+
+        if (activeWorkbenchMatches(activeWorkbench, QStringLiteral("SketcherWorkbench"))) {
+            if (label.compare(QStringLiteral("Sketcher"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority;
+            }
+            if (label.compare(QStringLiteral("Edit Mode"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 10;
+            }
+            if (label.compare(QStringLiteral("Geometries"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 20;
+            }
+            if (label.compare(QStringLiteral("Constraints"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 30;
+            }
+            if (nameContainsAny(label, {"Sketcher Tools", "Sketcher Edit Tools"})) {
+                return metadataPriority + 40;
+            }
+            if (label.compare(QStringLiteral("B-Spline Tools"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 50;
+            }
+            if (nameContainsAny(label, {"Visual Helpers", "Virtual Space"})) {
+                return metadataPriority + 60;
+            }
+        }
+
+        if (activeWorkbenchMatches(activeWorkbench, QStringLiteral("AssemblyWorkbench"))) {
+            if (label.compare(QStringLiteral("Workflow"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority;
+            }
+            if (label.compare(QStringLiteral("Joints"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 10;
+            }
+        }
+
+        if (activeWorkbenchMatches(activeWorkbench, QStringLiteral("FlowStudioWorkbench"))) {
+            if (label.compare(QStringLiteral("Analysis"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority;
+            }
+            if (label.compare(QStringLiteral("Setup"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 10;
+            }
+            if (label.compare(QStringLiteral("Solve"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 20;
+            }
+            if (label.compare(QStringLiteral("Boundary Conditions"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 30;
+            }
+            if (label.compare(QStringLiteral("Mesh"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 40;
+            }
+            if (label.compare(QStringLiteral("Geometry"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 50;
+            }
+            if (label.compare(QStringLiteral("Post-Processing"), Qt::CaseInsensitive) == 0) {
+                return metadataPriority + 60;
+            }
+        }
+
+        if (activeWorkbenchMatches(activeWorkbench, QStringLiteral("TechDrawWorkbench"))) {
+            if (nameContainsAny(label, {"TechDraw Pages", "Page"})) {
+                return metadataPriority;
+            }
+            if (nameContainsAny(label, {"TechDraw Views", "Views"})) {
+                return metadataPriority + 10;
+            }
+            if (nameContainsAny(label, {"TechDraw Dimensions", "Dimensions"})) {
+                return metadataPriority + 20;
+            }
+            if (nameContainsAny(label, {"TechDraw Annotation", "Annotations"})) {
+                return metadataPriority + 30;
+            }
+            if (nameContainsAny(label, {"TechDraw Decoration", "Decoration"})) {
+                return metadataPriority + 40;
+            }
+            if (nameContainsAny(label, {"TechDraw Attributes", "Attributes"})) {
+                return metadataPriority + 50;
+            }
+        }
+
+        return metadataPriority + toolbarOrderForMetadata(toolbarName);
+    }
+
+    int adaptiveHomePriorityForContextPanel(const RibbonContextualToolbarMetadata& metadata)
+    {
+        if (metadata.tabName.compare(QStringLiteral("Sketch"), Qt::CaseInsensitive) == 0) {
+            if (metadata.panelName.compare(QStringLiteral("Sketch"), Qt::CaseInsensitive) == 0) {
+                return 0;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Geometry"), Qt::CaseInsensitive) == 0) {
+                return 10;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Constraints"), Qt::CaseInsensitive) == 0) {
+                return 20;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Tools"), Qt::CaseInsensitive) == 0) {
+                return 30;
+            }
+            if (metadata.panelName.compare(QStringLiteral("B-Spline"), Qt::CaseInsensitive) == 0) {
+                return 40;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Visual"), Qt::CaseInsensitive) == 0) {
+                return 50;
+            }
+        }
+
+        if (metadata.tabName.compare(QStringLiteral("Assembly"), Qt::CaseInsensitive) == 0) {
+            if (metadata.panelName.compare(QStringLiteral("Assembly"), Qt::CaseInsensitive) == 0) {
+                return 0;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Joints"), Qt::CaseInsensitive) == 0) {
+                return 10;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Solve"), Qt::CaseInsensitive) == 0) {
+                return 20;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Joint Presets"), Qt::CaseInsensitive) == 0) {
+                return 30;
+            }
+        }
+
+        if (metadata.tabName.compare(QStringLiteral("Simulation"), Qt::CaseInsensitive) == 0) {
+            if (metadata.panelName.compare(QStringLiteral("Setup"), Qt::CaseInsensitive) == 0) {
+                return 0;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Boundary Conditions"), Qt::CaseInsensitive) == 0) {
+                return 10;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Mesh & Solve"), Qt::CaseInsensitive) == 0) {
+                return 20;
+            }
+            if (metadata.panelName.compare(QStringLiteral("Results"), Qt::CaseInsensitive) == 0) {
+                return 30;
+            }
+        }
+
+        return metadata.order;
     }
 
     QString toolbarLabelForHeuristics(const QString& toolbarName)
@@ -1335,8 +1554,6 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
     // Group toolbars into ribbon tabs by category
     QMap<QString, QList<ToolBarItem*>> tabMap;
     QStringList tabOrder;
-    QList<ToolBarItem*> homeSourceItems;
-
     for (ToolBarItem* it : items) {
         QString tbName = QString::fromUtf8(it->command().c_str());
         if (parseRibbonContextualToolbarMetadata(tbName).isValid()) {
@@ -1344,10 +1561,6 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         }
 
         QString tabName = categorizeToolbar(tbName);
-
-        if (shouldPromoteToolbarToHome(tbName)) {
-            homeSourceItems.append(it);
-        }
 
         if (!tabMap.contains(tabName)) {
             tabOrder.append(tabName);
@@ -1364,52 +1577,11 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         });
     }
 
-    std::stable_sort(homeSourceItems.begin(), homeSourceItems.end(), [](ToolBarItem* left, ToolBarItem* right) {
-        const int leftHomePriority
-            = toolbarHomePriorityForMetadata(QString::fromUtf8(left->command().c_str()));
-        const int rightHomePriority
-            = toolbarHomePriorityForMetadata(QString::fromUtf8(right->command().c_str()));
-        if (leftHomePriority != rightHomePriority) {
-            return leftHomePriority < rightHomePriority;
-        }
-
-        const int leftOrder = toolbarOrderForMetadata(QString::fromUtf8(left->command().c_str()));
-        const int rightOrder = toolbarOrderForMetadata(QString::fromUtf8(right->command().c_str()));
-        return leftOrder < rightOrder;
-    });
-    if (homeSourceItems.size() > MaxHomePanels) {
-        homeSourceItems = homeSourceItems.mid(0, MaxHomePanels);
-    }
-
-    if (homeSourceItems.isEmpty()) {
-        for (ToolBarItem* it : items) {
-            QString tbName = QString::fromUtf8(it->command().c_str());
-            if (isUtilityToolbarName(tbName)) {
-                continue;
-            }
-
-            homeSourceItems.append(it);
-            if (homeSourceItems.size() >= MaxHomePanels) {
-                break;
-            }
-        }
-    }
-
-    if (!homeSourceItems.isEmpty()) {
+    if (!items.isEmpty()) {
         auto* homePage = new RibbonTabPage(tabWidget);
         int homeTabIndex = tabWidget->addTab(homePage, tr("Home"));
-        tabWidget->setTabToolTip(homeTabIndex, tr("Most common actions for the active workbench"));
+        tabWidget->setTabToolTip(homeTabIndex, tr("Most common actions for the active workflow context"));
         tabPages[tr("Home")] = homePage;
-
-        for (ToolBarItem* tbItem : std::as_const(homeSourceItems)) {
-            RibbonPanel* panel = createPanel(QString::fromUtf8(tbItem->command().c_str()), tbItem);
-            if (panel && panel->buttonCount() > 0) {
-                homePage->addPanel(panel);
-            }
-            else {
-                delete panel;
-            }
-        }
     }
 
     std::stable_sort(tabOrder.begin(), tabOrder.end(), [](const QString& left, const QString& right) {
@@ -1743,6 +1915,122 @@ void RibbonBar::refreshContextualTabs()
         registeredContextualPanels[metadata.tabName].append({metadata, it.value()});
         if (metadata.accentColor.isValid() && !contextualAccentColors.contains(metadata.tabName)) {
             contextualAccentColors.insert(metadata.tabName, metadata.accentColor);
+        }
+    }
+
+    auto homeIt = tabPages.find(tr("Home"));
+    if (homeIt != tabPages.end()) {
+        auto* homePage = homeIt.value();
+        homePage->clearPanels();
+
+        struct ToolbarHomeCandidate {
+            ToolBarItem* item{};
+            int priority = DefaultRibbonPanelOrder;
+            int order = DefaultRibbonPanelOrder;
+        };
+
+        struct RegisteredHomeCandidate {
+            RibbonContextualToolbarMetadata metadata;
+            QStringList commands;
+            int priority = DefaultRibbonPanelOrder;
+        };
+
+        QList<ToolbarHomeCandidate> contextualHomeCandidates;
+        for (auto it = contextualToolbarMap.begin(); it != contextualToolbarMap.end(); ++it) {
+            for (ToolBarItem* tbItem : std::as_const(it.value())) {
+                const QString tbName = QString::fromUtf8(tbItem->command().c_str());
+                const auto metadata = parseRibbonContextualToolbarMetadata(tbName);
+                contextualHomeCandidates.push_back(
+                    {tbItem, adaptiveHomePriorityForContextPanel(metadata), metadata.order}
+                );
+            }
+        }
+        std::stable_sort(contextualHomeCandidates.begin(),
+                         contextualHomeCandidates.end(),
+                         [](const ToolbarHomeCandidate& left, const ToolbarHomeCandidate& right) {
+                             if (left.priority != right.priority) {
+                                 return left.priority < right.priority;
+                             }
+                             return left.order < right.order;
+                         });
+
+        QList<RegisteredHomeCandidate> registeredHomeCandidates;
+        for (auto it = registeredContextualPanels.begin(); it != registeredContextualPanels.end(); ++it) {
+            for (const auto& panel : std::as_const(it.value())) {
+                registeredHomeCandidates.push_back(
+                    {panel.first, panel.second, adaptiveHomePriorityForContextPanel(panel.first)}
+                );
+            }
+        }
+        std::stable_sort(registeredHomeCandidates.begin(),
+                         registeredHomeCandidates.end(),
+                         [](const RegisteredHomeCandidate& left, const RegisteredHomeCandidate& right) {
+                             if (left.priority != right.priority) {
+                                 return left.priority < right.priority;
+                             }
+                             return left.metadata.order < right.metadata.order;
+                         });
+
+        QList<ToolbarHomeCandidate> toolbarHomeCandidates;
+        for (ToolBarItem* tbItem : std::as_const(configuredToolbarItems)) {
+            const QString tbName = QString::fromUtf8(tbItem->command().c_str());
+            if (parseRibbonContextualToolbarMetadata(tbName).isValid() || isUtilityToolbarName(tbName)) {
+                continue;
+            }
+
+            toolbarHomeCandidates.push_back(
+                {tbItem,
+                 adaptiveHomePriorityForToolbar(tbName, activeWorkbench, editVp),
+                 toolbarOrderForMetadata(tbName)}
+            );
+        }
+        std::stable_sort(toolbarHomeCandidates.begin(),
+                         toolbarHomeCandidates.end(),
+                         [](const ToolbarHomeCandidate& left, const ToolbarHomeCandidate& right) {
+                             if (left.priority != right.priority) {
+                                 return left.priority < right.priority;
+                             }
+                             return left.order < right.order;
+                         });
+
+        QSet<QString> usedHomePanels;
+        int homePanelCount = 0;
+        auto addHomePanel = [&](RibbonPanel* panel, const QString& panelKey) {
+            if (!panel || panel->buttonCount() <= 0 || usedHomePanels.contains(panelKey)
+                || homePanelCount >= MaxHomePanels) {
+                delete panel;
+                return;
+            }
+
+            usedHomePanels.insert(panelKey);
+            homePage->addPanel(panel);
+            ++homePanelCount;
+        };
+
+        for (const auto& candidate : contextualHomeCandidates) {
+            addHomePanel(createPanel(QString::fromUtf8(candidate.item->command().c_str()), candidate.item),
+                         QString::fromUtf8(candidate.item->command().c_str()));
+        }
+
+        for (const auto& candidate : registeredHomeCandidates) {
+            addHomePanel(createContextPanel(candidate.metadata.panelName, candidate.commands),
+                         candidate.metadata.tabName + QStringLiteral("::") + candidate.metadata.panelName);
+        }
+
+        for (const auto& candidate : toolbarHomeCandidates) {
+            addHomePanel(createPanel(QString::fromUtf8(candidate.item->command().c_str()), candidate.item),
+                         QString::fromUtf8(candidate.item->command().c_str()));
+        }
+
+        if (homePanelCount == 0) {
+            for (const auto& candidate : toolbarHomeCandidates) {
+                if (homePanelCount >= MaxHomePanels) {
+                    break;
+                }
+
+                addHomePanel(createPanel(QString::fromUtf8(candidate.item->command().c_str()), candidate.item),
+                             QString::fromUtf8(candidate.item->command().c_str()));
+            }
         }
     }
 
