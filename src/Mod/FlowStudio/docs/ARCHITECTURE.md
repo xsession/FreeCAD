@@ -194,6 +194,10 @@ The UI should expose both a tree view and a schematic graph:
 - `Recommended for v2`: C++ geometry prep services, snappyHexMesh path, gRPC control plane, content-addressed artifacts, richer dashboards.
 - `Experimental`: standalone shell reuse, immersed-grid meshing, optional GPU solver adapters.
 
+### Vendored upstream references
+
+FlowStudio also keeps a curated set of upstream solver repositories under `src/Mod/FlowStudio/solver_repos` for adapter work, exporter validation, and reproducible backend integration. The current canonical set is documented in `SOLVER_REPOSITORIES.md` and includes OpenFOAM, Elmer, FluidX3D, Raysect, Meep, openEMS, Optiland, and Geant4.
+
 ---
 
 ## E. Multi-Solver Architecture

@@ -120,6 +120,7 @@ SET(FlowStudioDocs_SRCS
     docs/ARCHITECTURE.md
     docs/CST_STUDIO_SUITE_LAYOUT_DEEPSEARCH.md
     docs/OPTICAL_SOLVER_DEEPSEARCH.md
+    docs/SOLVER_REPOSITORIES.md
 )
 
 SET(FlowStudioFeminout_SRCS
