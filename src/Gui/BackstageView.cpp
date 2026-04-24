@@ -36,6 +36,7 @@
 #include "BackstageView.h"
 #include "MainWindow.h"
 #include "FileDialog.h"
+#include "Application.h"
 #include "Command.h"
 #include "RibbonBar.h"
 #include "Workbench.h"
@@ -340,6 +341,10 @@ void BackstageView::hideEvent(QHideEvent* event)
 
     if (ribbon && RibbonBar::isRibbonEnabled()) {
         ribbon->show();
+    }
+
+    if (Application::Instance) {
+        Application::Instance->refreshActiveWorkbench();
     }
 }
 

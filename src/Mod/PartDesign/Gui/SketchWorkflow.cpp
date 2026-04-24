@@ -43,6 +43,7 @@
 #include <Mod/PartDesign/App/ShapeBinder.h>
 #include <Mod/Part/App/Attacher.h>
 #include <Mod/Part/App/TopoShape.h>
+#include <Mod/Sketcher/Gui/SketchWorkflowController.h>
 #include <Mod/Sketcher/Gui/ViewProviderSketch.h>
 
 #include <App/Document.h>
@@ -583,9 +584,7 @@ private:
 
     void createSketchAndShowAttachment()
     {
-        // Keep a 3D view active so the attachment workflow returns to model editing
-        // instead of leaving the Start page in front.
-        Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
+        SketcherGui::SketchWorkflowController::prepareSketchEditViewport(guidocument);
         setOriginTemporaryVisibility();
 
         // Create sketch
@@ -599,7 +598,9 @@ private:
             resetOriginVisibility(partDesignBody);
 
             Gui::Selection().clearSelection();
-            Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
+            if (auto* guiDocument = Gui::Application::Instance->activeDocument()) {
+                SketcherGui::SketchWorkflowController::prepareSketchEditViewport(guiDocument);
+            }
 
             PartDesignGui::setEdit(sketch, partDesignBody);
         };
@@ -763,8 +764,9 @@ private:
             return;
         }
 
-        // Force a 3D view for plane-pick workflows that started from Start page.
-        Gui::Application::Instance->activateView(Gui::View3DInventor::getClassTypeId(), true);
+        if (auto* guiDocument = Gui::Application::Instance->getDocument(documentOfBody)) {
+            SketcherGui::SketchWorkflowController::prepareSketchEditViewport(guiDocument);
+        }
 
         std::string FeatName = documentOfBody->getUniqueObjectName("Sketch");
         auto* plane = static_cast<App::Plane*>(features.front());

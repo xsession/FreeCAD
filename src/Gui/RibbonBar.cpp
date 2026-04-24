@@ -1699,8 +1699,8 @@ RibbonButton* RibbonBar::createButton(const QString& cmdName)
 
 void RibbonBar::refreshContextualTabs()
 {
-    if (!tabWidget || !isVisible() || QApplication::closingDown()
-        || (Application::Instance && Application::Instance->isClosing())) {
+    if (!Application::Instance || !tabWidget || !isVisible() || QApplication::closingDown()
+        || Application::Instance->isClosing()) {
         return;
     }
 

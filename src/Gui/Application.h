@@ -237,6 +237,8 @@ public:
     //@{
     /// Activate a named workbench
     bool activateWorkbench(const char* name);
+    /// Re-apply the active workbench shell state after external UI changes.
+    bool refreshActiveWorkbench();
     QPixmap workbenchIcon(const QString&) const;
     QString workbenchToolTip(const QString&) const;
     QString workbenchMenuText(const QString&) const;

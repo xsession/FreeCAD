@@ -859,10 +859,9 @@ Note: your changes will be applied when you next switch workbenches\n"));
         }
     });
     dlg.exec();
-    // refresh toolbar so new icon shows up immediately
-    Workbench* active = Gui::WorkbenchManager::instance()->active();
-    if (active) {
-        active->activate();
+    // Refresh the active workbench shell so new macro commands appear immediately.
+    if (Application::Instance) {
+        Application::Instance->refreshActiveWorkbench();
     }
 }
 

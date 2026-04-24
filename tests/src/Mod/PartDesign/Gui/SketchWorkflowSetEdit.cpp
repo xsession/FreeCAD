@@ -166,19 +166,27 @@ private Q_SLOTS:
         const QString source = QString::fromUtf8(file.readAll());
 
         const QString createSketchNeedle = QStringLiteral("static void createSketch(");
-        const QString activateNeedle
-            = QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), true)");
+        const QString getDocumentNeedle
+            = QStringLiteral("Application::Instance->getDocument(documentOfBody)");
+        const QString prepareNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(guiDocument);");
         const QString setEditNeedle = QStringLiteral("PartDesignGui::setEdit(Feat, partDesignBody);");
 
         const int createSketchPos = source.indexOf(createSketchNeedle);
-        const int activatePos = source.indexOf(activateNeedle, createSketchPos);
+        const int getDocumentPos = source.indexOf(getDocumentNeedle, createSketchPos);
+        const int preparePos = source.indexOf(prepareNeedle, createSketchPos);
         const int setEditPos = source.indexOf(setEditNeedle, createSketchPos);
 
         QVERIFY2(createSketchPos >= 0, "SketchWorkflow::createSketch helper not found");
-        QVERIFY2(activatePos >= 0, "SketchWorkflow should activate a 3D view before setEdit");
+        QVERIFY2(getDocumentPos >= 0,
+                 "SketchWorkflow should resolve the GUI document before viewport normalization");
+        QVERIFY2(preparePos >= 0,
+                 "SketchWorkflow should use SketchWorkflowController viewport normalization before setEdit");
         QVERIFY2(setEditPos >= 0, "SketchWorkflow setEdit call not found");
-        QVERIFY2(activatePos < setEditPos,
-                 "SketchWorkflow must activate a 3D view before setEdit");
+        QVERIFY2(getDocumentPos < preparePos,
+                 "SketchWorkflow should resolve the GUI document before viewport normalization");
+        QVERIFY2(preparePos < setEditPos,
+                 "SketchWorkflow should normalize the viewport before setEdit");
     }
 
     void test_sketcherEditCommand_routesThroughSketchWorkflowController()  // NOLINT
@@ -205,12 +213,13 @@ private Q_SLOTS:
 
         const int activatedPos = source.indexOf(activatedNeedle);
         const int controllerPos = source.indexOf(controllerNeedle, activatedPos);
-        const int nextCommandPos = source.indexOf(QStringLiteral("bool CmdSketcherEditSketch::isActive()"),
-                                                  activatedPos);
+        const int nextCommandPos = source.indexOf(
+            QStringLiteral("bool CmdSketcherEditSketch::isActive()"), activatedPos);
         const int directSetEditPos = source.indexOf(directSetEditNeedle, activatedPos);
 
         QVERIFY2(activatedPos >= 0, "CmdSketcherEditSketch::activated not found");
-        QVERIFY2(controllerPos >= 0, "CmdSketcherEditSketch should call SketchWorkflowController");
+        QVERIFY2(controllerPos >= 0,
+                 "CmdSketcherEditSketch should call SketchWorkflowController");
         QVERIFY2(nextCommandPos >= 0, "CmdSketcherEditSketch::isActive not found");
         QVERIFY2(controllerPos < nextCommandPos,
                  "SketchWorkflowController call should be inside CmdSketcherEditSketch::activated");
@@ -439,6 +448,89 @@ private Q_SLOTS:
         QVERIFY2(createWorkflowPos >= 0, "PartDesign sketch workflow creation call not found");
         QVERIFY2(controllerPos < createWorkflowPos,
                  "Viewport normalization should happen before PartDesign sketch creation begins");
+    }
+
+    void test_partDesignAttachmentSketchFlow_usesSketchWorkflowViewportNormalization()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString workflowPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/SketchWorkflow.cpp"));
+        QFile file(workflowPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(workflowPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString attachmentNeedle
+            = QStringLiteral("void createSketchAndShowAttachment()");
+        const QString prepareNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(guidocument);");
+        const QString acceptPrepareNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(guiDocument);");
+        const QString showAttachmentNeedle
+            = QStringLiteral("vps->showAttachmentEditor(onAccept, onReject);");
+        const QString setEditNeedle
+            = QStringLiteral("PartDesignGui::setEdit(sketch, partDesignBody);");
+
+        const int attachmentPos = source.indexOf(attachmentNeedle);
+        const int preparePos = source.indexOf(prepareNeedle, attachmentPos);
+        const int acceptPreparePos = source.indexOf(acceptPrepareNeedle, preparePos + 1);
+        const int setEditPos = source.indexOf(setEditNeedle, attachmentPos);
+        const int showAttachmentPos = source.indexOf(showAttachmentNeedle, attachmentPos);
+
+        QVERIFY2(attachmentPos >= 0, "PartDesign attachment sketch helper not found");
+        QVERIFY2(preparePos >= 0,
+                 "PartDesign attachment sketch flow should normalize the viewport before showing the attachment editor");
+        QVERIFY2(showAttachmentPos >= 0, "Attachment editor launch missing in PartDesign sketch workflow");
+        QVERIFY2(acceptPreparePos >= 0,
+                 "PartDesign attachment accept flow should re-normalize the viewport before setEdit");
+        QVERIFY2(setEditPos >= 0, "PartDesign attachment accept flow setEdit call missing");
+        QVERIFY2(preparePos < showAttachmentPos,
+                 "Viewport normalization should happen before the attachment editor is shown");
+        QVERIFY2(acceptPreparePos < setEditPos,
+                 "Attachment accept flow should normalize the viewport before setEdit");
+    }
+
+    void test_partDesignSketchWorkflow_respectsAttachmentPreference()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString workflowPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/SketchWorkflow.cpp"));
+        QFile file(workflowPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(workflowPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString findSupportNeedle = QStringLiteral("void tryFindSupport()");
+        const QString prefNeedle = QStringLiteral("GetBool(\"NewSketchUseAttachmentDialog\", false)");
+        const QString attachmentNeedle = QStringLiteral("createSketchAndShowAttachment();");
+        const QString planePickNeedle = QStringLiteral("findAndSelectPlane();");
+
+        const int findSupportPos = source.indexOf(findSupportNeedle);
+        const int prefPos = source.indexOf(prefNeedle, findSupportPos);
+        const int attachmentPos = source.indexOf(attachmentNeedle, findSupportPos);
+        const int planePickPos = source.indexOf(planePickNeedle, findSupportPos);
+
+        QVERIFY2(findSupportPos >= 0, "PartDesign sketch support-selection helper not found");
+        QVERIFY2(prefPos >= 0,
+                 "PartDesign sketch workflow should read the attachment-dialog preference before choosing a support flow");
+        QVERIFY2(attachmentPos >= 0,
+                 "PartDesign sketch workflow should offer the attachment-dialog path when the preference is enabled");
+        QVERIFY2(planePickPos >= 0,
+                 "PartDesign sketch workflow should offer the plane-pick path when the attachment-dialog preference is disabled");
+        QVERIFY2(prefPos < attachmentPos,
+                 "Attachment preference should be resolved before choosing the attachment flow");
+        QVERIFY2(attachmentPos < planePickPos,
+                 "Attachment branch should be evaluated before the plane-pick fallback");
     }
 
     void test_partDesignPythonCommands_useSketchWorkflowPythonBridge()  // NOLINT

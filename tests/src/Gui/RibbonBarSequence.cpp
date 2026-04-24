@@ -146,17 +146,18 @@ private Q_SLOTS:
 
         const QString hideEventNeedle = QStringLiteral("void BackstageView::hideEvent(QHideEvent* event)");
         const QString ribbonNeedle = QStringLiteral("ribbon->show();");
-        const QString activateNeedle = QStringLiteral("workbench->activate();");
+        const QString refreshNeedle = QStringLiteral("Application::Instance->refreshActiveWorkbench();");
 
         const int hideEventPos = source.indexOf(hideEventNeedle);
         const int ribbonPos = source.indexOf(ribbonNeedle, hideEventPos);
-        const int activatePos = source.indexOf(activateNeedle, hideEventPos);
+        const int refreshPos = source.indexOf(refreshNeedle, hideEventPos);
 
         QVERIFY2(hideEventPos >= 0, "BackstageView hideEvent override missing");
         QVERIFY2(ribbonPos >= 0, "BackstageView hideEvent should restore ribbon visibility");
-        QVERIFY2(activatePos >= 0, "BackstageView hideEvent should reactivate the active workbench");
-        QVERIFY2(ribbonPos < activatePos,
-                 "BackstageView hideEvent should restore ribbon visibility before workbench reactivation");
+        QVERIFY2(refreshPos >= 0,
+             "BackstageView hideEvent should refresh the active workbench through Gui::Application");
+        QVERIFY2(ribbonPos < refreshPos,
+             "BackstageView hideEvent should restore ribbon visibility before workbench shell refresh");
     }
 
     void test_SketcherToolbarsRouteToSketchTab()  // NOLINT
@@ -197,6 +198,97 @@ private Q_SLOTS:
         const int toolsRulePos = source.indexOf(QStringLiteral("return tr(\"Tools\");"), sketchRulePos);
         QVERIFY2(toolsRulePos > sketchReturnPos,
                  "Sketch routing must be evaluated before the generic Tools fallback");
+    }
+
+    void test_ToggleRibbonUsesSharedWorkbenchRefresh()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString commandViewPath = repoRoot.filePath(QStringLiteral("src/Gui/CommandView.cpp"));
+        QFile commandViewFile(commandViewPath);
+        QVERIFY2(commandViewFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(commandViewPath));
+        const QString commandViewSource = QString::fromUtf8(commandViewFile.readAll());
+
+        const QString toggleNeedle
+            = QStringLiteral("void StdCmdToggleRibbonBar::activated(int iMsg)");
+        const int togglePos = commandViewSource.indexOf(toggleNeedle);
+        QVERIFY2(togglePos >= 0, "StdCmdToggleRibbonBar::activated definition missing");
+
+        const int refreshCallPos = commandViewSource.indexOf(
+            QStringLiteral("Application::Instance->refreshActiveWorkbench();"), togglePos);
+        QVERIFY2(refreshCallPos >= 0,
+                 "StdCmdToggleRibbonBar should refresh shell state through Gui::Application");
+
+        QVERIFY2(commandViewSource.indexOf(
+                      QStringLiteral("getMainWindow()->activateWorkbench("), togglePos) < 0,
+                 "StdCmdToggleRibbonBar should not replay MainWindow workbench activation inline");
+        QVERIFY2(commandViewSource.indexOf(
+                      QStringLiteral("signalActivateWorkbench("), togglePos) < 0,
+                 "StdCmdToggleRibbonBar should not emit workbench activation inline");
+        QVERIFY2(commandViewSource.indexOf(QStringLiteral("wb->activated();"), togglePos) < 0,
+                 "StdCmdToggleRibbonBar should not call Workbench::activated inline");
+
+        const QString appPath = repoRoot.filePath(QStringLiteral("src/Gui/Application.cpp"));
+        QFile appFile(appPath);
+        QVERIFY2(appFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(appPath));
+        const QString appSource = QString::fromUtf8(appFile.readAll());
+
+        const QString refreshNeedle = QStringLiteral("bool Application::refreshActiveWorkbench()");
+        const int refreshPos = appSource.indexOf(refreshNeedle);
+        QVERIFY2(refreshPos >= 0, "Gui::Application::refreshActiveWorkbench definition missing");
+         QVERIFY2(appSource.indexOf(QStringLiteral("if (isClosing() || QApplication::closingDown())"),
+                        refreshPos) >= 0,
+               "refreshActiveWorkbench should no-op while the GUI is shutting down");
+         QVERIFY2(appSource.indexOf(QStringLiteral("auto* mainWindow = getMainWindow();"),
+                        refreshPos) >= 0,
+               "refreshActiveWorkbench should resolve MainWindow once before replaying shell state");
+         QVERIFY2(appSource.indexOf(QStringLiteral("if (!mainWindow)"), refreshPos) >= 0,
+               "refreshActiveWorkbench should tolerate a missing MainWindow during teardown");
+        QVERIFY2(appSource.indexOf(QStringLiteral("wb->activate();"), refreshPos) >= 0,
+                 "refreshActiveWorkbench should rebuild the active workbench surfaces");
+        QVERIFY2(appSource.indexOf(
+                      QStringLiteral("mainWindow->activateWorkbench("), refreshPos) >= 0,
+                 "refreshActiveWorkbench should notify MainWindow about workbench activation");
+        QVERIFY2(appSource.indexOf(QStringLiteral("signalActivateWorkbench("), refreshPos) >= 0,
+                 "refreshActiveWorkbench should emit the shared workbench activation signal");
+        QVERIFY2(appSource.indexOf(QStringLiteral("wb->activated();"), refreshPos) >= 0,
+                 "refreshActiveWorkbench should run Workbench::activated()");
+
+        const QString macroDialogPath
+            = repoRoot.filePath(QStringLiteral("src/Gui/Dialogs/DlgMacroExecuteImp.cpp"));
+        QFile macroDialogFile(macroDialogPath);
+        QVERIFY2(macroDialogFile.open(QIODevice::ReadOnly | QIODevice::Text),
+                 qPrintable(macroDialogPath));
+        const QString macroDialogSource = QString::fromUtf8(macroDialogFile.readAll());
+
+        const QString macroRefreshNeedle
+            = QStringLiteral("Application::Instance->refreshActiveWorkbench();");
+        const QString macroReloadNeedle
+            = QStringLiteral("dlg.exec();");
+        const int macroReloadPos = macroDialogSource.indexOf(macroReloadNeedle);
+        QVERIFY2(macroReloadPos >= 0, "DlgMacroExecuteImp should execute the macro dialog");
+        QVERIFY2(macroDialogSource.indexOf(macroRefreshNeedle, macroReloadPos) >= 0,
+                 "DlgMacroExecuteImp should refresh the active workbench through Gui::Application");
+        QVERIFY2(macroDialogSource.indexOf(QStringLiteral("active->activate();"), macroReloadPos) < 0,
+                 "DlgMacroExecuteImp should not reactivate the workbench inline after the dialog closes");
+
+        const QString workbenchPyPath = repoRoot.filePath(QStringLiteral("src/Gui/WorkbenchPyImp.cpp"));
+        QFile workbenchPyFile(workbenchPyPath);
+        QVERIFY2(workbenchPyFile.open(QIODevice::ReadOnly | QIODevice::Text),
+                 qPrintable(workbenchPyPath));
+        const QString workbenchPySource = QString::fromUtf8(workbenchPyFile.readAll());
+
+        const QString reloadActiveNeedle
+            = QStringLiteral("PyObject* WorkbenchPy::reloadActive(PyObject* args)");
+        const int reloadActivePos = workbenchPySource.indexOf(reloadActiveNeedle);
+        QVERIFY2(reloadActivePos >= 0, "WorkbenchPy::reloadActive definition missing");
+        QVERIFY2(workbenchPySource.indexOf(macroRefreshNeedle, reloadActivePos) >= 0,
+                 "WorkbenchPy::reloadActive should refresh the active workbench through Gui::Application");
+        QVERIFY2(workbenchPySource.indexOf(QStringLiteral("active->activate();"), reloadActivePos) < 0,
+                 "WorkbenchPy::reloadActive should not reactivate the workbench inline");
     }
 };
 

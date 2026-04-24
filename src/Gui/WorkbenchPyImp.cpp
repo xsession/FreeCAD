@@ -20,6 +20,7 @@
  *                                                                         *
  ***************************************************************************/
 
+#include "Application.h"
 #include "Workbench.h"
 #include "WorkbenchManager.h"
 
@@ -170,9 +171,8 @@ PyObject* WorkbenchPy::reloadActive(PyObject* args)
             return nullptr;
         }
 
-        Workbench* active = Gui::WorkbenchManager::instance()->active();
-        if (active) {
-            active->activate();
+        if (Application::Instance) {
+            Application::Instance->refreshActiveWorkbench();
         }
         Py_Return;
     }

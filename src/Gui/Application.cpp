@@ -25,6 +25,7 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <Inventor/errors/SoDebugError.h>
 #include <Inventor/errors/SoError.h>
+#include <QApplication>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDir>
@@ -1980,6 +1981,33 @@ bool Application::activateWorkbench(const char* name)
     }
 
     return ok;
+}
+
+bool Application::refreshActiveWorkbench()
+{
+    if (isClosing() || QApplication::closingDown()) {
+        return false;
+    }
+
+    Workbench* wb = WorkbenchManager::instance()->active();
+    if (!wb) {
+        return false;
+    }
+
+    auto* mainWindow = getMainWindow();
+    if (!mainWindow) {
+        return false;
+    }
+
+    wb->activate();
+
+    const QString workbenchName = QString::fromLatin1(wb->name().c_str());
+    mainWindow->activateWorkbench(workbenchName);
+    this->signalActivateWorkbench(wb->name().c_str());
+
+    wb->activated();
+
+    return true;
 }
 
 QPixmap Application::workbenchIcon(const QString& wb) const

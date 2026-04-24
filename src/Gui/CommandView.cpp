@@ -4333,15 +4333,9 @@ void StdCmdToggleRibbonBar::activated(int iMsg)
     // Save preference using the canonical path (must match RibbonBar::isRibbonEnabled)
     RibbonBar::setRibbonEnabled(useRibbon);
 
-    // Re-run the full workbench activation so ToolBarManager::setup() populates
-    // the ribbon with buttons and manages classic toolbar visibility correctly.
-    Workbench* wb = WorkbenchManager::instance()->active();
-    if (wb) {
-        wb->activate();
-        getMainWindow()->activateWorkbench(QString::fromLatin1(wb->name().c_str()));
-        Application::Instance->signalActivateWorkbench(wb->name().c_str());
-        wb->activated();
-    }
+    // Re-apply the active workbench shell state so command surfaces track
+    // the current ribbon or classic-toolbar mode consistently.
+    Application::Instance->refreshActiveWorkbench();
 
     // Sync checked state
     if (_pcAction) {
