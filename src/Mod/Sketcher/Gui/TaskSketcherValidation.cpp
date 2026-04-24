@@ -533,6 +533,22 @@ TaskSketcherValidation::TaskSketcherValidation(Sketcher::SketchObject* Obj)
 {
     QWidget* widget = new SketcherValidation(Obj);
     auto taskbox = new Gui::TaskView::TaskBox(QPixmap(), widget->windowTitle(), true, nullptr);
+    QString sketchLabel = tr("Sketch");
+    if (Obj) {
+        sketchLabel = QString::fromUtf8(Obj->Label.getValue());
+    }
+
+    setProperty("taskview_context_mode", tr("Sketch Validation"));
+    setProperty("taskview_context_title", sketchLabel);
+    setProperty("taskview_context_detail",
+                tr("Inspect missing coincidences, invalid constraints, reversed geometry, and degenerated elements."));
+    setProperty("taskview_summary_title", tr("Sketch Diagnostics"));
+    setProperty("taskview_summary_detail",
+                tr("Run validation checks, highlight problems, then apply repairs where appropriate."));
+    setProperty("taskview_validation_level", QStringLiteral("info"));
+    setProperty("taskview_validation_title", tr("Run a check to inspect the sketch"));
+    setProperty("taskview_validation_detail",
+                tr("Start with the relevant find action, review highlighted results, then apply fixes intentionally."));
     taskbox->groupLayout()->addWidget(widget);
     Content.push_back(taskbox);
 }

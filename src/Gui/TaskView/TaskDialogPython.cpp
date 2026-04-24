@@ -51,6 +51,9 @@ bool isTaskViewMetadataProperty(const QByteArray& propertyName)
 {
     return propertyName == QByteArrayLiteral("taskview_summary_title")
         || propertyName == QByteArrayLiteral("taskview_summary_detail")
+    || propertyName == QByteArrayLiteral("taskview_context_mode")
+    || propertyName == QByteArrayLiteral("taskview_context_title")
+    || propertyName == QByteArrayLiteral("taskview_context_detail")
         || propertyName == QByteArrayLiteral("taskview_validation_level")
         || propertyName == QByteArrayLiteral("taskview_validation_title")
         || propertyName == QByteArrayLiteral("taskview_validation_detail");
@@ -709,9 +712,12 @@ TaskDialogPython::TaskDialogPython(const Py::Object& o)
 {
     Base::PyGILStateLocker lock;
     try {
-        const std::array<std::pair<const char*, const char*>, 5> forwardedProperties {{
+        const std::array<std::pair<const char*, const char*>, 8> forwardedProperties {{
             {"taskview_summary_title", "taskview_summary_title"},
             {"taskview_summary_detail", "taskview_summary_detail"},
+            {"taskview_context_mode", "taskview_context_mode"},
+            {"taskview_context_title", "taskview_context_title"},
+            {"taskview_context_detail", "taskview_context_detail"},
             {"taskview_validation_level", "taskview_validation_level"},
             {"taskview_validation_title", "taskview_validation_title"},
             {"taskview_validation_detail", "taskview_validation_detail"},

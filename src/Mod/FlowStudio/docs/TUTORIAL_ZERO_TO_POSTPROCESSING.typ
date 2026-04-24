@@ -118,9 +118,10 @@ FlowStudio is a multi-physics workbench for FreeCAD that provides a guided simul
 - Solver and turbulence model selection logic.
 - Mesh and boundary-layer strategy for stable convergence.
 - Post-processing using built-in objects and ParaView script export.
-- Five complete scenarios:
+- Six complete scenarios:
   - Level 1: Simple electronics box cooling.
   - Level 2: Multi-component PCB thermal management.
+  - Level 2B: CHT and radiation electronics benchmark.
   - Level 3: Wing external aerodynamics.
   - Level 4: Server rack forced cooling.
   - Level 5: CT detector rotating system.
@@ -352,6 +353,27 @@ Expected outcome: chip temperature field, airflow pathlines, and stable residual
 6. Post-process with cut-plane thermal map and per-chip probes.
 
 Engineering check: identify hottest component and downstream interaction effects.
+
+== Level 2B - Electronics Cooling CHT and Radiation Benchmark (Intermediate-Advanced)
+
+#lvl("Difficulty", "* * *" )
+
+- Multi-region setup with separate solid and fluid regions.
+- Fan inlet, extracted outlet, and interface-coupled heat flow.
+- Second-pass radiation solve to measure temperature reduction.
+
+=== Steps
+
+1. Import or build board, CPU, optional pins, fan box, outlet tool, and enclosing air domain.
+2. Create CFD analysis and set steady turbulent heat-transfer physics.
+3. Assign air to the fluid region and thermal materials to board and CPU solids.
+4. Create fan inlet and outlet boundaries, keep enclosure walls adiabatic, and define CPU heating.
+5. Build the solid region mesh first, convert it to a named sub-region, then mesh the fluid region.
+6. Create or preserve the fluid-solid coupling interface for the CHT backend.
+7. Run a no-radiation baseline, then enable radiation and continue from the converged state.
+8. Compare CPU peak temperature, outlet temperature, and radiative heat-flux maps.
+
+Engineering check: the radiation-enabled run should reduce the peak package temperature without changing the underlying geometry or mesh.
 
 == Level 3 - Wing External Flow (Intermediate-Advanced)
 

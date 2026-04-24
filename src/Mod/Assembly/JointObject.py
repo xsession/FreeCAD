@@ -1620,6 +1620,79 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         self.createDeleteAction()
 
         self.addition_rejected = False
+        self._refresh_taskview_metadata()
+
+    def _publish_taskview_property(self, name, value):
+        if hasattr(self, "form") and self.form is not None:
+            self.form.setProperty(name, value)
+
+    def _set_taskview_metadata(self, context_mode, context_title, context_detail, summary_title, summary_detail, validation_level="", validation_title="", validation_detail=""):
+        self.taskview_context_mode = context_mode
+        self.taskview_context_title = context_title
+        self.taskview_context_detail = context_detail
+        self.taskview_summary_title = summary_title
+        self.taskview_summary_detail = summary_detail
+        self.taskview_validation_level = validation_level
+        self.taskview_validation_title = validation_title
+        self.taskview_validation_detail = validation_detail
+
+        self._publish_taskview_property("taskview_context_mode", context_mode)
+        self._publish_taskview_property("taskview_context_title", context_title)
+        self._publish_taskview_property("taskview_context_detail", context_detail)
+        self._publish_taskview_property("taskview_summary_title", summary_title)
+        self._publish_taskview_property("taskview_summary_detail", summary_detail)
+        self._publish_taskview_property("taskview_validation_level", validation_level)
+        self._publish_taskview_property("taskview_validation_title", validation_title)
+        self._publish_taskview_property("taskview_validation_detail", validation_detail)
+
+    def _joint_task_context_title(self):
+        if hasattr(self, "joint") and self.joint is not None:
+            return getattr(self.joint, "Label", getattr(self.joint, "Name", self.jointName))
+        return self.jointName
+
+    def _joint_task_context_detail(self):
+        target_label = getattr(self.assembly, "Label", getattr(self.assembly, "Name", self.activeType))
+        action = translate("Assembly", "Editing") if not self.creating else translate("Assembly", "Creating")
+        joint_type = self.jForm.jointType.currentText() if hasattr(self, "jForm") else self.jointName
+        return translate("Assembly", "{action} a {joint_type} joint in {target_type} \"{target_label}\".").format(
+            action=action,
+            joint_type=joint_type,
+            target_type=self.activeType.lower(),
+            target_label=target_label,
+        )
+
+    def _joint_task_summary_detail(self):
+        selected = len(self.refs) if hasattr(self, "refs") else 0
+        if selected == 0:
+            return translate("Assembly", "Select the first reference to begin defining the joint.")
+        if selected == 1:
+            return translate("Assembly", "Select one more reference on a different component to complete the joint definition.")
+        return translate("Assembly", "Review offsets, limits, and isolation settings before confirming the joint.")
+
+    def _joint_task_validation(self):
+        selected = len(self.refs) if hasattr(self, "refs") else 0
+        if selected < 2:
+            return (
+                "incomplete",
+                translate("Assembly", "Select two references"),
+                translate("Assembly", "Pick references on two separate parts to define the assembly relationship."),
+            )
+        return "", "", ""
+
+    def _refresh_taskview_metadata(self):
+        context_mode = translate("Assembly", "Joint Edit") if not self.creating else translate("Assembly", "Joint Creation")
+        summary_title = translate("Assembly", "Joint Definition")
+        validation_level, validation_title, validation_detail = self._joint_task_validation()
+        self._set_taskview_metadata(
+            context_mode,
+            self._joint_task_context_title(),
+            self._joint_task_context_detail(),
+            summary_title,
+            self._joint_task_summary_detail(),
+            validation_level,
+            validation_title,
+            validation_detail,
+        )
 
     def accept(self):
         if len(self.refs) != 2:
@@ -1745,6 +1818,7 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         self.jType = JointTypes[self.jForm.jointType.currentIndex()]
         self.joint.Proxy.setJointType(self.joint, self.jType)
         self.adaptUi()
+        self._refresh_taskview_metadata()
 
     def onAngleChanged(self, quantity):
         self.joint.Angle = self.jForm.angleSpinbox.property("rawValue")
@@ -1975,6 +2049,7 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         self.jForm.jointType.setCurrentIndex(JointTypes.index(self.joint.JointType))
         self.updateJointList()
         self.updateIsolation()
+        self._refresh_taskview_metadata()
 
     def updateJoint(self):
         # First we build the listwidget
@@ -1984,6 +2059,7 @@ class TaskAssemblyCreateJoint(QtCore.QObject):
         self.joint.Proxy.setJointConnectors(self.joint, self.refs)
 
         self.updateIsolation()
+        self._refresh_taskview_metadata()
 
     def updateJointList(self):
         self.jForm.featureList.clear()

@@ -14,6 +14,7 @@ Inspired by FloEFD's user-friendly workflow:
 import os
 import FreeCAD
 import FreeCADGui
+from flow_studio.physics_domains import all_example_commands, example_command_groups
 from RibbonMetadata import (
     build_contextual_ribbon_toolbar_name,
     build_ribbon_toolbar_name,
@@ -61,6 +62,9 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     MenuText = "FlowStudio"
     ToolTip = "Multi-physics simulation workbench (CFD, FEM, EM, Thermal) with multi-solver support."
+
+    EXAMPLE_COMMAND_GROUPS = example_command_groups()
+    EXAMPLE_COMMANDS = all_example_commands()
 
     ANALYSIS_COMMANDS = [
         "FlowStudio_Analysis",
@@ -247,12 +251,22 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 ),
                 self.ANALYSIS_COMMANDS,
             )
+            for index, (group_key, _group_label, commands) in enumerate(self.EXAMPLE_COMMAND_GROUPS):
+                self.appendToolbar(
+                    build_ribbon_toolbar_name(
+                        "Setup",
+                        f"{group_key} Examples",
+                        "Home",
+                        order=20 + index,
+                        home_priority="primary",
+                    ),
+                    list(commands),
+                )
             self.appendToolbar(
                 build_ribbon_toolbar_name(
-                    "Setup", "Setup", "Home", order=20, home_priority="primary"
+                    "Setup", "Setup", "Home", order=40, home_priority="primary"
                 ),
                 [
-                    "FlowStudio_ProjectCockpit",
                     "FlowStudio_PhysicsModel",
                     "FlowStudio_FluidMaterial",
                     "FlowStudio_EngineeringDatabase",
@@ -435,6 +449,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
             )
         else:
             self.appendToolbar("FlowStudio Analysis", self.ANALYSIS_COMMANDS)
+            for group_key, _group_label, commands in self.EXAMPLE_COMMAND_GROUPS:
+                self.appendToolbar(f"FlowStudio {group_key} Examples", list(commands))
             self.appendToolbar("FlowStudio CFD Setup", self.CFD_SETUP_COMMANDS)
             self.appendToolbar("FlowStudio Geometry Tools", self.GEOMETRY_COMMANDS)
             self.appendToolbar("FlowStudio Solve", self.MESH_SOLVE_COMMANDS)
@@ -443,6 +459,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 self.appendToolbar("FlowStudio Enterprise", self.ENTERPRISE_COMMANDS)
 
         self.appendMenu("FlowStudio", self.ANALYSIS_COMMANDS)
+        for _group_key, group_label, commands in self.EXAMPLE_COMMAND_GROUPS:
+            self.appendMenu(["FlowStudio", "Examples", group_label], list(commands))
         self.appendMenu(["FlowStudio", "CFD Setup"], self.CFD_SETUP_COMMANDS)
         self.appendMenu(["FlowStudio", "Geometry Tools"], self.GEOMETRY_COMMANDS)
         self.appendMenu(["FlowStudio", "Physics Setup"], self.PHYSICS_COMMANDS)

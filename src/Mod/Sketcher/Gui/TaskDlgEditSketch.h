@@ -85,6 +85,7 @@ protected:
 
 private:
     void slotToolChanged(const std::string& toolname);
+    void updateTaskViewMetadata();
 
 protected:
     ViewProviderSketch* sketchView;

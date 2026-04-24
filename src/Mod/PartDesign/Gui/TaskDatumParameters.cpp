@@ -82,6 +82,21 @@ TaskDlgDatumParameters::TaskDlgDatumParameters(ViewProviderDatum* ViewProvider)
     assert(ViewProvider);
     parameter = new TaskDatumParameters(ViewProvider);
     Content.push_back(parameter);
+
+    Part::Datum* datum = ViewProvider->getObject<Part::Datum>();
+    const QString datumLabel = datum ? QString::fromUtf8(datum->Label.getValue()) : tr("Datum");
+    QString contextDetail = tr("Editing datum attachment and placement.");
+    if (auto* body = datum ? PartDesign::Body::findBodyOf(datum) : nullptr) {
+        contextDetail = tr("Editing datum attachment and placement in body \"%1\".")
+                            .arg(QString::fromUtf8(body->Label.getValue()));
+    }
+
+    setProperty("taskview_context_mode", tr("Datum Edit"));
+    setProperty("taskview_context_title", datumLabel);
+    setProperty("taskview_context_detail", contextDetail);
+    setProperty("taskview_summary_title", ViewProvider->datumMenuText);
+    setProperty("taskview_summary_detail",
+                tr("Review references, attachment mode, and placement before confirming the datum."));
 }
 
 TaskDlgDatumParameters::~TaskDlgDatumParameters() = default;

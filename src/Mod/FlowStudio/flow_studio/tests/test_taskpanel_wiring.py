@@ -254,6 +254,169 @@ class TestTaskPanelWiring(unittest.TestCase):
             commands_source,
             f"Missing project cockpit command registration: {commands_path}",
         )
+        self.assertIn('self.appendMenu("FlowStudio", self.ANALYSIS_COMMANDS)', initgui_source, initgui_path)
+
+    def test_electronics_cooling_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ElectronicsCoolingStudy", _CmdElectronicsCoolingStudy())',
+            commands_source,
+            f"Missing electronics cooling study command registration: {commands_path}",
+        )
+
+        self.assertIn(
+            'EXAMPLE_COMMANDS = all_example_commands()',
+            initgui_source,
+            f"Workbench should source example starters from domain metadata: {initgui_path}",
+        )
+        self.assertIn(
+            'for _group_key, group_label, commands in self.EXAMPLE_COMMAND_GROUPS:',
+            initgui_source,
+            f"Workbench should expose example starters through grouped domain menus: {initgui_path}",
+        )
+
+    def test_examples_toolbar_is_separate_from_analysis_toolbar(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+
+        self.assertIn(
+            'for index, (group_key, _group_label, commands) in enumerate(self.EXAMPLE_COMMAND_GROUPS):',
+            initgui_source,
+            f"Ribbon workbench should expose grouped Examples toolbars: {initgui_path}",
+        )
+        self.assertIn(
+            'self.appendToolbar(f"FlowStudio {group_key} Examples", list(commands))',
+            initgui_source,
+            f"Classic workbench should expose grouped Examples toolbars: {initgui_path}",
+        )
+
+    def test_external_aero_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ExternalAeroStudy", _CmdExternalAeroStudy())',
+            commands_source,
+            f"Missing external aero study command registration: {commands_path}",
+        )
+
+    def test_pipe_flow_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_PipeFlowStudy", _CmdPipeFlowStudy())',
+            commands_source,
+            f"Missing pipe flow study command registration: {commands_path}",
+        )
+
+    def test_static_mixer_study_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_StaticMixerStudy", _CmdStaticMixerStudy())',
+            commands_source,
+            f"Missing static mixer study command registration: {commands_path}",
+        )
+
+    def test_structural_example_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_structural_bracket_defaults', commands_source, commands_path)
+        self.assertIn('post = makePostPipeline(name="StructuralBracketPost")', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="BracketStressPlot", plot_kind="Surface Plot")', commands_source, commands_path)
+        self.assertIn('apply_structural_bracket_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_StructuralBracketExample", _CmdStructuralBracketExample())',
+            commands_source,
+            f"Missing structural example command registration: {commands_path}",
+        )
+
+    def test_electrostatic_example_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_electrostatic_capacitor_defaults', commands_source, commands_path)
+        self.assertIn('post = makePostPipeline(name="ElectrostaticCapacitorPost")', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="PotentialCutPlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_electrostatic_capacitor_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ElectrostaticCapacitorExample", _CmdElectrostaticCapacitorExample())',
+            commands_source,
+            f"Missing electrostatic example command registration: {commands_path}",
+        )
+
+    def test_electromagnetic_example_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_electromagnetic_coil_defaults', commands_source, commands_path)
+        self.assertIn('post = makePostPipeline(name="ElectromagneticCoilPost")', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="MagneticFluxPlot", plot_kind="Surface Plot")', commands_source, commands_path)
+        self.assertIn('apply_electromagnetic_coil_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ElectromagneticCoilExample", _CmdElectromagneticCoilExample())',
+            commands_source,
+            f"Missing electromagnetic example command registration: {commands_path}",
+        )
+
+    def test_thermal_example_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_thermal_plate_defaults', commands_source, commands_path)
+        self.assertIn('post = makePostPipeline(name="ThermalPlatePost")', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="TemperatureCutPlot", plot_kind="Cut Plot")', commands_source, commands_path)
+        self.assertIn('apply_thermal_plate_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_ThermalPlateExample", _CmdThermalPlateExample())',
+            commands_source,
+            f"Missing thermal example command registration: {commands_path}",
+        )
+
+    def test_optical_example_command_is_exposed_in_workbench_surface(self):
+        initgui_path, initgui_source = self._read_source("../InitGui.py")
+        commands_path, commands_source = self._read_source("commands.py")
+
+        self.assertIn('EXAMPLE_COMMANDS = all_example_commands()', initgui_source, initgui_path)
+        self.assertIn('from flow_studio.workflows.studies import apply_optical_lens_defaults', commands_source, commands_path)
+        self.assertIn('post = makePostPipeline(name="OpticalLensPost")', commands_source, commands_path)
+        self.assertIn('result_plot = makeResultPlot(name="IrradianceSurfacePlot", plot_kind="Surface Plot")', commands_source, commands_path)
+        self.assertIn('apply_optical_lens_defaults(', commands_source, commands_path)
+        self.assertIn(
+            'FreeCADGui.addCommand("FlowStudio_OpticalLensExample", _CmdOpticalLensExample())',
+            commands_source,
+            f"Missing optical example command registration: {commands_path}",
+        )
+
+    def test_project_cockpit_sources_starters_from_domain_metadata(self):
+        cockpit_path, cockpit_source = self._read_source(os.path.join("taskpanels", "task_project_cockpit.py"))
+
+        self.assertIn(
+            'STARTER_COMMAND_GROUPS = tuple(',
+            cockpit_source,
+            f"Cockpit should derive starter groups dynamically: {cockpit_path}",
+        )
+        self.assertIn(
+            'for _group_key, group_label, commands in example_command_groups()',
+            cockpit_source,
+            f"Cockpit should iterate over grouped domain example commands: {cockpit_path}",
+        )
+        self.assertIn(
+            'starter_group = QtGui.QGroupBox("Starter Examples")',
+            cockpit_source,
+            f"Cockpit should render a dedicated starter examples area: {cockpit_path}",
+        )
 
     def test_connected_self_methods_exist(self):
         files = [os.path.join("taskpanels", name) for name in TASKPANEL_FILES] + [ENTERPRISE_FILE]
@@ -312,6 +475,15 @@ class TestTaskPanelWiring(unittest.TestCase):
         store_source = self._class_method_source(source, "TaskMaterial", "_store")
         self.assertIn("for prop, widget in self._widgets.items()", store_source)
         self.assertIn("setattr(self.obj, prop, widget.value())", store_source)
+
+    def test_base_task_panel_publishes_context_metadata(self):
+        abs_path, source = self._read_source(os.path.join("taskpanels", "base_taskpanel.py"))
+
+        self.assertIn('self._publish_taskview_property("taskview_context_mode", mode)', source, abs_path)
+        self.assertIn('self._publish_taskview_property("taskview_context_title", title)', source, abs_path)
+        self.assertIn('self._publish_taskview_property("taskview_context_detail", detail)', source, abs_path)
+        self.assertIn("def _build_task_context", source, abs_path)
+        self.assertIn("CONTEXT_MODE = \"Edit\"", source, abs_path)
 
         abs_path, source = self._read_source(os.path.join("taskpanels", "task_generic_bc.py"))
         store_source = self._class_method_source(source, "TaskGenericBC", "_store")

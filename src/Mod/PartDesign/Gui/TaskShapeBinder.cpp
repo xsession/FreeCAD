@@ -38,6 +38,7 @@
 #include <Gui/Widgets.h>
 
 #include <Mod/Part/App/PartFeature.h>
+#include <Mod/PartDesign/App/Body.h>
 #include <Mod/PartDesign/App/ShapeBinder.h>
 
 #include "ui_TaskShapeBinder.h"
@@ -418,6 +419,29 @@ TaskDlgShapeBinder::TaskDlgShapeBinder(ViewProviderShapeBinder* view, bool newOb
     parameter = new TaskShapeBinder(view, newObj);
 
     Content.push_back(parameter);
+
+    auto* binder = view->getObject<PartDesign::ShapeBinder>();
+    const QString binderLabel = binder ? QString::fromUtf8(binder->Label.getValue()) : tr("Shape Binder");
+    QString contextMode = tr("Shape Binder Edit");
+    QString contextDetail = tr("Editing shape binder references and synchronization targets.");
+    if (newObj) {
+        contextMode = tr("Shape Binder Creation");
+        contextDetail = tr("Selecting source geometry and references for the new shape binder.");
+    }
+    if (auto* body = binder ? PartDesign::Body::findBodyOf(binder) : nullptr) {
+        contextDetail = newObj
+            ? tr("Selecting source geometry for a new shape binder in body \"%1\".")
+                  .arg(QString::fromUtf8(body->Label.getValue()))
+            : tr("Editing shape binder references in body \"%1\".")
+                  .arg(QString::fromUtf8(body->Label.getValue()));
+    }
+
+    setProperty("taskview_context_mode", contextMode);
+    setProperty("taskview_context_title", binderLabel);
+    setProperty("taskview_context_detail", contextDetail);
+    setProperty("taskview_summary_title", tr("Shape Binder Parameters"));
+    setProperty("taskview_summary_detail",
+                tr("Choose source objects and referenced subelements, then confirm to keep the binder synchronized."));
 }
 
 TaskDlgShapeBinder::~TaskDlgShapeBinder() = default;

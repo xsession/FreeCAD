@@ -20,7 +20,7 @@ class PhysicsDomain:
     __slots__ = (
         "key", "label", "description", "icon",
         "analysis_types", "bc_types", "solver_backends",
-        "material_type", "physics_model_type",
+        "material_type", "physics_model_type", "example_commands",
     )
 
     def __init__(
@@ -34,6 +34,7 @@ class PhysicsDomain:
         solver_backends=None,
         material_type=None,
         physics_model_type=None,
+        example_commands=None,
     ):
         self.key = key
         self.label = label
@@ -44,6 +45,7 @@ class PhysicsDomain:
         self.solver_backends = solver_backends or []
         self.material_type = material_type
         self.physics_model_type = physics_model_type
+        self.example_commands = example_commands or []
 
 
 # ======================================================================
@@ -70,6 +72,37 @@ def available_domains():
 def all_domains():
     """Return all registered PhysicsDomain objects."""
     return list(_DOMAINS.values())
+
+
+def example_commands_for_domain(key):
+    """Return the starter example commands registered for one domain key."""
+    domain = get_domain(key)
+    if domain is None:
+        return []
+    return list(domain.example_commands)
+
+
+def all_example_commands():
+    """Return all registered starter example commands in domain order."""
+    commands = []
+    seen = set()
+    for domain in all_domains():
+        for command in domain.example_commands:
+            if command in seen:
+                continue
+            seen.add(command)
+            commands.append(command)
+    return commands
+
+
+def example_command_groups():
+    """Return grouped starter example commands by domain in registry order."""
+    groups = []
+    for domain in all_domains():
+        if not domain.example_commands:
+            continue
+        groups.append((domain.key, domain.label, tuple(domain.example_commands)))
+    return tuple(groups)
 
 
 # ======================================================================
@@ -99,6 +132,12 @@ CFD = PhysicsDomain(
     solver_backends=["OpenFOAM", "FluidX3D", "Elmer"],
     material_type="FlowStudio::FluidMaterial",
     physics_model_type="FlowStudio::PhysicsModel",
+    example_commands=[
+        "FlowStudio_ElectronicsCoolingStudy",
+        "FlowStudio_ExternalAeroStudy",
+        "FlowStudio_PipeFlowStudy",
+        "FlowStudio_StaticMixerStudy",
+    ],
 )
 
 STRUCTURAL = PhysicsDomain(
@@ -122,6 +161,7 @@ STRUCTURAL = PhysicsDomain(
     solver_backends=["Elmer"],
     material_type="FlowStudio::SolidMaterial",
     physics_model_type="FlowStudio::StructuralPhysicsModel",
+    example_commands=["FlowStudio_StructuralBracketExample"],
 )
 
 ELECTROSTATIC = PhysicsDomain(
@@ -143,6 +183,7 @@ ELECTROSTATIC = PhysicsDomain(
     solver_backends=["Elmer"],
     material_type="FlowStudio::ElectrostaticMaterial",
     physics_model_type="FlowStudio::ElectrostaticPhysicsModel",
+    example_commands=["FlowStudio_ElectrostaticCapacitorExample"],
 )
 
 ELECTROMAGNETIC = PhysicsDomain(
@@ -166,6 +207,7 @@ ELECTROMAGNETIC = PhysicsDomain(
     solver_backends=["Elmer"],
     material_type="FlowStudio::ElectromagneticMaterial",
     physics_model_type="FlowStudio::ElectromagneticPhysicsModel",
+    example_commands=["FlowStudio_ElectromagneticCoilExample"],
 )
 
 THERMAL = PhysicsDomain(
@@ -188,6 +230,7 @@ THERMAL = PhysicsDomain(
     solver_backends=["Elmer"],
     material_type="FlowStudio::ThermalMaterial",
     physics_model_type="FlowStudio::ThermalPhysicsModel",
+    example_commands=["FlowStudio_ThermalPlateExample"],
 )
 
 OPTICAL = PhysicsDomain(
@@ -215,6 +258,7 @@ OPTICAL = PhysicsDomain(
     solver_backends=["Raysect", "Meep", "openEMS", "Optiland", "Geant4"],
     material_type="FlowStudio::OpticalMaterial",
     physics_model_type="FlowStudio::OpticalPhysicsModel",
+    example_commands=["FlowStudio_OpticalLensExample"],
 )
 
 

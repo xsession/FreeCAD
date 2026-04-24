@@ -17,7 +17,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from flow_studio.physics_domains import (
     PhysicsDomain, register_domain, get_domain, available_domains,
-    all_domains, CFD, STRUCTURAL, ELECTROSTATIC, ELECTROMAGNETIC, THERMAL,
+    all_domains, example_commands_for_domain, all_example_commands, example_command_groups,
+    CFD, STRUCTURAL, ELECTROSTATIC, ELECTROMAGNETIC, THERMAL, OPTICAL,
     _DOMAINS,
 )
 
@@ -40,6 +41,7 @@ class TestPhysicsDomainInit(unittest.TestCase):
         self.assertEqual(d.solver_backends, [])
         self.assertIsNone(d.material_type)
         self.assertIsNone(d.physics_model_type)
+        self.assertEqual(d.example_commands, [])
 
     def test_full_creation(self):
         d = PhysicsDomain(
@@ -52,11 +54,13 @@ class TestPhysicsDomainInit(unittest.TestCase):
             solver_backends=["Solver1"],
             material_type="Material1",
             physics_model_type="PhysicsModel1",
+            example_commands=["Example1"],
         )
         self.assertEqual(d.key, "FULL")
         self.assertEqual(len(d.analysis_types), 2)
         self.assertEqual(len(d.bc_types), 1)
         self.assertEqual(d.material_type, "Material1")
+        self.assertEqual(d.example_commands, ["Example1"])
 
     def test_slots(self):
         d = PhysicsDomain(key="A", label="B")
@@ -107,6 +111,10 @@ class TestCFDDomain(unittest.TestCase):
     def test_physics_model_type(self):
         self.assertEqual(CFD.physics_model_type, "FlowStudio::PhysicsModel")
 
+    def test_example_commands(self):
+        self.assertIn("FlowStudio_ElectronicsCoolingStudy", CFD.example_commands)
+        self.assertIn("FlowStudio_ExternalAeroStudy", CFD.example_commands)
+
 
 class TestStructuralDomain(unittest.TestCase):
     """Test Structural domain definition."""
@@ -130,6 +138,9 @@ class TestStructuralDomain(unittest.TestCase):
         self.assertIn("Static Linear Elastic", STRUCTURAL.analysis_types)
         self.assertIn("Modal Analysis", STRUCTURAL.analysis_types)
 
+    def test_example_commands(self):
+        self.assertEqual(STRUCTURAL.example_commands, ["FlowStudio_StructuralBracketExample"])
+
 
 class TestElectrostaticDomain(unittest.TestCase):
     """Test Electrostatic domain definition."""
@@ -151,6 +162,9 @@ class TestElectrostaticDomain(unittest.TestCase):
     def test_analysis_types(self):
         self.assertIn("Electrostatic Potential", ELECTROSTATIC.analysis_types)
         self.assertIn("Capacitance Matrix", ELECTROSTATIC.analysis_types)
+
+    def test_example_commands(self):
+        self.assertEqual(ELECTROSTATIC.example_commands, ["FlowStudio_ElectrostaticCapacitorExample"])
 
 
 class TestElectromagneticDomain(unittest.TestCase):
@@ -175,6 +189,9 @@ class TestElectromagneticDomain(unittest.TestCase):
         self.assertIn("Magnetodynamic Harmonic", ELECTROMAGNETIC.analysis_types)
         self.assertIn("Magnetodynamic Transient", ELECTROMAGNETIC.analysis_types)
 
+    def test_example_commands(self):
+        self.assertEqual(ELECTROMAGNETIC.example_commands, ["FlowStudio_ElectromagneticCoilExample"])
+
 
 class TestThermalDomain(unittest.TestCase):
     """Test Thermal domain definition."""
@@ -198,6 +215,9 @@ class TestThermalDomain(unittest.TestCase):
         self.assertIn("Steady-State Heat Transfer", THERMAL.analysis_types)
         self.assertIn("Transient Heat Transfer", THERMAL.analysis_types)
 
+    def test_example_commands(self):
+        self.assertEqual(THERMAL.example_commands, ["FlowStudio_ThermalPlateExample"])
+
 
 class TestOpticalDomain(unittest.TestCase):
     """Test Optical domain definition."""
@@ -216,10 +236,12 @@ class TestOpticalDomain(unittest.TestCase):
         self.assertIn("radiation transport", OPTICAL.description)
 
     def test_bc_types_include_geant4_authoring_objects(self):
-        from flow_studio.physics_domains import OPTICAL
         self.assertIn("FlowStudio::BCGeant4Source", OPTICAL.bc_types)
         self.assertIn("FlowStudio::BCGeant4Detector", OPTICAL.bc_types)
         self.assertIn("FlowStudio::BCGeant4Scoring", OPTICAL.bc_types)
+
+    def test_example_commands(self):
+        self.assertEqual(OPTICAL.example_commands, ["FlowStudio_OpticalLensExample"])
 
 
 # ======================================================================
@@ -263,6 +285,47 @@ class TestDomainRegistration(unittest.TestCase):
         domains = all_domains()
         self.assertEqual(len(domains), 6)
         self.assertIsInstance(domains[0], PhysicsDomain)
+
+    def test_example_commands_for_domain(self):
+        self.assertEqual(
+            example_commands_for_domain("Structural"),
+            ["FlowStudio_StructuralBracketExample"],
+        )
+        self.assertEqual(example_commands_for_domain("MissingDomain"), [])
+
+    def test_all_example_commands_preserves_domain_order(self):
+        self.assertEqual(
+            all_example_commands(),
+            [
+                "FlowStudio_ElectronicsCoolingStudy",
+                "FlowStudio_ExternalAeroStudy",
+                "FlowStudio_PipeFlowStudy",
+                "FlowStudio_StaticMixerStudy",
+                "FlowStudio_StructuralBracketExample",
+                "FlowStudio_ElectrostaticCapacitorExample",
+                "FlowStudio_ElectromagneticCoilExample",
+                "FlowStudio_ThermalPlateExample",
+                "FlowStudio_OpticalLensExample",
+            ],
+        )
+
+    def test_example_command_groups_preserve_domain_order(self):
+        self.assertEqual(
+            example_command_groups(),
+            (
+                ("CFD", "CFD (Fluid Dynamics)", (
+                    "FlowStudio_ElectronicsCoolingStudy",
+                    "FlowStudio_ExternalAeroStudy",
+                    "FlowStudio_PipeFlowStudy",
+                    "FlowStudio_StaticMixerStudy",
+                )),
+                ("Structural", "Structural Mechanics (FEM)", ("FlowStudio_StructuralBracketExample",)),
+                ("Electrostatic", "Electrostatic", ("FlowStudio_ElectrostaticCapacitorExample",)),
+                ("Electromagnetic", "Electromagnetic", ("FlowStudio_ElectromagneticCoilExample",)),
+                ("Thermal", "Thermal (Heat Transfer)", ("FlowStudio_ThermalPlateExample",)),
+                ("Optical", "Optical / Photonics", ("FlowStudio_OpticalLensExample",)),
+            ),
+        )
 
     def test_register_custom_domain(self):
         """Register and retrieve a custom domain, then clean up."""

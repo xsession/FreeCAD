@@ -60,6 +60,25 @@ def _with_overrides(base_steps, overrides):
     return tuple(updated)
 
 
+def apply_workflow_profile_overrides(
+    profile: WorkflowProfile,
+    *,
+    label: str | None = None,
+    description: str | None = None,
+    workflows: tuple[str, ...] | None = None,
+    step_overrides: dict[int, dict] | None = None,
+) -> WorkflowProfile:
+    """Return one workflow profile with optional display and step overrides."""
+    return WorkflowProfile(
+        domain_key=profile.domain_key,
+        label=label or profile.label,
+        workspace_name=profile.workspace_name,
+        description=description or profile.description,
+        workflows=workflows or profile.workflows,
+        steps=_with_overrides(profile.steps, step_overrides or {}),
+    )
+
+
 _BASE_STEPS = _base_steps()
 
 _PROFILES = {
@@ -67,11 +86,11 @@ _PROFILES = {
         domain_key="CFD",
         label="CFD / Flow",
         workspace_name="CFD Project Cockpit",
-        description="Geometry-to-mesh-to-run workflow for internal and external flow studies.",
+        description="Geometry-to-mesh-to-run workflow for internal flow, external aerodynamics, and electronics-cooling CHT studies.",
         workflows=("Internal flow", "External aerodynamics", "Electronics cooling"),
         steps=_with_overrides(_BASE_STEPS, {
-            5: {"name": "Define Boundary Conditions", "hint": "Add inlet, outlet, wall, symmetry, or open boundaries."},
-            7: {"name": "Set Initial Conditions", "description": "Configure initial field values to improve convergence.", "hint": "Review the InitialConditions object before running."},
+            5: {"name": "Define Boundary Conditions", "hint": "Add inlet, outlet, wall, symmetry, open, fan, or thermal boundaries for the active CFD study."},
+            7: {"name": "Set Initial Conditions", "description": "Configure initial field values and solver controls to improve convergence.", "hint": "Review the InitialConditions object and any CHT or radiation control settings before running."},
         }),
     ),
     "Thermal": WorkflowProfile(

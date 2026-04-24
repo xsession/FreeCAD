@@ -478,6 +478,105 @@ private Q_SLOTS:
                  "Transformation tools should require active-body membership");
     }
 
+    void test_partDesignFeatureDialogs_publishTaskViewContextMetadata()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString taskFeaturePath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/TaskFeatureParameters.cpp"));
+        QFile file(taskFeaturePath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(taskFeaturePath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        QVERIFY2(source.contains(QStringLiteral("void TaskDlgFeatureParameters::updateTaskViewMetadata()")),
+                 "PartDesign feature dialogs should centralize task-view metadata publication");
+        QVERIFY2(source.contains(QStringLiteral("setProperty(\"taskview_context_mode\", tr(\"Feature Edit\"))")),
+                 "PartDesign feature dialogs should publish an explicit feature-edit task context mode");
+        QVERIFY2(source.contains(QStringLiteral("setProperty(\"taskview_context_title\", featureTaskContextTitle())")),
+                 "PartDesign feature dialogs should publish the edited feature title to TaskView");
+        QVERIFY2(source.contains(QStringLiteral("setProperty(\"taskview_summary_title\", featureTaskSummaryTitle())")),
+                 "PartDesign feature dialogs should publish task summaries through the shared feature-dialog base");
+        QVERIFY2(source.contains(QStringLiteral("PartDesign::Body::findBodyOf(feature)")),
+                 "PartDesign feature task context should mention the owning body when available");
+    }
+
+    void test_partDesignDatumAndShapeBinderDialogs_publishTaskViewContextMetadata()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString datumPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/TaskDatumParameters.cpp"));
+        QFile datumFile(datumPath);
+        QVERIFY2(datumFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(datumPath));
+        const QString datumSource = QString::fromUtf8(datumFile.readAll());
+
+        QVERIFY2(datumSource.contains(QStringLiteral("setProperty(\"taskview_context_mode\", tr(\"Datum Edit\"))")),
+                 "Datum dialogs should publish an explicit datum-edit task context mode");
+        QVERIFY2(datumSource.contains(QStringLiteral("setProperty(\"taskview_summary_title\", ViewProvider->datumMenuText)")),
+                 "Datum dialogs should publish the datum-specific summary title");
+        QVERIFY2(datumSource.contains(QStringLiteral("PartDesign::Body::findBodyOf(datum)")),
+                 "Datum task context should mention the owning body when available");
+
+        const QString binderPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/TaskShapeBinder.cpp"));
+        QFile binderFile(binderPath);
+        QVERIFY2(binderFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(binderPath));
+        const QString binderSource = QString::fromUtf8(binderFile.readAll());
+
+        QVERIFY2(binderSource.contains(QStringLiteral("setProperty(\"taskview_context_mode\", contextMode)")),
+                 "Shape binder dialogs should publish a task context mode");
+        QVERIFY2(binderSource.contains(QStringLiteral("setProperty(\"taskview_summary_title\", tr(\"Shape Binder Parameters\"))")),
+                 "Shape binder dialogs should publish a stable summary title");
+        QVERIFY2(binderSource.contains(QStringLiteral("PartDesign::Body::findBodyOf(binder)")),
+                 "Shape binder task context should mention the owning body when available");
+    }
+
+    void test_sketcherDialogs_publishTaskViewContextMetadata()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString editSketchPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/TaskDlgEditSketch.cpp"));
+        QFile editSketchFile(editSketchPath);
+        QVERIFY2(editSketchFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(editSketchPath));
+        const QString editSketchSource = QString::fromUtf8(editSketchFile.readAll());
+
+        QVERIFY2(editSketchSource.contains(QStringLiteral("void TaskDlgEditSketch::updateTaskViewMetadata()")),
+                 "Sketcher edit dialog should centralize task-view metadata publication");
+        QVERIFY2(editSketchSource.contains(QStringLiteral("setProperty(\"taskview_context_mode\", tr(\"Sketch Edit\"))")),
+                 "Sketcher edit dialog should publish an explicit sketch-edit context mode");
+        QVERIFY2(editSketchSource.contains(QStringLiteral("setProperty(\"taskview_summary_title\", tr(\"Sketch Editing Tools\"))")),
+                 "Sketcher edit dialog should publish a stable editing summary title");
+
+        const QString validationPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/Sketcher/Gui/TaskSketcherValidation.cpp"));
+        QFile validationFile(validationPath);
+        QVERIFY2(validationFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(validationPath));
+        const QString validationSource = QString::fromUtf8(validationFile.readAll());
+
+        QVERIFY2(validationSource.contains(QStringLiteral("setProperty(\"taskview_context_mode\", tr(\"Sketch Validation\"))")),
+                 "Sketcher validation dialog should publish a validation-specific task context mode");
+        QVERIFY2(validationSource.contains(QStringLiteral("setProperty(\"taskview_validation_level\", QStringLiteral(\"info\"))")),
+                 "Sketcher validation dialog should publish a default validation banner");
+        QVERIFY2(validationSource.contains(QStringLiteral("setProperty(\"taskview_summary_title\", tr(\"Sketch Diagnostics\"))")),
+                 "Sketcher validation dialog should publish a diagnostics summary title");
+    }
+
     void test_partDesignAttachmentSketchFlow_usesSketchWorkflowViewportNormalization()  // NOLINT
     {
         QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));

@@ -27,6 +27,7 @@
 
 
 #include <App/DocumentObserver.h>
+#include <App/DocumentObject.h>
 #include <Gui/Application.h>
 #include <Gui/CommandT.h>
 #include <Gui/MainWindow.h>
@@ -144,14 +145,93 @@ void TaskFeatureParameters::recomputeFeature()
 /*********************************************************************
  *                            Task Dialog                            *
  *********************************************************************/
+namespace
+{
+QString simplifyFeatureTypeName(const App::DocumentObject* feature)
+{
+    if (!feature) {
+        return QObject::tr("feature");
+    }
+
+    QString typeName = QString::fromLatin1(feature->getTypeId().getName());
+    const int scopeIndex = typeName.lastIndexOf(QStringLiteral("::"));
+    if (scopeIndex >= 0) {
+        typeName = typeName.mid(scopeIndex + 2);
+    }
+    if (typeName.startsWith(QStringLiteral("Feature"))) {
+        typeName.remove(0, QStringLiteral("Feature").size());
+    }
+    if (typeName.isEmpty()) {
+        return QObject::tr("feature");
+    }
+
+    QString humanized;
+    humanized.reserve(typeName.size() + 8);
+    for (int index = 0; index < typeName.size(); ++index) {
+        const QChar ch = typeName.at(index);
+        if (index > 0 && ch.isUpper() && typeName.at(index - 1).isLower()) {
+            humanized += QLatin1Char(' ');
+        }
+        humanized += ch;
+    }
+    return humanized;
+}
+}
+
 TaskDlgFeatureParameters::TaskDlgFeatureParameters(PartDesignGui::ViewProvider* vp)
     : preview(new TaskPreviewParameters(vp))
     , vp(vp)
 {
     assert(vp);
+    updateTaskViewMetadata();
 }
 
 TaskDlgFeatureParameters::~TaskDlgFeatureParameters() = default;
+
+void TaskDlgFeatureParameters::updateTaskViewMetadata()
+{
+    setProperty("taskview_context_mode", tr("Feature Edit"));
+    setProperty("taskview_context_title", featureTaskContextTitle());
+    setProperty("taskview_context_detail", featureTaskContextDetail());
+    setProperty("taskview_summary_title", featureTaskSummaryTitle());
+    setProperty("taskview_summary_detail", featureTaskSummaryDetail());
+}
+
+QString TaskDlgFeatureParameters::featureTaskContextTitle() const
+{
+    if (const auto* feature = getObject()) {
+        return QString::fromUtf8(feature->Label.getValue());
+    }
+
+    return tr("Part Design Feature");
+}
+
+QString TaskDlgFeatureParameters::featureTaskContextDetail() const
+{
+    const auto* feature = getObject();
+    const QString featureType = simplifyFeatureTypeName(feature);
+    if (!feature) {
+        return tr("Editing PartDesign feature parameters.");
+    }
+
+    if (const auto* body = PartDesign::Body::findBodyOf(feature)) {
+        return tr("Editing %1 parameters in body \"%2\".")
+            .arg(featureType, QString::fromUtf8(body->Label.getValue()));
+    }
+
+    return tr("Editing %1 parameters.").arg(featureType);
+}
+
+QString TaskDlgFeatureParameters::featureTaskSummaryTitle() const
+{
+    return tr("Feature Parameters");
+}
+
+QString TaskDlgFeatureParameters::featureTaskSummaryDetail() const
+{
+    const QString title = featureTaskContextTitle();
+    return tr("Review %1, inspect the preview, then confirm or cancel.").arg(title);
+}
 
 bool TaskDlgFeatureParameters::accept()
 {

@@ -241,6 +241,57 @@ TaskPanel::TaskPanel(QWidget* parent)
     this->setLayout(mainLayout);
     scrollArea = new QScrollArea(this);
 
+    contextFrame = new QFrame(this);
+    contextFrame->setFrameShape(QFrame::StyledPanel);
+    contextFrame->setObjectName(QStringLiteral("taskViewContext"));
+    contextFrame->setVisible(false);
+
+    auto* contextLayout = new QVBoxLayout(contextFrame);
+    contextLayout->setContentsMargins(10, 8, 10, 8);
+    contextLayout->setSpacing(4);
+
+    auto* contextHeaderLayout = new QHBoxLayout();
+    contextHeaderLayout->setContentsMargins(0, 0, 0, 0);
+    contextHeaderLayout->setSpacing(8);
+
+    contextModeLabel = new QLabel(contextFrame);
+    contextModeLabel->setObjectName(QStringLiteral("taskViewContextMode"));
+    contextModeLabel->setVisible(false);
+    contextHeaderLayout->addWidget(contextModeLabel, 0, Qt::AlignLeft | Qt::AlignTop);
+
+    contextTitleLabel = new QLabel(contextFrame);
+    QFont contextTitleFont = contextTitleLabel->font();
+    contextTitleFont.setBold(true);
+    contextTitleLabel->setFont(contextTitleFont);
+    contextTitleLabel->setWordWrap(true);
+    contextHeaderLayout->addWidget(contextTitleLabel, 1);
+    contextLayout->addLayout(contextHeaderLayout);
+
+    contextDetailLabel = new QLabel(contextFrame);
+    contextDetailLabel->setWordWrap(true);
+    contextDetailLabel->setObjectName(QStringLiteral("taskViewContextDetail"));
+    contextLayout->addWidget(contextDetailLabel);
+
+    contextFrame->setStyleSheet(QStringLiteral(
+        "QFrame#taskViewContext {"
+        "  border: 1px solid palette(mid);"
+        "  border-radius: 6px;"
+        "  background: palette(alternate-base);"
+        "}"
+        "QLabel#taskViewContextMode {"
+        "  padding: 2px 8px;"
+        "  border-radius: 10px;"
+        "  border: 1px solid #175cd3;"
+        "  background: #eff8ff;"
+        "  color: #1849a9;"
+        "  font-weight: 600;"
+        "}"
+        "QLabel#taskViewContextDetail {"
+        "  color: palette(mid);"
+        "}"
+    ));
+    mainLayout->addWidget(contextFrame);
+
     summaryFrame = new QFrame(this);
     summaryFrame->setFrameShape(QFrame::StyledPanel);
     summaryFrame->setObjectName(QStringLiteral("taskViewSummary"));
@@ -327,6 +378,36 @@ TaskPanel::~TaskPanel()
     for (QWidget* panel : contextualPanels) {
         delete panel;
     }
+}
+
+void TaskPanel::setContext(const QString& mode, const QString& title, const QString& detail)
+{
+    const QString trimmedMode = mode.trimmed();
+    const QString trimmedTitle = title.trimmed();
+    const QString trimmedDetail = detail.trimmed();
+    if (trimmedMode.isEmpty() && trimmedTitle.isEmpty() && trimmedDetail.isEmpty()) {
+        clearContext();
+        return;
+    }
+
+    contextModeLabel->setVisible(!trimmedMode.isEmpty());
+    contextModeLabel->setText(trimmedMode.toUpper());
+    contextTitleLabel->setText(trimmedTitle);
+    contextTitleLabel->setVisible(!trimmedTitle.isEmpty());
+    contextDetailLabel->setVisible(!trimmedDetail.isEmpty());
+    contextDetailLabel->setText(trimmedDetail);
+    contextFrame->setVisible(true);
+}
+
+void TaskPanel::clearContext()
+{
+    contextModeLabel->clear();
+    contextModeLabel->setVisible(false);
+    contextTitleLabel->clear();
+    contextTitleLabel->setVisible(false);
+    contextDetailLabel->clear();
+    contextDetailLabel->setVisible(false);
+    contextFrame->setVisible(false);
 }
 
 void TaskPanel::setSummary(const QString& title, const QString& detail)
@@ -750,13 +831,36 @@ bool TaskView::showDialog(TaskDialog* dlg, App::Document* doc)
 
     QString summaryTitle = dlg->property("taskview_summary_title").toString().trimmed();
     QString summaryDetail = dlg->property("taskview_summary_detail").toString().trimmed();
+    QString contextMode = dlg->property("taskview_context_mode").toString().trimmed();
+    QString contextTitle = dlg->property("taskview_context_title").toString().trimmed();
+    QString contextDetail = dlg->property("taskview_context_detail").toString().trimmed();
     QString validationLevel = dlg->property("taskview_validation_level").toString().trimmed();
     QString validationTitle = dlg->property("taskview_validation_title").toString().trimmed();
     QString validationDetail = dlg->property("taskview_validation_detail").toString().trimmed();
 
+    if (contextMode.isEmpty()) {
+        contextMode = tr("Edit");
+    }
+
     if (summaryTitle.isEmpty()) {
         summaryTitle = tr("Task in progress");
     }
+
+    if (contextTitle.isEmpty()) {
+        if (!summaryTitle.isEmpty() && summaryTitle != tr("Task in progress")) {
+            contextTitle = summaryTitle;
+        }
+        else if (!dlg->getDocumentName().empty()) {
+            contextTitle = tr("Document");
+        }
+    }
+
+    if (contextDetail.isEmpty() && !dlg->getDocumentName().empty()) {
+        contextDetail = tr("Attached to document \"%1\".")
+                            .arg(QString::fromStdString(dlg->getDocumentName()));
+    }
+
+    outInfo.taskPanel->setContext(contextMode, contextTitle, contextDetail);
 
     if (summaryDetail.isEmpty()) {
         if (!dlg->getDocumentName().empty()) {

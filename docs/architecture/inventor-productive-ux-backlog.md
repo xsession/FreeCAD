@@ -166,6 +166,20 @@ Current status:
 - Acceptance:
   - users can edit without losing basic object context and without competing dock behavior
 
+Current status:
+
+- initial framework support implemented
+- `src/Gui/TaskView/TaskView.cpp` now supports an explicit task-context surface above task summaries, with mode, active context title, and supporting detail
+- Python task dialogs can now forward live `taskview_context_*` metadata through `src/Gui/TaskView/TaskDialogPython.cpp`
+- `src/Mod/FlowStudio/flow_studio/taskpanels/base_taskpanel.py` now publishes default edit-context metadata so the shell contract is exercised by a real workflow surface immediately
+- `src/Mod/PartDesign/Gui/TaskFeatureParameters.cpp` now publishes shared feature-edit context and summary metadata for PartDesign feature dialogs that inherit from `TaskDlgFeatureParameters`
+- `src/Mod/PartDesign/Gui/TaskDatumParameters.cpp` and `src/Mod/PartDesign/Gui/TaskShapeBinder.cpp` now publish task context and summary metadata for high-frequency datum and shape binder editing flows that previously sat outside the shared PartDesign feature-dialog base
+- `src/Mod/Assembly/JointObject.py` and `src/Mod/Assembly/CommandCreateBom.py` now publish live task context and validation metadata for Assembly joint editing and bill-of-materials configuration flows
+- `src/Mod/Sketcher/Gui/TaskDlgEditSketch.cpp` and `src/Mod/Sketcher/Gui/TaskSketcherValidation.cpp` now publish task context, summaries, and validation guidance for core Sketcher editing and diagnostics dialogs
+- remaining work should focus on:
+  - extending the same context contract to high-frequency C++ task dialogs in PartDesign, Sketcher, Assembly, and TechDraw
+  - deciding when property inspection should be co-located versus remain in the separate model/property surface
+
 ### UX-006 Task Summary And Validation Contract Expansion
 
 - Priority: `P0`
@@ -246,6 +260,23 @@ Current status:
   - visible grounded/DOF/constraint-state feedback
 - Acceptance:
   - basic place-and-constrain workflows are understandable without assembly-specific tribal knowledge
+
+### UX-010A FlowStudio Electronics Cooling Workflow Pass
+
+- Priority: `P1`
+- Goal: make FlowStudio's electronics-cooling path feel like a guided product workflow instead of a generic CFD assembly of objects
+- Target files:
+  - `src/Mod/FlowStudio/docs/TUTORIAL_ZERO_TO_POSTPROCESSING.md`
+  - `src/Mod/FlowStudio/flow_studio/workflows/profiles.py`
+  - `src/Mod/FlowStudio/flow_studio/workflow_guide.py`
+  - `src/Mod/FlowStudio/flow_studio/taskpanels/`
+- Deliverables:
+  - a named electronics-cooling benchmark workflow covering enclosure, board, CPU, fan, outlet, and radiation pass
+  - explicit guided steps for fluid region, solid region, interface coupling, heat source assignment, and result review
+  - workflow hints that distinguish simple wall-heat-flux cooling from full CHT plus radiation studies
+  - follow-on task-panel work for fan presets, compact heat-source setup, and radiation review
+- Acceptance:
+  - a user can follow one documented FlowStudio workflow to reproduce a commercial-style electronics-cooling study without relying on solver-specific tribal knowledge
 
 ### UX-011 TechDraw Workflow Pass
 

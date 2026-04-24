@@ -104,6 +104,12 @@ class CFDAnalysis(BaseFlowObject):
         )
         self._update_analysis_types(obj, domain_key)
 
+        obj.addProperty(
+            "App::PropertyString", "StudyRecipeKey", "Analysis",
+            "Optional stable key selecting a guided study recipe"
+        )
+        obj.StudyRecipeKey = ""
+
     def _update_analysis_types(self, obj, domain_key):
         """Populate AnalysisType enum from the physics domain."""
         if not hasattr(obj, "AnalysisType"):

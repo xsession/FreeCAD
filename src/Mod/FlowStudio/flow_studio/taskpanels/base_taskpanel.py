@@ -13,6 +13,9 @@ from PySide import QtGui, QtCore
 class BaseTaskPanel:
     """Common task panel base with accept/reject."""
 
+    CONTEXT_MODE = "Edit"
+    CONTEXT_TITLE = ""
+    CONTEXT_DETAIL = ""
     SUMMARY_TITLE = ""
     SUMMARY_DETAIL = ""
     VALIDATION_LEVEL = ""
@@ -53,6 +56,15 @@ class BaseTaskPanel:
         self._publish_taskview_property("taskview_summary_title", title)
         self._publish_taskview_property("taskview_summary_detail", detail)
 
+    def _apply_task_context(self):
+        mode, title, detail = self._build_task_context()
+        self.taskview_context_mode = mode
+        self.taskview_context_title = title
+        self.taskview_context_detail = detail
+        self._publish_taskview_property("taskview_context_mode", mode)
+        self._publish_taskview_property("taskview_context_title", title)
+        self._publish_taskview_property("taskview_context_detail", detail)
+
     def _apply_task_validation(self):
         level, title, detail = self._build_task_validation()
         self.taskview_validation_level = level
@@ -63,6 +75,7 @@ class BaseTaskPanel:
         self._publish_taskview_property("taskview_validation_detail", detail)
 
     def _refresh_taskview_metadata(self, *_args):
+        self._apply_task_context()
         self._apply_task_summary()
         self._apply_task_validation()
 
@@ -116,6 +129,20 @@ class BaseTaskPanel:
             return flow_type.split("::", 1)[1].replace("_", " ")
 
         return getattr(self.obj, "Label", getattr(self.obj, "Name", "Task"))
+
+    def _build_task_context(self):
+        title = self.CONTEXT_TITLE or getattr(self.obj, "Label", getattr(self.obj, "Name", "Object"))
+        detail = self.CONTEXT_DETAIL or self._default_context_detail()
+        return self.CONTEXT_MODE or "Edit", title, detail
+
+    def _default_context_detail(self):
+        flow_type = getattr(self.obj, "FlowType", "")
+        if isinstance(flow_type, str) and flow_type.startswith("FlowStudio::"):
+            return flow_type.split("::", 1)[1].replace("_", " ")
+
+        summary_title = self.SUMMARY_TITLE or self._default_summary_title()
+        object_title = getattr(self.obj, "Label", getattr(self.obj, "Name", "Object"))
+        return "" if summary_title == object_title else summary_title
 
     def _build_task_validation(self):
         level = self.VALIDATION_LEVEL or ""

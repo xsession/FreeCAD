@@ -25,7 +25,8 @@ except Exception:  # pragma: no cover - keeps pure-Python imports working
     FreeCAD = _FreeCADStub()
 
 from flow_studio.ui.layouts import get_workspace_layout
-from flow_studio.workflows.profiles import get_workflow_profile
+from flow_studio.workflows.profiles import apply_workflow_profile_overrides, get_workflow_profile
+from flow_studio.workflows.studies import get_study_recipe
 
 # FlowType strings used to identify objects inside analysis groups
 _PHYSICS_TYPES = {
@@ -284,10 +285,26 @@ def get_workflow_context(analysis=None):
     if analysis is None:
         analysis = get_active_analysis()
     domain_key = get_active_domain_key(analysis)
+    analysis_type = getattr(analysis, "AnalysisType", "") if analysis is not None else ""
+    study_key = getattr(analysis, "StudyRecipeKey", "") if analysis is not None else ""
+    base_profile = get_workflow_profile(domain_key)
+    study_recipe = get_study_recipe(domain_key, analysis_type, study_key)
+    profile = base_profile
+    if study_recipe is not None:
+        profile = apply_workflow_profile_overrides(
+            base_profile,
+            description=study_recipe.summary,
+            workflows=study_recipe.focus_workflows,
+            step_overrides=study_recipe.step_overrides,
+        )
     return {
         "analysis": analysis,
         "domain_key": domain_key,
-        "profile": get_workflow_profile(domain_key),
+        "analysis_type": analysis_type,
+        "study_key": study_key,
+        "base_profile": base_profile,
+        "profile": profile,
+        "study_recipe": study_recipe,
         "layout": get_workspace_layout(domain_key),
     }
 

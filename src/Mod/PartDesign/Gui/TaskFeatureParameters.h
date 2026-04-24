@@ -176,6 +176,12 @@ public:
     }
 
 protected:
+    void updateTaskViewMetadata();
+    QString featureTaskContextTitle() const;
+    QString featureTaskContextDetail() const;
+    QString featureTaskSummaryTitle() const;
+    QString featureTaskSummaryDetail() const;
+
     PartDesignGui::TaskPreviewParameters* preview;
 
 private:

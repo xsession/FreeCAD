@@ -84,6 +84,7 @@ TaskDlgEditSketch::TaskDlgEditSketch(ViewProviderSketch* sketchView)
     ToolSettings->setHidden(true);
 
     associateToObject3dView(sketchView->getObject());
+    updateTaskViewMetadata();
 }
 
 TaskDlgEditSketch::~TaskDlgEditSketch()
@@ -108,6 +109,23 @@ void TaskDlgEditSketch::slotToolChanged(const std::string& toolname)
     }
 
     ToolSettings->setHidden(!widgetvisible);
+    updateTaskViewMetadata();
+}
+
+void TaskDlgEditSketch::updateTaskViewMetadata()
+{
+    QString sketchLabel = tr("Sketch");
+    if (sketchView && sketchView->getObject()) {
+        sketchLabel = QString::fromUtf8(sketchView->getObject()->Label.getValue());
+    }
+
+    setProperty("taskview_context_mode", tr("Sketch Edit"));
+    setProperty("taskview_context_title", sketchLabel);
+    setProperty("taskview_context_detail",
+                tr("Editing the active sketch with live constraint, solver, and geometry feedback."));
+    setProperty("taskview_summary_title", tr("Sketch Editing Tools"));
+    setProperty("taskview_summary_detail",
+                tr("Use the geometry, constraint, element, and message panels to edit the active sketch."));
 }
 
 //==== calls from the TaskView ===============================================================

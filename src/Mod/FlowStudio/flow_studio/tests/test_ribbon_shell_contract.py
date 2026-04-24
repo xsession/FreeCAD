@@ -170,6 +170,9 @@ class TestRibbonShellContract(unittest.TestCase):
     def test_task_dialog_python_forwards_validation_metadata(self):
         path, source = self._read("src/Gui/TaskView/TaskDialogPython.cpp")
 
+        self.assertIn('"taskview_context_mode"', source, path)
+        self.assertIn('"taskview_context_title"', source, path)
+        self.assertIn('"taskview_context_detail"', source, path)
         self.assertIn('"taskview_validation_level"', source, path)
         self.assertIn('"taskview_validation_title"', source, path)
         self.assertIn('"taskview_validation_detail"', source, path)
@@ -188,9 +191,23 @@ class TestRibbonShellContract(unittest.TestCase):
 
         self.assertIn("self._refresh_taskview_metadata()", source, path)
         self.assertIn("self._connect_taskview_metadata_signals()", source, path)
+        self.assertIn('self._publish_taskview_property("taskview_context_mode", mode)', source, path)
+        self.assertIn('self._publish_taskview_property("taskview_context_title", title)', source, path)
+        self.assertIn('self._publish_taskview_property("taskview_context_detail", detail)', source, path)
         self.assertIn('self._publish_taskview_property("taskview_validation_level", level)', source, path)
         self.assertIn("def _publish_taskview_property", source, path)
+        self.assertIn("def _apply_task_context", source, path)
+        self.assertIn("def _build_task_context", source, path)
         self.assertIn("def _connect_widget_metadata_signal", source, path)
+
+    def test_task_view_reads_context_metadata(self):
+        path, source = self._read("src/Gui/TaskView/TaskView.cpp")
+
+        self.assertIn('dlg->property("taskview_context_mode")', source, path)
+        self.assertIn('dlg->property("taskview_context_title")', source, path)
+        self.assertIn('dlg->property("taskview_context_detail")', source, path)
+        self.assertIn("outInfo.taskPanel->setContext", source, path)
+        self.assertIn('contextMode = tr("Edit")', source, path)
 
 
 if __name__ == "__main__":

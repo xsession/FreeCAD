@@ -18,6 +18,7 @@
 8. **Example Scenarios**
    - [Level 1 — Simple Box Cooling (Beginner)](#level-1--simple-box-cooling-beginner)
    - [Level 2 — Multi-Component PCB Cooling (Intermediate)](#level-2--multi-component-pcb-cooling-intermediate)
+  - [Level 2B — Electronics Cooling CHT + Radiation Benchmark (Intermediate-Advanced)](#level-2b--electronics-cooling-cht--radiation-benchmark-intermediate-advanced)
    - [Level 3 — NACA 2412 Wing (Intermediate-Advanced)](#level-3--naca-2412-wing-intermediate-advanced)
    - [Level 4 — Server Rack Forced Cooling (Advanced)](#level-4--server-rack-forced-cooling-advanced)
    - [Level 5 — CT Detector Rotating System (Expert)](#level-5--ct-detector-rotating-system-expert)
@@ -1145,6 +1146,234 @@ Key things to check:
   │  ░░░░░░░░░░▒▒▒▒▒▒▒▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓██████  │
   └────────────────────────────────────────────────┘
 ```
+
+---
+
+## Level 2B — Electronics Cooling CHT + Radiation Benchmark (Intermediate-Advanced)
+
+> **Difficulty:** ★★★☆☆
+> **Physics:** Steady, turbulent, conjugate heat transfer with optional radiation
+> **Solver:** OpenFOAM (`chtMultiRegionSimpleFoam`) or Elmer thermal/radiation workflow for partial parity
+> **Time to complete:** 2-4 hours
+> **Cells:** ~700K-1.5M across fluid + solid regions
+
+### Scenario Description
+
+This scenario mirrors the common SimFlow electronics-cooling tutorial pattern:
+a **solid CPU and board** exchange heat with a forced-air **fluid region**, and a
+second solve enables **surface-to-surface radiation** to quantify the thermal drop.
+
+Unlike Level 2, this benchmark is intentionally **multi-region**:
+
+- `solid` region contains the board, CPU, and fan housing solids
+- `fluid` region contains the surrounding air domain
+- a region interface couples conduction in the solids to convection in the air
+- a second run toggles radiation to measure its effect on component temperature
+
+Use this case when you want a workflow that is much closer to commercial
+electronics-cooling GUIs and when wall heat-flux shortcuts are no longer enough.
+
+### Benchmark Geometry
+
+Import or create the following solids:
+
+| Body | Role | Suggested source | Notes |
+|------|------|------------------|-------|
+| `board` | Main PCB solid | imported STL/STEP or Part box | Treated as solid conduction region |
+| `cpu` | Heat-generating package | imported STL/STEP or Part box | Receives volumetric or equivalent heat source |
+| `pins` | Secondary solid detail | optional imported STL/STEP | Helps test mesh refinement behavior |
+| `fan` | Inlet plenum / fan body | Part box | Create a face group for the fan inlet |
+| `outlet_tool` | Boundary extraction helper | Part box | Used to carve the outlet patch from the outer domain |
+| `air_domain` | Outer enclosure / fluid box | Part box or Boolean result | Surrounds the board and CPU |
+
+Suggested dimensions if you are building the benchmark from scratch instead of
+reusing imported geometry:
+
+- `fan`: origin `(0.05, 0.016, 0.0115) m`, size `(0.016, 0.016, 0.004) m`
+- `outlet_tool`: origin `(0.0845, 0.0415, 0) m`, size `(0.0065, 0.009, 0.008) m`
+- base domain min `(0, 0, 0) m`, max `(0.085, 0.056, 0.0155) m`
+
+### FlowStudio Mapping
+
+This is the closest FlowStudio mapping to the original commercial workflow:
+
+| SimFlow concept | FlowStudio equivalent |
+|-----------------|-----------------------|
+| Case | `FlowStudio::CFDAnalysis` |
+| Imported STL solids | FreeCAD Part bodies or imported STEP/STL geometry |
+| Fan inlet face group | selected face + `FlowStudio_Fan` or inlet BC |
+| Solid region | assigned `ThermalMaterial` objects on board/cpu solids |
+| Fluid region | internal air volume with `FluidMaterial` |
+| Region interface | touching fluid/solid boundary pair prepared for CHT backend |
+| Cell-zone heat source | CPU heat source via fixed heat flux or solver-side volumetric source |
+| Radiation panel | physics heat-transfer plus `FlowStudio_BC_Radiation` on exposed solids |
+| ParaView temperature plots | `PostPipeline`, cut plots, surface plots, probes |
+
+### Step-by-Step Instructions
+
+#### L2B.1 — Geometry Preparation
+
+1. Import `board`, `cpu`, and optional `pins` geometry or build them with Part primitives.
+2. Create a `fan` box above the CPU.
+3. Create an `outlet_tool` helper body on the far end of the enclosure.
+4. Create an enclosing air box and derive the `air_domain` fluid volume.
+5. Name bodies explicitly so later assignments stay readable: `board`, `cpu`, `pins`, `fan`, `air_domain`, `outlet_tool`.
+
+#### L2B.2 — Analysis and Physics
+
+1. Create **New CFD Analysis**.
+2. In **PhysicsModel**, set:
+   - `FlowRegime`: **Turbulent**
+   - `TurbulenceModel`: **kEpsilon** or **kOmegaSST**
+   - `Compressibility`: **Incompressible**
+   - `TimeModel`: **Steady**
+   - `HeatTransfer`: **✓ Enabled**
+   - `Gravity`: **Optional** for this forced-flow benchmark
+   - `Buoyancy`: **Off** unless you explicitly want mixed convection
+3. For OpenFOAM-backed parity, set the solver app to **`chtMultiRegionSimpleFoam`**.
+4. Keep **Radiation** disabled for the first pass; it will be enabled in the second run.
+
+> **Implementation note:** FlowStudio already exposes heat transfer, thermal
+> materials, and radiation BC objects. The fully guided CHT wizard is still a
+> product target, so this benchmark documents the intended multi-region setup
+> rather than claiming one-click automation.
+
+#### L2B.3 — Materials
+
+Assign materials by region:
+
+**Fluid region:**
+- `FluidMaterial`: **Air**
+- If your backend exposes equation-of-state selection, prefer an incompressible ideal/perfect-gas style model for closer parity with the reference workflow.
+
+**Solid regions:**
+- `board`: **FR-4 (PCB)** or a custom thermal material
+- `cpu`: **Aluminum** for the tutorial benchmark, or a package-specific custom material
+- `pins`: **Copper** if included
+
+For radiation-enabled runs, set reasonable emissivity values on the thermal materials:
+
+| Region | Suggested emissivity |
+|--------|----------------------|
+| board / solder mask | 0.85-0.95 |
+| CPU package top | 0.80-0.95 |
+| bare aluminum surfaces | 0.05-0.20 unless coated |
+
+#### L2B.4 — Boundary and Interface Setup
+
+Configure the boundaries as follows:
+
+**Fan inlet:**
+- Select the fan bottom face and create a dedicated inlet face selection.
+- Use either:
+  - `FlowStudio_Fan` with an external-inlet or compact-fan style preset, or
+  - `FlowStudio_BC_Inlet` with `VelocityMagnitude = 0.1 m/s`
+- Set inlet temperature to `293.15 K`.
+
+**Outlet:**
+- Use the outer face or extracted outlet patch on the right side.
+- `OutletType`: **Static Pressure**
+- Pressure: `0 Pa`
+
+**Outer enclosure walls:**
+- `WallType`: **No-Slip**
+- `ThermalType`: **Adiabatic** for the no-radiation baseline
+
+**CPU heat source:**
+- Preferred parity path: apply a **volumetric source** in the CPU region.
+- Equivalent shortcut: apply a **Fixed Heat Flux** chosen to match `0.25 W` total power.
+- If the CPU volume is approximately `200 mm^3`, the SimFlow-style volumetric source is:
+  - `1.25e6 W/m^3`
+
+**Fluid-solid interface:**
+- Keep the CPU and board surfaces conformal with the surrounding fluid region.
+- Mark the contacting fluid/solid surfaces as the CHT coupling interface for the selected backend.
+
+#### L2B.5 — Mesh Strategy
+
+Use a true multi-region mesh strategy rather than a single fluid-only mesh.
+
+**Solid-region meshing:**
+- `fan`: refinement `1-3`
+- `board`: refinement `2-3`
+- `cpu`: refinement `2-4`
+- material point inside the solid region near `(0.058, 0.024, 0.0005) m`
+
+**Fluid-region meshing:**
+- move the material point into the air near `(0.058, 0.024, 0.005) m`
+- keep the same base box extents as the geometry benchmark
+- base divisions around `15 x 10 x 5` are acceptable for a first pass
+- extract or explicitly define the outlet boundary before finalizing the fluid region
+
+**Quality priorities:**
+- maintain clean interface cells at CPU and board surfaces
+- refine the fan and outlet path enough to avoid excessive numerical diffusion
+- use boundary layers if your current backend path supports them cleanly
+
+#### L2B.6 — Solver Controls
+
+For the first run, target the no-radiation steady solution:
+
+- Solver: `chtMultiRegionSimpleFoam`
+- Turbulence: `realizable k-epsilon` for closer reference parity, `kOmegaSST` is also acceptable in FlowStudio tutorials
+- Solid enthalpy tolerance: `1e-8` if exposed
+- Non-orthogonal correctors: `2`
+- Temperature limits: `290 K` to `600 K`
+- Relaxation starting point:
+  - `p_rgh`: `0.3`
+  - `U`: `0.4`
+  - `rho`, `k`, `epsilon`: `0.8`
+  - `h` / solid enthalpy: `1.0`
+- Initial run length: `800` iterations
+
+#### L2B.7 — Radiation Pass
+
+After the baseline converges:
+
+1. Enable radiation in the active heat-transfer model.
+2. Add `FlowStudio_BC_Radiation` to the exposed board, CPU, and fan-facing solid surfaces as needed.
+3. Use surface-to-surface style assumptions where the backend supports it.
+4. Keep the same mesh so the result delta is attributable to radiation rather than discretization changes.
+5. Continue the run to roughly `2000` total iterations.
+
+Expected benchmark behavior:
+
+- baseline max temperature around the mid-`350 K` range
+- with radiation enabled, peak temperature can drop by roughly `10-20 K`
+- radiative heat flux should be visibly concentrated on the hotter package and nearby board surfaces
+
+#### L2B.8 — Post-Processing Checklist
+
+Create the following result views:
+
+1. Temperature contour on board and CPU surfaces.
+2. A cut plane through the fan, CPU, and outlet path.
+3. Streamlines or flow trajectories from the inlet.
+4. Point probes at CPU center, outlet, and a board hot spot.
+5. A second temperature scene with the same color scale for the radiation-enabled rerun.
+6. If supported, a radiative heat-flux plot on exposed solid surfaces.
+
+#### L2B.9 — Validation Targets
+
+Use these checks to judge whether the replication is behaving correctly:
+
+| Check | Baseline expectation | Radiation run expectation |
+|-------|----------------------|---------------------------|
+| Residual trend | steady decay without oscillatory divergence | continued decay after restart |
+| CPU peak temperature | hot spot on CPU and near-board contact | lower than baseline |
+| Outlet air temperature | above inlet temperature | slightly cooler than baseline |
+| Heat path | conduction into board + convection into air | same plus visible radiative redistribution |
+
+### Why This Scenario Matters
+
+This benchmark closes the gap between FlowStudio's existing beginner PCB example
+and a workflow that thermal engineers expect from commercial electronics-cooling
+tools:
+
+1. It uses **fluid + solid regions** instead of only wall heat-flux surrogates.
+2. It introduces **fan, outlet extraction, and interface coupling** as explicit setup tasks.
+3. It makes **radiation** a measurable second-pass study instead of a theoretical checkbox.
+4. It provides a reproducible benchmark for future FlowStudio workflow automation.
 
 ---
 

@@ -30,6 +30,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 try:
+    import flow_studio.commands as _commands_mod
     from flow_studio.taskpanels import task_solver as _task_solver_mod
     from flow_studio.taskpanels import task_fluid_material as _task_fluid_material_mod
     from flow_studio.taskpanels import task_bc_inlet as _task_bc_inlet_mod
@@ -69,6 +70,7 @@ class TestTaskPanelRuntimeSmoke(unittest.TestCase):
             cls._app = QtGui.QApplication([])
 
         cls.TaskSolver = _task_solver_mod.TaskSolver
+        cls.CommandsModule = _commands_mod
         cls.TaskFluidMaterial = _task_fluid_material_mod.TaskFluidMaterial
         cls.TaskBCInlet = _task_bc_inlet_mod.TaskBCInlet
         cls.TaskBCOpen = _task_bc_open_mod.TaskBCOpen
@@ -93,6 +95,28 @@ class TestTaskPanelRuntimeSmoke(unittest.TestCase):
         cls.EngineeringDatabaseEditorModule = _engineering_database_editor_mod
         cls.MATERIALS_DB = _task_fluid_material_mod.MATERIALS_DB
         cls.FreeCAD = _task_measurement_point_mod.FreeCAD
+
+    def _new_document(self, name):
+        doc = self.FreeCAD.newDocument(name)
+        self.addCleanup(self.FreeCAD.closeDocument, doc.Name)
+        return doc
+
+    def _run_example_command(self, doc, command_cls):
+        with mock.patch.object(self.CommandsModule, "_show_project_cockpit", return_value=None):
+            command_cls().Activated()
+        doc.recompute()
+
+    def _find_analysis_by_recipe_key(self, doc, recipe_key):
+        for obj in getattr(doc, "Objects", []):
+            if getattr(obj, "StudyRecipeKey", "") == recipe_key:
+                return obj
+        self.fail(f"Could not find analysis for recipe key {recipe_key}")
+
+    def _find_child_by_type(self, analysis, flow_type):
+        for child in getattr(analysis, "Group", []):
+            if getattr(child, "FlowType", "") == flow_type:
+                return child
+        self.fail(f"Could not find child of type {flow_type} in {getattr(analysis, 'Name', analysis)}")
 
     def test_solver_backend_switch_updates_stack_and_store(self):
         obj = types.SimpleNamespace(
@@ -264,6 +288,100 @@ class TestTaskPanelRuntimeSmoke(unittest.TestCase):
         self.assertEqual(solver_obj.StallTimeoutSeconds, 90)
         self.assertAlmostEqual(solver_obj.MinProgressPercent, 12.5, places=3)
         self.assertFalse(solver_obj.AbortOnThreshold)
+
+    def test_non_cfd_example_commands_create_recipe_keyed_result_scaffolds(self):
+        cases = (
+            (
+                "RuntimeStructuralBracketExample",
+                self.CommandsModule._CmdStructuralBracketExample,
+                "structural-bracket-example",
+                "Structural",
+                "Static Linear Elastic",
+                "Structural Bracket Results",
+                "Von Mises Stress",
+                "Bracket Stress Plot",
+                "Surface Plot",
+                "Von Mises Stress",
+            ),
+            (
+                "RuntimeElectrostaticCapacitorExample",
+                self.CommandsModule._CmdElectrostaticCapacitorExample,
+                "electrostatic-capacitor-example",
+                "Electrostatic",
+                "Capacitance Matrix",
+                "Electrostatic Capacitor Results",
+                "Electric Potential",
+                "Potential Cut Plot",
+                "Cut Plot",
+                "Electric Potential",
+            ),
+            (
+                "RuntimeElectromagneticCoilExample",
+                self.CommandsModule._CmdElectromagneticCoilExample,
+                "electromagnetic-coil-example",
+                "Electromagnetic",
+                "Magnetostatic",
+                "Electromagnetic Coil Results",
+                "Magnetic Flux Density",
+                "Magnetic Flux Plot",
+                "Surface Plot",
+                "Magnetic Flux Density",
+            ),
+            (
+                "RuntimeThermalPlateExample",
+                self.CommandsModule._CmdThermalPlateExample,
+                "thermal-plate-example",
+                "Thermal",
+                "Steady-State Heat Transfer",
+                "Thermal Plate Results",
+                "Temperature",
+                "Temperature Cut Plot",
+                "Cut Plot",
+                "Temperature",
+            ),
+            (
+                "RuntimeOpticalLensExample",
+                self.CommandsModule._CmdOpticalLensExample,
+                "optical-lens-example",
+                "Optical",
+                "Illumination",
+                "Optical Lens Results",
+                "Irradiance",
+                "Irradiance Surface Plot",
+                "Surface Plot",
+                "Irradiance",
+            ),
+        )
+
+        for (
+            doc_name,
+            command_cls,
+            recipe_key,
+            domain_key,
+            analysis_type,
+            post_label,
+            active_field,
+            result_label,
+            plot_kind,
+            plot_field,
+        ) in cases:
+            with self.subTest(recipe_key=recipe_key):
+                doc = self._new_document(doc_name)
+                self._run_example_command(doc, command_cls)
+
+                analysis = self._find_analysis_by_recipe_key(doc, recipe_key)
+                self.assertEqual(analysis.PhysicsDomain, domain_key)
+                self.assertEqual(analysis.AnalysisType, analysis_type)
+
+                post = self._find_child_by_type(analysis, "FlowStudio::PostPipeline")
+                self.assertEqual(post.Label, post_label)
+                self.assertEqual(post.ActiveField, active_field)
+                self.assertIn(active_field, list(getattr(post, "AvailableFields", [])))
+
+                result_plot = self._find_child_by_type(analysis, "FlowStudio::ResultPlot")
+                self.assertEqual(result_plot.Label, result_label)
+                self.assertEqual(result_plot.PlotKind, plot_kind)
+                self.assertEqual(result_plot.Field, plot_field)
 
     def test_inlet_panel_publishes_validation_metadata_for_missing_setup(self):
         inlet_obj = types.SimpleNamespace(

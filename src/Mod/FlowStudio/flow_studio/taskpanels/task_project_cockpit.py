@@ -14,6 +14,7 @@ import FreeCADGui
 from PySide import QtCore, QtGui
 
 from flow_studio.core.workflow import get_active_analysis
+from flow_studio.physics_domains import example_command_groups
 from flow_studio.runtime_monitor import get_run_snapshot, sync_post_pipeline, terminate_run
 from flow_studio.workflow_guide import get_workflow_context, get_workflow_status
 
@@ -39,6 +40,29 @@ def _style_banner(widget, level):
 
 class ProjectCockpitPanel:
     """Color-coded simulation cockpit that drives the whole project flow."""
+
+    EXAMPLE_LABELS = {
+        "FlowStudio_ElectronicsCoolingStudy": "EC Study",
+        "FlowStudio_ExternalAeroStudy": "Aero Study",
+        "FlowStudio_PipeFlowStudy": "Pipe Study",
+        "FlowStudio_StaticMixerStudy": "Mixer Study",
+        "FlowStudio_StructuralBracketExample": "Struct Ex",
+        "FlowStudio_ElectrostaticCapacitorExample": "ES Ex",
+        "FlowStudio_ElectromagneticCoilExample": "EM Ex",
+        "FlowStudio_ThermalPlateExample": "Therm Ex",
+        "FlowStudio_OpticalLensExample": "Opt Ex",
+    }
+
+    STARTER_COMMAND_GROUPS = tuple(
+        (
+            group_label,
+            tuple(
+                (command_name, EXAMPLE_LABELS.get(command_name, command_name.replace("FlowStudio_", "")))
+                for command_name in commands
+            ),
+        )
+        for _group_key, group_label, commands in example_command_groups()
+    )
 
     COMMAND_LABELS = (
         ("FlowStudio_Analysis", "1. Analysis"),
@@ -77,6 +101,32 @@ class ProjectCockpitPanel:
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
 
+        self.recipe_group = QtGui.QGroupBox("Study Recipe")
+        recipe_layout = QtGui.QVBoxLayout(self.recipe_group)
+        self.recipe_banner = QtGui.QLabel("")
+        self.recipe_banner.setWordWrap(True)
+        recipe_layout.addWidget(self.recipe_banner)
+        self.recipe_details = QtGui.QLabel("")
+        self.recipe_details.setWordWrap(True)
+        recipe_layout.addWidget(self.recipe_details)
+        self.recipe_group.setVisible(False)
+        layout.addWidget(self.recipe_group)
+
+        starter_group = QtGui.QGroupBox("Starter Examples")
+        starter_layout = QtGui.QVBoxLayout(starter_group)
+        for group_label, commands in self.STARTER_COMMAND_GROUPS:
+            domain_group = QtGui.QGroupBox(group_label)
+            domain_layout = QtGui.QGridLayout(domain_group)
+            for index, (command_name, label) in enumerate(commands):
+                button = QtGui.QPushButton(label)
+                button.clicked.connect(lambda _checked=False, c=command_name: self._run_command(c))
+                button.setMinimumHeight(32)
+                row, col = divmod(index, 2)
+                domain_layout.addWidget(button, row, col)
+                self._command_buttons[command_name] = button
+            starter_layout.addWidget(domain_group)
+        layout.addWidget(starter_group)
+
         actions_group = QtGui.QGroupBox("Forced Workflow")
         actions_layout = QtGui.QGridLayout(actions_group)
         for index, (command_name, label) in enumerate(self.COMMAND_LABELS):
@@ -87,13 +137,15 @@ class ProjectCockpitPanel:
             actions_layout.addWidget(button, row, col)
             self._command_buttons[command_name] = button
 
+        control_row = (len(self.COMMAND_LABELS) + 3) // 4
+
         self.btn_stop = QtGui.QPushButton("Stop Run")
         self.btn_stop.clicked.connect(self._stop_run)
-        actions_layout.addWidget(self.btn_stop, 2, 0, 1, 2)
+        actions_layout.addWidget(self.btn_stop, control_row, 0, 1, 2)
 
         self.btn_results = QtGui.QPushButton("Open Results")
         self.btn_results.clicked.connect(lambda: self._run_command("FlowStudio_PostPipeline"))
-        actions_layout.addWidget(self.btn_results, 2, 2, 1, 2)
+        actions_layout.addWidget(self.btn_results, control_row, 2, 1, 2)
         layout.addWidget(actions_group)
 
         self.steps_tree = QtGui.QTreeWidget()
@@ -169,9 +221,33 @@ class ProjectCockpitPanel:
             f"Color coding is enforced: green = done, blue = ready now, grey = blocked."
         )
 
+        self._refresh_study_recipe(context)
         self._refresh_step_tree(steps)
         self._refresh_action_buttons(steps)
         self._refresh_runtime(analysis)
+
+    def _refresh_study_recipe(self, context):
+        recipe = context.get("study_recipe")
+        if recipe is None:
+            self.recipe_group.setVisible(False)
+            self.recipe_banner.clear()
+            self.recipe_details.clear()
+            return
+
+        self.recipe_group.setVisible(True)
+        self.recipe_banner.setText(
+            f"<b>{recipe.label}</b><br>{recipe.summary}<br><a href='{recipe.reference_url}'>{recipe.reference_url}</a>"
+        )
+        milestone_lines = "".join(f"<li>{item}</li>" for item in recipe.milestones)
+        parameter_lines = "".join(f"<li>{item}</li>" for item in recipe.key_parameters)
+        self.recipe_details.setText(
+            "<b>Workflow milestones</b><ul>"
+            f"{milestone_lines}"
+            "</ul><b>Reference values</b><ul>"
+            f"{parameter_lines}"
+            "</ul>"
+        )
+        self.recipe_banner.setOpenExternalLinks(True)
 
     def _refresh_step_tree(self, steps):
         self.steps_tree.clear()

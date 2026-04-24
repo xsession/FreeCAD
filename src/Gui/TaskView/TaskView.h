@@ -128,6 +128,8 @@ class GuiExport TaskPanel: public QWidget
 public:
     explicit TaskPanel(QWidget* parent = nullptr);
     ~TaskPanel() override;
+    void setContext(const QString& mode, const QString& title, const QString& detail = {});
+    void clearContext();
     void setSummary(const QString& title, const QString& detail = {});
     void clearSummary();
     void setValidation(const QString& level, const QString& title, const QString& detail = {});
@@ -136,6 +138,10 @@ public:
 public:
     QVBoxLayout* mainLayout;
     QScrollArea* scrollArea;
+    ::QFrame* contextFrame;
+    ::QLabel* contextModeLabel;
+    ::QLabel* contextTitleLabel;
+    ::QLabel* contextDetailLabel;
     ::QFrame* summaryFrame;
     ::QLabel* summaryTitleLabel;
     ::QLabel* summaryDetailLabel;

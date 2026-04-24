@@ -242,6 +242,372 @@ class _CmdAnalysis:
         FreeCAD.ActiveDocument.recompute()
 
 
+class _CmdElectronicsCoolingStudy:
+    """Create a benchmark-oriented electronics cooling CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Electronics Cooling Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a conjugate heat-transfer electronics cooling study scaffold with benchmark defaults",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Electronics Cooling Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeSolidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeFan,
+            makeVolumeSource,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeBCRadiation,
+        )
+        from flow_studio.workflows.studies import apply_electronics_cooling_defaults
+
+        analysis = makeAnalysis(name="ElectronicsCoolingAnalysis")
+        physics = makePhysicsModel(name="ElectronicsCoolingPhysics")
+        fluid_material = makeFluidMaterial(name="CoolingAir")
+        solid_material = makeSolidMaterial(name="ElectronicsSolid")
+        initial_conditions = makeInitialConditions(name="CoolingInitialConditions")
+        solver = makeSolver(name="ElectronicsCoolingSolver")
+        mesh = makeMeshGmsh(name="ElectronicsCoolingMesh")
+        post = makePostPipeline(name="ElectronicsCoolingPost")
+        fan = makeFan(name="CoolingFan")
+        heat_source = makeVolumeSource(name="CPUHeatSource")
+        inlet = makeBCInlet(name="FanInlet")
+        outlet = makeBCOutlet(name="Outlet")
+        walls = makeBCWall(name="Walls")
+        radiation = makeBCRadiation(name="Radiation")
+
+        for child in (
+            physics,
+            fluid_material,
+            solid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            fan,
+            heat_source,
+            inlet,
+            outlet,
+            walls,
+            radiation,
+        ):
+            analysis.addObject(child)
+
+        apply_electronics_cooling_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solid_material=solid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            fan=fan,
+            volume_source=heat_source,
+            mesh=mesh,
+            post_pipeline=post,
+        )
+
+        try:
+            inlet.BCLabel = "fan_inlet"
+            inlet.VelocityMagnitude = 0.1
+            inlet.InletTemperature = 293.15
+            outlet.BCLabel = "outlet"
+            outlet.StaticPressure = 0.0
+            walls.BCLabel = "walls"
+            walls.ThermalType = "Adiabatic"
+            radiation.BCLabel = "Radiation"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdExternalAeroStudy:
+    """Create a reusable external-aerodynamics CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New External Aero Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a generic external aerodynamics CFD study scaffold for wing, car, or building cases",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create External Aero Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeBCSymmetry,
+        )
+        from flow_studio.workflows.studies import apply_external_aero_defaults
+
+        analysis = makeAnalysis(name="ExternalAeroAnalysis")
+        physics = makePhysicsModel(name="ExternalAeroPhysics")
+        fluid_material = makeFluidMaterial(name="ExternalAeroAir")
+        initial_conditions = makeInitialConditions(name="ExternalAeroInitialConditions")
+        solver = makeSolver(name="ExternalAeroSolver")
+        mesh = makeMeshGmsh(name="ExternalAeroMesh")
+        post = makePostPipeline(name="ExternalAeroPost")
+        inlet = makeBCInlet(name="FarFieldInlet")
+        outlet = makeBCOutlet(name="FarFieldOutlet")
+        ground = makeBCWall(name="GroundWall")
+        symmetry = makeBCSymmetry(name="FarFieldSymmetry")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet,
+            outlet,
+            ground,
+            symmetry,
+        ):
+            analysis.addObject(child)
+
+        apply_external_aero_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+        )
+
+        try:
+            inlet.BCLabel = "inlet"
+            inlet.VelocityMagnitude = 20.0
+            outlet.BCLabel = "outlet"
+            outlet.StaticPressure = 0.0
+            ground.BCLabel = "ground"
+            ground.WallType = "Moving Wall"
+            symmetry.BCLabel = "symmetry"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdPipeFlowStudy:
+    """Create a reusable internal pipe-flow CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Pipe Flow Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a generic internal pipe-flow CFD study scaffold with mixed inlet conditions",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Pipe Flow Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+        )
+        from flow_studio.workflows.studies import apply_pipe_flow_defaults
+
+        analysis = makeAnalysis(name="PipeFlowAnalysis")
+        physics = makePhysicsModel(name="PipeFlowPhysics")
+        fluid_material = makeFluidMaterial(name="PipeFlowFluid")
+        initial_conditions = makeInitialConditions(name="PipeFlowInitialConditions")
+        solver = makeSolver(name="PipeFlowSolver")
+        mesh = makeMeshGmsh(name="PipeFlowMesh")
+        post = makePostPipeline(name="PipeFlowPost")
+        inlet_velocity = makeBCInlet(name="VelocityInlet")
+        inlet_pressure = makeBCInlet(name="PressureInlet")
+        outlet = makeBCOutlet(name="PipeOutlet")
+        walls = makeBCWall(name="PipeWalls")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet_velocity,
+            inlet_pressure,
+            outlet,
+            walls,
+        ):
+            analysis.addObject(child)
+
+        apply_pipe_flow_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+        )
+
+        try:
+            inlet_velocity.BCLabel = "inlet1"
+            inlet_velocity.InletType = "Velocity"
+            inlet_velocity.VelocityMagnitude = 1.0
+            inlet_velocity.NormalToFace = True
+            inlet_pressure.BCLabel = "inlet2"
+            inlet_pressure.InletType = "Total Pressure"
+            inlet_pressure.TotalPressure = 100.0
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            walls.BCLabel = "walls"
+            walls.ThermalType = "Adiabatic"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdStaticMixerStudy:
+    """Create a reusable static-mixer passive-scalar CFD study scaffold."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioAnalysis.svg"),
+            "MenuText": translate("FlowStudio", "New Static Mixer Study"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a transient passive-scalar static mixer scaffold with split inlets and scalar-focused post setup",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Static Mixer Study")
+        from flow_studio.ObjectsFlowStudio import (
+            makeAnalysis,
+            makePhysicsModel,
+            makeFluidMaterial,
+            makeInitialConditions,
+            makeSolver,
+            makeMeshGmsh,
+            makePostPipeline,
+            makeBCInlet,
+            makeBCOutlet,
+            makeBCWall,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_static_mixer_defaults
+
+        analysis = makeAnalysis(name="StaticMixerAnalysis")
+        physics = makePhysicsModel(name="StaticMixerPhysics")
+        fluid_material = makeFluidMaterial(name="StaticMixerFluid")
+        initial_conditions = makeInitialConditions(name="StaticMixerInitialConditions")
+        solver = makeSolver(name="StaticMixerSolver")
+        mesh = makeMeshGmsh(name="StaticMixerMesh")
+        post = makePostPipeline(name="StaticMixerPost")
+        inlet_scalar0 = makeBCInlet(name="Scalar0Inlet")
+        inlet_scalar1 = makeBCInlet(name="Scalar1Inlet")
+        outlet = makeBCOutlet(name="MixerOutlet")
+        walls = makeBCWall(name="MixerWalls")
+        result_plot = makeResultPlot(name="PassiveScalarCut", plot_kind="Cut Plot")
+
+        for child in (
+            physics,
+            fluid_material,
+            initial_conditions,
+            solver,
+            mesh,
+            post,
+            inlet_scalar0,
+            inlet_scalar1,
+            outlet,
+            walls,
+            result_plot,
+        ):
+            analysis.addObject(child)
+
+        apply_static_mixer_defaults(
+            analysis,
+            physics_model=physics,
+            fluid_material=fluid_material,
+            solver=solver,
+            initial_conditions=initial_conditions,
+            mesh=mesh,
+            post_pipeline=post,
+        )
+
+        try:
+            inlet_scalar0.BCLabel = "scalar0_inlet"
+            inlet_scalar0.InletType = "Velocity"
+            inlet_scalar0.VelocityMagnitude = 0.8
+            inlet_scalar1.BCLabel = "scalar1_inlet"
+            inlet_scalar1.InletType = "Velocity"
+            inlet_scalar1.VelocityMagnitude = 0.8
+            outlet.BCLabel = "outlet"
+            outlet.OutletType = "Static Pressure"
+            outlet.StaticPressure = 0.0
+            walls.BCLabel = "walls"
+            walls.ThermalType = "Adiabatic"
+            result_plot.Field = "Passive Scalar"
+            result_plot.Streamlines = True
+            result_plot.CutPlane = "YZ Plane"
+        except Exception:
+            pass
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
 class _CmdStructuralAnalysis:
     """Create a new Structural Mechanics analysis."""
 
@@ -391,6 +757,298 @@ class _CmdOpticalAnalysis:
             analysis.addObject(child)
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
+
+
+class _CmdStructuralBracketExample:
+    """Create a structural bracket starter example."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioStructural.svg"),
+            "MenuText": translate("FlowStudio", "Structural Bracket Example"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a structural bracket example with aluminum material, a fixed support, and a tip load",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Structural Bracket Example")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis,
+            makeStructuralPhysicsModel,
+            makeSolidMaterial,
+            makeSolver,
+            makeBCFixedDisplacement,
+            makeBCForce,
+            makePostPipeline,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_structural_bracket_defaults
+
+        analysis = makeDomainAnalysis(name="StructuralBracketExample", domain_key="Structural")
+        physics = makeStructuralPhysicsModel(name="BracketPhysics")
+        material = makeSolidMaterial(name="BracketMaterial")
+        solver = makeSolver(name="StructuralSolver")
+        fixed = makeBCFixedDisplacement(name="SupportConstraint")
+        force = makeBCForce(name="TipLoad")
+        post = makePostPipeline(name="StructuralBracketPost")
+        result_plot = makeResultPlot(name="BracketStressPlot", plot_kind="Surface Plot")
+
+        for child in (physics, material, solver, fixed, force, post, result_plot):
+            analysis.addObject(child)
+
+        apply_structural_bracket_defaults(
+            analysis,
+            physics_model=physics,
+            solid_material=material,
+            solver=solver,
+            fixed_constraint=fixed,
+            force_constraint=force,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdElectrostaticCapacitorExample:
+    """Create a parallel-plate capacitor starter example."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectrostatic.svg"),
+            "MenuText": translate("FlowStudio", "Electrostatic Capacitor Example"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a capacitor example with dielectric material and paired voltage electrodes",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Electrostatic Capacitor Example")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis,
+            makeElectrostaticPhysicsModel,
+            makeElectrostaticMaterial,
+            makeSolver,
+            makeBCElectricPotential,
+            makePostPipeline,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_electrostatic_capacitor_defaults
+
+        analysis = makeDomainAnalysis(name="ElectrostaticCapacitorExample", domain_key="Electrostatic")
+        physics = makeElectrostaticPhysicsModel(name="CapacitorPhysics")
+        material = makeElectrostaticMaterial(name="DielectricMaterial")
+        solver = makeSolver(name="ElectrostaticSolver")
+        positive = makeBCElectricPotential(name="PositivePlate")
+        ground = makeBCElectricPotential(name="GroundPlate")
+        post = makePostPipeline(name="ElectrostaticCapacitorPost")
+        result_plot = makeResultPlot(name="PotentialCutPlot", plot_kind="Cut Plot")
+
+        for child in (physics, material, solver, positive, ground, post, result_plot):
+            analysis.addObject(child)
+
+        apply_electrostatic_capacitor_defaults(
+            analysis,
+            physics_model=physics,
+            material=material,
+            solver=solver,
+            positive_bc=positive,
+            ground_bc=ground,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdElectromagneticCoilExample:
+    """Create a magnetostatic coil starter example."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectromagnetic.svg"),
+            "MenuText": translate("FlowStudio", "Electromagnetic Coil Example"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a magnetostatic coil example with current density excitation and far-field potential",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Electromagnetic Coil Example")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis,
+            makeElectromagneticPhysicsModel,
+            makeElectromagneticMaterial,
+            makeSolver,
+            makeBCCurrentDensity,
+            makeBCMagneticPotential,
+            makePostPipeline,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_electromagnetic_coil_defaults
+
+        analysis = makeDomainAnalysis(name="ElectromagneticCoilExample", domain_key="Electromagnetic")
+        physics = makeElectromagneticPhysicsModel(name="CoilPhysics")
+        material = makeElectromagneticMaterial(name="CoilMaterial")
+        solver = makeSolver(name="ElectromagneticSolver")
+        current = makeBCCurrentDensity(name="CoilCurrent")
+        boundary = makeBCMagneticPotential(name="FarFieldBoundary")
+        post = makePostPipeline(name="ElectromagneticCoilPost")
+        result_plot = makeResultPlot(name="MagneticFluxPlot", plot_kind="Surface Plot")
+
+        for child in (physics, material, solver, current, boundary, post, result_plot):
+            analysis.addObject(child)
+
+        apply_electromagnetic_coil_defaults(
+            analysis,
+            physics_model=physics,
+            material=material,
+            solver=solver,
+            current_bc=current,
+            boundary_bc=boundary,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdThermalPlateExample:
+    """Create a heated-plate thermal starter example."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioThermal.svg"),
+            "MenuText": translate("FlowStudio", "Thermal Plate Example"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a thermal conduction example with a heat-flux source and ambient convection",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Thermal Plate Example")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis,
+            makeThermalPhysicsModel,
+            makeThermalMaterial,
+            makeSolver,
+            makeBCHeatFlux,
+            makeBCConvection,
+            makePostPipeline,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_thermal_plate_defaults
+
+        analysis = makeDomainAnalysis(name="ThermalPlateExample", domain_key="Thermal")
+        physics = makeThermalPhysicsModel(name="ThermalPlatePhysics")
+        material = makeThermalMaterial(name="ThermalPlateMaterial")
+        solver = makeSolver(name="ThermalSolver")
+        heat_flux = makeBCHeatFlux(name="HeaterPad")
+        convection = makeBCConvection(name="AmbientCooling")
+        post = makePostPipeline(name="ThermalPlatePost")
+        result_plot = makeResultPlot(name="TemperatureCutPlot", plot_kind="Cut Plot")
+
+        for child in (physics, material, solver, heat_flux, convection, post, result_plot):
+            analysis.addObject(child)
+
+        apply_thermal_plate_defaults(
+            analysis,
+            physics_model=physics,
+            material=material,
+            solver=solver,
+            heat_flux_bc=heat_flux,
+            convection_bc=convection,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
+
+
+class _CmdOpticalLensExample:
+    """Create a lens illumination optical starter example."""
+
+    def GetResources(self):
+        return {
+            "Pixmap": _icon("FlowStudioElectromagnetic.svg"),
+            "MenuText": translate("FlowStudio", "Optical Lens Example"),
+            "ToolTip": translate(
+                "FlowStudio",
+                "Create a non-sequential lens illumination example with a source, detector, and reflective boundary",
+            ),
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None
+
+    def Activated(self):
+        FreeCAD.ActiveDocument.openTransaction("Create Optical Lens Example")
+        from flow_studio.ObjectsFlowStudio import (
+            makeDomainAnalysis,
+            makeOpticalPhysicsModel,
+            makeOpticalMaterial,
+            makeSolver,
+            makeBCOpticalSource,
+            makeBCOpticalDetector,
+            makeBCOpticalBoundary,
+            makePostPipeline,
+            makeResultPlot,
+        )
+        from flow_studio.workflows.studies import apply_optical_lens_defaults
+
+        analysis = makeDomainAnalysis(name="OpticalLensExample", domain_key="Optical")
+        physics = makeOpticalPhysicsModel(name="LensPhysics")
+        material = makeOpticalMaterial(name="LensMaterial")
+        solver = makeSolver(name="OpticalSolver")
+        source = makeBCOpticalSource(name="LEDSource")
+        detector = makeBCOpticalDetector(name="TargetDetector")
+        boundary = makeBCOpticalBoundary(name="MirrorHousing")
+        post = makePostPipeline(name="OpticalLensPost")
+        result_plot = makeResultPlot(name="IrradianceSurfacePlot", plot_kind="Surface Plot")
+
+        for child in (physics, material, solver, source, detector, boundary, post, result_plot):
+            analysis.addObject(child)
+
+        apply_optical_lens_defaults(
+            analysis,
+            physics_model=physics,
+            material=material,
+            solver=solver,
+            source_bc=source,
+            detector_bc=detector,
+            boundary_bc=boundary,
+            post_pipeline=post,
+            result_plot=result_plot,
+        )
+
+        FreeCAD.ActiveDocument.commitTransaction()
+        FreeCAD.ActiveDocument.recompute()
+        _show_project_cockpit()
 
 
 class _CmdPhysicsModel:
@@ -2205,6 +2863,7 @@ class _CmdWorkflowGuide:
         steps = get_workflow_status()
         profile = context["profile"]
         layout_model = context["layout"]
+        study_recipe = context.get("study_recipe")
 
         # Print a formatted workflow status report to the console
         FreeCAD.Console.PrintMessage(
@@ -2218,6 +2877,15 @@ class _CmdWorkflowGuide:
             f"Workspace: {layout_model.name}\n"
             f"Primary workflows: {', '.join(profile.workflows)}\n\n"
         )
+
+        if study_recipe is not None:
+            FreeCAD.Console.PrintMessage(
+                f"Study recipe: {study_recipe.label}\n"
+                f"Reference: {study_recipe.reference_url}\n"
+            )
+            for item in study_recipe.key_parameters:
+                FreeCAD.Console.PrintMessage(f"  - {item}\n")
+            FreeCAD.Console.PrintMessage("\n")
 
         next_step = None
         for step in steps:
@@ -2299,6 +2967,7 @@ class _WorkflowGuidePanel:
         layout = QtWidgets.QVBoxLayout(self.form)
         profile = context["profile"]
         workspace = context["layout"]
+        study_recipe = context.get("study_recipe")
 
         # Header
         header = QtWidgets.QLabel(
@@ -2310,6 +2979,22 @@ class _WorkflowGuidePanel:
         )
         header.setWordWrap(True)
         layout.addWidget(header)
+
+        if study_recipe is not None:
+            recipe = QtWidgets.QLabel(
+                f"<p><b>Study recipe:</b> {study_recipe.label}<br>"
+                f"{study_recipe.summary}<br>"
+                f"<a href='{study_recipe.reference_url}'>{study_recipe.reference_url}</a></p>"
+                "<p><b>Milestones:</b><ul>"
+                + "".join(f"<li>{item}</li>" for item in study_recipe.milestones)
+                + "</ul><b>Reference values:</b><ul>"
+                + "".join(f"<li>{item}</li>" for item in study_recipe.key_parameters)
+                + "</ul></p>"
+            )
+            recipe.setWordWrap(True)
+            recipe.setOpenExternalLinks(True)
+            recipe.setStyleSheet("background:#f7f9fc; border:1px solid #90a4ae; border-radius:6px; padding:8px;")
+            layout.addWidget(recipe)
 
         # Steps list
         scroll = QtWidgets.QScrollArea()
@@ -2541,11 +3226,20 @@ class _CmdLeakTracking:
 
 # --- Analysis creation (one per domain) ---
 FreeCADGui.addCommand("FlowStudio_Analysis", _CmdAnalysis())
+FreeCADGui.addCommand("FlowStudio_ElectronicsCoolingStudy", _CmdElectronicsCoolingStudy())
+FreeCADGui.addCommand("FlowStudio_ExternalAeroStudy", _CmdExternalAeroStudy())
+FreeCADGui.addCommand("FlowStudio_PipeFlowStudy", _CmdPipeFlowStudy())
+FreeCADGui.addCommand("FlowStudio_StaticMixerStudy", _CmdStaticMixerStudy())
 FreeCADGui.addCommand("FlowStudio_StructuralAnalysis", _CmdStructuralAnalysis())
+FreeCADGui.addCommand("FlowStudio_StructuralBracketExample", _CmdStructuralBracketExample())
 FreeCADGui.addCommand("FlowStudio_ElectrostaticAnalysis", _CmdElectrostaticAnalysis())
+FreeCADGui.addCommand("FlowStudio_ElectrostaticCapacitorExample", _CmdElectrostaticCapacitorExample())
 FreeCADGui.addCommand("FlowStudio_ElectromagneticAnalysis", _CmdElectromagneticAnalysis())
+FreeCADGui.addCommand("FlowStudio_ElectromagneticCoilExample", _CmdElectromagneticCoilExample())
 FreeCADGui.addCommand("FlowStudio_ThermalAnalysis", _CmdThermalAnalysis())
+FreeCADGui.addCommand("FlowStudio_ThermalPlateExample", _CmdThermalPlateExample())
 FreeCADGui.addCommand("FlowStudio_OpticalAnalysis", _CmdOpticalAnalysis())
+FreeCADGui.addCommand("FlowStudio_OpticalLensExample", _CmdOpticalLensExample())
 
 # --- CFD setup ---
 FreeCADGui.addCommand("FlowStudio_PhysicsModel", _CmdPhysicsModel())

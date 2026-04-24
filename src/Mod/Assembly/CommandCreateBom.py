@@ -149,6 +149,59 @@ class TaskAssemblyCreateBom(QtCore.QObject):
         self.form.CheckBox_detailSubAssemblies.stateChanged.connect(self.onDetailSubAssemblies)
 
         self.updateColumnList()
+        self._refresh_taskview_metadata()
+
+    def _publish_taskview_property(self, name, value):
+        if hasattr(self, "form") and self.form is not None:
+            self.form.setProperty(name, value)
+
+    def _set_taskview_metadata(self, context_mode, context_title, context_detail, summary_title, summary_detail, validation_level="", validation_title="", validation_detail=""):
+        self.taskview_context_mode = context_mode
+        self.taskview_context_title = context_title
+        self.taskview_context_detail = context_detail
+        self.taskview_summary_title = summary_title
+        self.taskview_summary_detail = summary_detail
+        self.taskview_validation_level = validation_level
+        self.taskview_validation_title = validation_title
+        self.taskview_validation_detail = validation_detail
+
+        self._publish_taskview_property("taskview_context_mode", context_mode)
+        self._publish_taskview_property("taskview_context_title", context_title)
+        self._publish_taskview_property("taskview_context_detail", context_detail)
+        self._publish_taskview_property("taskview_summary_title", summary_title)
+        self._publish_taskview_property("taskview_summary_detail", summary_detail)
+        self._publish_taskview_property("taskview_validation_level", validation_level)
+        self._publish_taskview_property("taskview_validation_title", validation_title)
+        self._publish_taskview_property("taskview_validation_detail", validation_detail)
+
+    def _bom_context_title(self):
+        return getattr(self.bomObj, "Label", translate("Assembly", "Bill of Materials"))
+
+    def _bom_context_detail(self):
+        column_count = self.form.columnList.count() if self.form is not None else 0
+        return translate("Assembly", "Configuring {count} bill-of-materials columns for export and sheet output.").format(count=column_count)
+
+    def _bom_validation(self):
+        if self.form.columnList.count() == 0:
+            return (
+                "incomplete",
+                translate("Assembly", "Add at least one column"),
+                translate("Assembly", "A bill of materials needs at least one visible column before it can be meaningfully exported."),
+            )
+        return "", "", ""
+
+    def _refresh_taskview_metadata(self):
+        validation_level, validation_title, validation_detail = self._bom_validation()
+        self._set_taskview_metadata(
+            translate("Assembly", "BOM Edit"),
+            self._bom_context_title(),
+            self._bom_context_detail(),
+            translate("Assembly", "Bill Of Materials Columns"),
+            translate("Assembly", "Reorder columns, rename custom fields, and choose whether sub-assemblies and part details are included."),
+            validation_level,
+            validation_title,
+            validation_detail,
+        )
 
     def accept(self):
         self.deactivate()
@@ -176,12 +229,15 @@ class TaskAssemblyCreateBom(QtCore.QObject):
 
     def onIncludeSolids(self, val):
         self.bomObj.onlyParts = val
+        self._refresh_taskview_metadata()
 
     def onDetailParts(self, val):
         self.bomObj.detailParts = val
+        self._refresh_taskview_metadata()
 
     def onDetailSubAssemblies(self, val):
         self.bomObj.detailSubAssemblies = val
+        self._refresh_taskview_metadata()
 
     def addColumn(self):
         new_name = translate("Assembly", "Default")
@@ -255,6 +311,7 @@ class TaskAssemblyCreateBom(QtCore.QObject):
 
     def onItemsReordered(self, parent, start, end, destination, row):
         self.updateColumnList()
+        self._refresh_taskview_metadata()
 
     def updateColumnList(self):
         if self.bomObj:
@@ -266,6 +323,7 @@ class TaskAssemblyCreateBom(QtCore.QObject):
                     text = ColumnNames[index]
                 new_names.append(text)
             self.bomObj.columnsNames = new_names
+        self._refresh_taskview_metadata()
 
     def itemUpdated(self, item):
         new_text = item.text()
@@ -303,6 +361,7 @@ class TaskAssemblyCreateBom(QtCore.QObject):
                 QtCore.QTimer.singleShot(0, lambda: self.makeItemNonEditable(item))
 
             self.updateColumnList()
+        self._refresh_taskview_metadata()
 
     def makeItemNonEditable(self, item):
         item.setFlags(item.flags() & ~QtCore.Qt.ItemIsEditable)
@@ -348,6 +407,7 @@ class TaskAssemblyCreateBom(QtCore.QObject):
                         self.form.columnList.takeItem(index.row())
 
                     self.updateColumnList()
+                    self._refresh_taskview_metadata()
                     return True  # Consume the event
 
         return super().eventFilter(watched, event)
