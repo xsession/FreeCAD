@@ -19,3 +19,18 @@
 [submodule "src/Mod/FlowStudio/solver_repos/fluidx3d"]
 	path = src/Mod/FlowStudio/solver_repos/fluidx3d
 	url = https://github.com/ProjectPhysX/FluidX3D.git
+[submodule "src/Mod/FlowStudio/solver_repos/raysect"]
+	path = src/Mod/FlowStudio/solver_repos/raysect
+	url = https://github.com/raysect/source.git
+[submodule "src/Mod/FlowStudio/solver_repos/meep"]
+	path = src/Mod/FlowStudio/solver_repos/meep
+	url = https://github.com/NanoComp/meep.git
+[submodule "src/Mod/FlowStudio/solver_repos/openems"]
+	path = src/Mod/FlowStudio/solver_repos/openems
+	url = https://github.com/thliebig/openEMS.git
+[submodule "src/Mod/FlowStudio/solver_repos/optiland"]
+	path = src/Mod/FlowStudio/solver_repos/optiland
+	url = https://github.com/HarrisonKramer/optiland.git
+[submodule "src/Mod/FlowStudio/solver_repos/geant4"]
+	path = src/Mod/FlowStudio/solver_repos/geant4
+	url = https://github.com/Geant4/geant4.git
