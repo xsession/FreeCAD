@@ -5,9 +5,9 @@
 
 """Task panel for Solver settings – multi-solver configuration."""
 
-import FreeCAD
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.solver_presenter import SolverPresenter
 
 
 class TaskSolver(BaseTaskPanel):
@@ -17,61 +17,14 @@ class TaskSolver(BaseTaskPanel):
         "Choose the backend, numerical controls, and execution settings for {label}."
     )
 
-    @staticmethod
-    def _normalized_multi_solver_backends(value):
-        if isinstance(value, str):
-            candidates = [item.strip() for item in value.split(",")]
-        else:
-            candidates = [str(item).strip() for item in (value or ())]
-        return tuple(dict.fromkeys(item for item in candidates if item))
+    def __init__(self, obj):
+        self._presenter = SolverPresenter()
+        super().__init__(obj)
 
     def _build_task_validation(self):
-        backend = getattr(self.obj, "SolverBackend", "")
-        multi_solver_enabled = bool(getattr(self.obj, "MultiSolverEnabled", False))
-        multi_solver_backends = self._normalized_multi_solver_backends(
-            getattr(self.obj, "MultiSolverBackends", ())
-        )
-        if multi_solver_enabled:
-            if len(multi_solver_backends) < 2:
-                return (
-                    "incomplete",
-                    "Select multiple solver backends",
-                    "Enable at least two enterprise solver backends for simultaneous multi-solver execution.",
-                )
-            if backend not in multi_solver_backends:
-                return (
-                    "incomplete",
-                    "Primary backend missing from multi-solver selection",
-                    "Include the currently selected backend in the multi-solver backend list.",
-                )
-        if backend == "Geant4" and not getattr(self.obj, "Geant4Executable", "").strip():
-            return (
-                "incomplete",
-                "Geant4 executable required",
-                "Set the compiled Geant4 application path before launching the solver.",
-            )
-        max_runtime = int(getattr(self.obj, "MaxRuntimeSeconds", 0) or 0)
-        soft_runtime = int(getattr(self.obj, "SoftRuntimeWarningSeconds", 0) or 0)
-        stall_timeout = int(getattr(self.obj, "StallTimeoutSeconds", 0) or 0)
-        min_progress = float(getattr(self.obj, "MinProgressPercent", 0.0) or 0.0)
-        if soft_runtime > 0 and max_runtime > 0 and soft_runtime > max_runtime:
-            return (
-                "warning",
-                "Runtime thresholds out of order",
-                "The soft runtime warning must not exceed the hard runtime limit.",
-            )
-        if stall_timeout > 0 and max_runtime > 0 and stall_timeout > max_runtime:
-            return (
-                "warning",
-                "Stall timeout exceeds hard runtime limit",
-                "Reduce the stall timeout or increase the hard runtime limit so both thresholds can be applied consistently.",
-            )
-        if min_progress < 0.0 or min_progress > 100.0:
-            return (
-                "warning",
-                "Minimum progress threshold invalid",
-                "Use a minimum progress threshold between 0 and 100 percent.",
-            )
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level or title or detail:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -93,7 +46,7 @@ class TaskSolver(BaseTaskPanel):
         multi_solver_group = QtGui.QGroupBox("Parallel Multi-Solver Backends")
         multi_solver_layout = QtGui.QVBoxLayout(multi_solver_group)
         selected_multi_backends = set(
-            self._normalized_multi_solver_backends(getattr(self.obj, "MultiSolverBackends", ()))
+            self._presenter.normalized_multi_solver_backends(getattr(self.obj, "MultiSolverBackends", ()))
         )
         self.chk_multi_openfoam = QtGui.QCheckBox("OpenFOAM")
         self.chk_multi_openfoam.setChecked("OpenFOAM" in selected_multi_backends)
@@ -237,8 +190,7 @@ class TaskSolver(BaseTaskPanel):
         return widget
 
     def _on_backend_changed(self, text):
-        idx = {"OpenFOAM": 0, "Elmer": 1, "FluidX3D": 2, "SU2": 3, "Geant4": 4}.get(text, 0)
-        self.stack.setCurrentIndex(idx)
+        self.stack.setCurrentIndex(self._presenter.backend_page_index(text))
 
     def _selected_multi_solver_backends(self):
         selected = []
@@ -253,44 +205,38 @@ class TaskSolver(BaseTaskPanel):
         return selected
 
     def _store(self):
-        self.obj.SolverBackend = self.cb_backend.currentText()
-        self.obj.MultiSolverEnabled = self.chk_multi_solver.isChecked()
-        self.obj.MultiSolverBackends = [
-            backend
-            for backend, enabled in (
-                ("OpenFOAM", self.chk_multi_openfoam.isChecked()),
-                ("Elmer", self.chk_multi_elmer.isChecked()),
-                ("FluidX3D", self.chk_multi_fluidx3d.isChecked()),
-                ("Geant4", self.chk_multi_geant4.isChecked()),
-            )
-            if enabled
-        ]
-        # OpenFOAM
-        self.obj.OpenFOAMSolver = self.cb_of_solver.currentText()
-        self.obj.MaxIterations = self.sp_iter.value()
-        self.obj.ConvergenceTolerance = self.sp_tol.value()
-        self.obj.NumProcessors = self.sp_nproc.value()
-        self.obj.ConvectionScheme = self.cb_conv.currentText()
-        # Elmer
-        self.obj.ElmerSolverBinary = self.cb_elmer_solver.currentText()
-        if self.cb_backend.currentText() == "Elmer":
-            self.obj.NumProcessors = self.sp_elmer_nproc.value()
-        # FluidX3D
-        self.obj.FluidX3DPrecision = self.cb_fx_prec.currentText()
-        self.obj.FluidX3DResolution = self.sp_fx_res.value()
-        self.obj.FluidX3DTimeSteps = self.sp_fx_steps.value()
-        self.obj.FluidX3DVRAM = self.sp_fx_vram.value()
-        self.obj.FluidX3DMultiGPU = self.chk_multigpu.isChecked()
-        self.obj.FluidX3DNumGPUs = self.sp_ngpu.value()
-        # Geant4
-        self.obj.Geant4Executable = self.le_g4_exe.text().strip()
-        self.obj.Geant4PhysicsList = self.le_g4_physics.text().strip() or "FTFP_BERT"
-        self.obj.Geant4EventCount = self.sp_g4_events.value()
-        self.obj.Geant4Threads = self.sp_g4_threads.value()
-        self.obj.Geant4MacroName = self.le_g4_macro.text().strip() or "run.mac"
-        self.obj.Geant4EnableVisualization = self.chk_g4_vis.isChecked()
-        self.obj.SoftRuntimeWarningSeconds = self.sp_runtime_soft.value()
-        self.obj.MaxRuntimeSeconds = self.sp_runtime_max.value()
-        self.obj.StallTimeoutSeconds = self.sp_runtime_stall.value()
-        self.obj.MinProgressPercent = self.sp_runtime_progress.value()
-        self.obj.AbortOnThreshold = self.chk_abort_threshold.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())
+
+    def _current_settings(self):
+        if not hasattr(self, "cb_backend"):
+            return self._presenter.read_settings(self.obj)
+
+        num_processors = self.sp_elmer_nproc.value() if self.cb_backend.currentText() == "Elmer" else self.sp_nproc.value()
+        return self._presenter._coerce_settings({
+            "SolverBackend": self.cb_backend.currentText(),
+            "OpenFOAMSolver": self.cb_of_solver.currentText(),
+            "MaxIterations": self.sp_iter.value(),
+            "ConvergenceTolerance": self.sp_tol.value(),
+            "NumProcessors": num_processors,
+            "ConvectionScheme": self.cb_conv.currentText(),
+            "ElmerSolverBinary": self.cb_elmer_solver.currentText(),
+            "FluidX3DPrecision": self.cb_fx_prec.currentText(),
+            "FluidX3DResolution": self.sp_fx_res.value(),
+            "FluidX3DTimeSteps": self.sp_fx_steps.value(),
+            "FluidX3DVRAM": self.sp_fx_vram.value(),
+            "FluidX3DMultiGPU": self.chk_multigpu.isChecked(),
+            "FluidX3DNumGPUs": self.sp_ngpu.value(),
+            "Geant4Executable": self.le_g4_exe.text().strip(),
+            "Geant4PhysicsList": self.le_g4_physics.text().strip() or "FTFP_BERT",
+            "Geant4EventCount": self.sp_g4_events.value(),
+            "Geant4Threads": self.sp_g4_threads.value(),
+            "Geant4MacroName": self.le_g4_macro.text().strip() or "run.mac",
+            "Geant4EnableVisualization": self.chk_g4_vis.isChecked(),
+            "MultiSolverEnabled": self.chk_multi_solver.isChecked(),
+            "MultiSolverBackends": self._selected_multi_solver_backends(),
+            "SoftRuntimeWarningSeconds": self.sp_runtime_soft.value(),
+            "MaxRuntimeSeconds": self.sp_runtime_max.value(),
+            "StallTimeoutSeconds": self.sp_runtime_stall.value(),
+            "MinProgressPercent": self.sp_runtime_progress.value(),
+            "AbortOnThreshold": self.chk_abort_threshold.isChecked(),
+        })

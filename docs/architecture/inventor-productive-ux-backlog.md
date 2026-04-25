@@ -77,6 +77,16 @@ Status as of 2026-04-24:
 - Acceptance:
   - identical workflow context produces equivalent shell surfaces regardless of entry route
 
+Current status:
+
+- partially implemented
+- `src/Gui/Application.cpp` already provides `refreshActiveWorkbench()` as the shared shell replay path for ribbon and workbench surfaces
+- `src/Gui/Control.cpp` now routes task-dialog show and close transitions through that same shared replay path instead of leaving task-panel shell refresh as a purely local dock concern
+- `tests/src/Gui/RibbonBarSequence.cpp` now guards this contract so future task-dialog transitions keep using the shared application-level shell refresh entry point
+- remaining work should focus on:
+  - moving more edit-entry and task-surface transitions onto explicit shared shell-state helpers instead of one-off dock logic
+  - defining whether inspector/model-surface normalization should join the same contract or remain a separate right-side-surface phase item
+
 ### UX-002 Canonical Workflow Entry For Sketch And Feature Edit
 
 - Priority: `P0`
@@ -92,6 +102,17 @@ Status as of 2026-04-24:
   - regression checks for bypass routes
 - Acceptance:
   - sketch and feature edit routes no longer diverge in workbench, task-panel, or ribbon behavior
+
+Current status:
+
+- partially implemented
+- `src/Mod/Sketcher/Gui/SketchWorkflowController.cpp` now centralizes sketch-edit viewport normalization and sketch-edit entry behavior for shared Sketcher and PartDesign routes
+- `src/Mod/PartDesign/Gui/SketchWorkflow.cpp` now resolves the active GUI document and normalizes the sketch-edit viewport before calling `setEdit()` during new-sketch creation flows
+- `src/Mod/Sketcher/Gui/Command.cpp` routes the main sketch edit and reorient commands through the shared controller instead of duplicating direct `setEdit()` logic
+- `tests/src/Mod/PartDesign/Gui/SketchWorkflowSetEdit.cpp` now guards the controller routing and the `activateView(..., true)` ordering that prevents non-3D views from stealing sketch-edit focus
+- remaining work should focus on:
+  - extending the same controller-driven entry contract to remaining high-frequency PartDesign feature-edit routes that still manage shell context locally
+  - adding stable runtime smoke coverage for the new-sketch viewport path once the Windows GUI harness is reliable enough for that assertion
 
 ## Epic B: Human-Centered Shell Navigation
 
@@ -115,6 +136,9 @@ Current status:
 
 - partially implemented
 - current implementation already covers favorites, recents, tooltips, and searchable overflow for the tabbed selector path
+- `src/Gui/WorkbenchSelector.cpp` now keeps the combo-box selector aligned with the tabbed selector's mode model by showing pinned primary workbenches plus the currently active non-primary workbench as a temporary visible mode
+- `src/Gui/WorkbenchSelector.cpp` now adds visible category guidance to combo-box workbench labels so that selector mode conveys purpose without relying only on tooltips and overflow menus
+- `src/Mod/FlowStudio/flow_studio/tests/test_ribbon_shell_contract.py` now guards that combo-selector parity contract at the source level
 - remaining work should focus on visibility and parity rather than rebuilding the feature from scratch
 
 ### UX-004 Stable And Adaptive Home Tab

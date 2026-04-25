@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.bc_open_presenter import OpenBoundaryPresenter, OpenBoundarySettings
 
 
 class TaskBCOpen(FloEFDTaskPanel):
@@ -16,21 +17,14 @@ class TaskBCOpen(FloEFDTaskPanel):
         "Define far-field pressure, temperature, and freestream velocity for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = OpenBoundaryPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign open-boundary faces",
-                "Select one or more exterior faces so the far-field condition can be applied.",
-            )
-
-        if float(getattr(self.obj, "FarFieldTemperature", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Far-field temperature required",
-                "Enter a positive far-field temperature in kelvin before solving with this boundary.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -56,9 +50,17 @@ class TaskBCOpen(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "sp_p"):
+            return self._presenter.read_settings(self.obj)
+        return OpenBoundarySettings(
+            references=tuple(self._refs()),
+            far_field_pressure=self.sp_p.value(),
+            far_field_temperature=self.sp_T.value(),
+            far_field_velocity_x=self.sp_vx.value(),
+            far_field_velocity_y=self.sp_vy.value(),
+            far_field_velocity_z=self.sp_vz.value(),
+        )
+
     def _store(self):
-        self.obj.FarFieldPressure = self.sp_p.value()
-        self.obj.FarFieldTemperature = self.sp_T.value()
-        self.obj.FarFieldVelocityX = self.sp_vx.value()
-        self.obj.FarFieldVelocityY = self.sp_vy.value()
-        self.obj.FarFieldVelocityZ = self.sp_vz.value()
+        self._presenter.persist_settings(self.obj, self._current_settings())

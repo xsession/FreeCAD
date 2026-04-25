@@ -160,6 +160,36 @@ private Q_SLOTS:
              "BackstageView hideEvent should restore ribbon visibility before workbench shell refresh");
     }
 
+    void test_RibbonShellButtonRoutesToBackstage()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString ribbonPath = repoRoot.filePath(QStringLiteral("src/Gui/RibbonBar.cpp"));
+        QFile file(ribbonPath);
+        QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(ribbonPath));
+        const QString source = QString::fromUtf8(file.readAll());
+
+        const QString buttonNeedle
+            = QStringLiteral("applicationButton->setObjectName(QStringLiteral(\"ribbonApplicationButton\"))");
+        const QString connectNeedle
+            = QStringLiteral("connect(applicationButton, &QToolButton::clicked, this, [this]() {");
+        const QString backstageNeedle = QStringLiteral("openBackstage();");
+
+        const int buttonPos = source.indexOf(buttonNeedle);
+        const int connectPos = source.indexOf(connectNeedle, buttonPos);
+        const int backstagePos = source.indexOf(backstageNeedle, connectPos);
+
+        QVERIFY2(buttonPos >= 0,
+                 "RibbonBar should expose an application shell button in the header");
+        QVERIFY2(connectPos >= 0,
+                 "RibbonBar application shell button should be connected to a click handler");
+        QVERIFY2(backstagePos >= 0,
+                 "RibbonBar application shell button should route through openBackstage");
+    }
+
     void test_SketcherToolbarsRouteToSketchTab()  // NOLINT
     {
         QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
@@ -289,6 +319,111 @@ private Q_SLOTS:
                  "WorkbenchPy::reloadActive should refresh the active workbench through Gui::Application");
         QVERIFY2(workbenchPySource.indexOf(QStringLiteral("active->activate();"), reloadActivePos) < 0,
                  "WorkbenchPy::reloadActive should not reactivate the workbench inline");
+    }
+
+    void test_TaskDialogTransitionsUseSharedShellRefresh()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString controlPath = repoRoot.filePath(QStringLiteral("src/Gui/Control.cpp"));
+        QFile controlFile(controlPath);
+        QVERIFY2(controlFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(controlPath));
+        const QString controlSource = QString::fromUtf8(controlFile.readAll());
+
+        const QString refreshNeedle = QStringLiteral("Application::Instance->refreshActiveWorkbench();");
+
+        const QString showNeedle = QStringLiteral("void ControlSingleton::showDialog(");
+        const int showPos = controlSource.indexOf(showNeedle);
+        QVERIFY2(showPos >= 0, "ControlSingleton::showDialog definition missing");
+        QVERIFY2(controlSource.indexOf(refreshNeedle, showPos) >= 0,
+                 "ControlSingleton::showDialog should refresh shell state through Gui::Application");
+
+        const QString closeNeedle = QStringLiteral("void ControlSingleton::closedDialog(App::Document* attachedTo)");
+        const int closePos = controlSource.indexOf(closeNeedle);
+        QVERIFY2(closePos >= 0, "ControlSingleton::closedDialog definition missing");
+        QVERIFY2(controlSource.indexOf(refreshNeedle, closePos) >= 0,
+                 "ControlSingleton::closedDialog should refresh shell state through Gui::Application");
+    }
+
+    void test_SplitViewKeepsPersistentNaviCubeSettings()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString headerPath = repoRoot.filePath(QStringLiteral("src/Gui/SplitView3DInventor.h"));
+        QFile headerFile(headerPath);
+        QVERIFY2(headerFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(headerPath));
+        const QString headerSource = QString::fromUtf8(headerFile.readAll());
+
+        const QString implPath = repoRoot.filePath(QStringLiteral("src/Gui/SplitView3DInventor.cpp"));
+        QFile implFile(implPath);
+        QVERIFY2(implFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(implPath));
+        const QString implSource = QString::fromUtf8(implFile.readAll());
+
+        QVERIFY2(headerSource.indexOf(
+                      QStringLiteral("std::vector<std::unique_ptr<NaviCubeSettings>> naviSettings;")) >= 0,
+                 "AbstractSplitView should retain NaviCubeSettings observers for split viewers");
+
+        const QString setupNeedle = QStringLiteral("void AbstractSplitView::setupSettings()");
+        const int setupPos = implSource.indexOf(setupNeedle);
+        QVERIFY2(setupPos >= 0, "AbstractSplitView::setupSettings definition missing");
+        QVERIFY2(implSource.indexOf(QStringLiteral("naviSettings.clear();"), setupPos) >= 0,
+                 "AbstractSplitView::setupSettings should reset retained NaviCubeSettings before rebuilding them");
+        QVERIFY2(implSource.indexOf(QStringLiteral("auto viewerNaviSettings = std::make_unique<NaviCubeSettings>("), setupPos) >= 0,
+                 "AbstractSplitView::setupSettings should allocate persistent NaviCubeSettings instances");
+        QVERIFY2(implSource.indexOf(QStringLiteral("viewerNaviSettings->applySettings();"), setupPos) >= 0,
+                 "AbstractSplitView::setupSettings should apply per-view NaviCube settings");
+        QVERIFY2(implSource.indexOf(QStringLiteral("naviSettings.push_back(std::move(viewerNaviSettings));"), setupPos) >= 0,
+                 "AbstractSplitView::setupSettings should retain each NaviCubeSettings observer");
+    }
+
+    void test_ViewerPythonWrapperExposesSplitOverlayState()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString headerPath = repoRoot.filePath(QStringLiteral("src/Gui/View3DViewerPy.h"));
+        QFile headerFile(headerPath);
+        QVERIFY2(headerFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(headerPath));
+        const QString headerSource = QString::fromUtf8(headerFile.readAll());
+
+        const QString implPath = repoRoot.filePath(QStringLiteral("src/Gui/View3DViewerPy.cpp"));
+        QFile implFile(implPath);
+        QVERIFY2(implFile.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(implPath));
+        const QString implSource = QString::fromUtf8(implFile.readAll());
+
+        QVERIFY2(headerSource.indexOf(
+                      QStringLiteral("Py::Object setCornerCrossVisible(const Py::Tuple& args);")) >= 0,
+                 "View3DInventorViewerPy should declare setCornerCrossVisible for split-view overlay probes");
+        QVERIFY2(headerSource.indexOf(
+                      QStringLiteral("Py::Object isCornerCrossVisible(const Py::Tuple& args);")) >= 0,
+                 "View3DInventorViewerPy should declare isCornerCrossVisible for split-view overlay probes");
+
+        QVERIFY2(implSource.indexOf(QStringLiteral("\"setCornerCrossVisible\",")) >= 0,
+                 "View3DInventorViewerPy should register setCornerCrossVisible in the Python method table");
+        QVERIFY2(implSource.indexOf(QStringLiteral("\"isCornerCrossVisible\",")) >= 0,
+                 "View3DInventorViewerPy should register isCornerCrossVisible in the Python method table");
+
+        const QString setNeedle = QStringLiteral("Py::Object View3DInventorViewerPy::setCornerCrossVisible(const Py::Tuple& args)");
+        const int setPos = implSource.indexOf(setNeedle);
+        QVERIFY2(setPos >= 0,
+                 "View3DInventorViewerPy::setCornerCrossVisible definition missing");
+        QVERIFY2(implSource.indexOf(QStringLiteral("_viewer->setFeedbackVisibility(Base::asBoolean(visible));"), setPos) >= 0,
+                 "setCornerCrossVisible should route through the viewer feedback visibility");
+
+        const QString getNeedle = QStringLiteral("Py::Object View3DInventorViewerPy::isCornerCrossVisible(const Py::Tuple& args)");
+        const int getPos = implSource.indexOf(getNeedle);
+        QVERIFY2(getPos >= 0,
+                 "View3DInventorViewerPy::isCornerCrossVisible definition missing");
+        QVERIFY2(implSource.indexOf(QStringLiteral("bool visible = _viewer->isFeedbackVisible();"), getPos) >= 0,
+                 "isCornerCrossVisible should report the viewer feedback visibility");
     }
 };
 

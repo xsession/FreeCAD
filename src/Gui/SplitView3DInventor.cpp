@@ -117,12 +117,14 @@ void AbstractSplitView::setupSettings()
     viewSettings->ignoreDimensions = true;
     viewSettings->applySettings();
 
+    naviSettings.clear();
     for (auto view : _viewer) {
-        NaviCubeSettings naviSettings(
+        auto viewerNaviSettings = std::make_unique<NaviCubeSettings>(
             App::GetApplication().GetParameterGroupByPath("User parameter:BaseApp/Preferences/NaviCube"),
             view
         );
-        naviSettings.applySettings();
+        viewerNaviSettings->applySettings();
+        naviSettings.push_back(std::move(viewerNaviSettings));
     }
 }
 

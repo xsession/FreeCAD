@@ -14,6 +14,7 @@ SET(FlowStudioPackage_SRCS
     flow_studio/geometry_tools.py
     flow_studio/ObjectsFlowStudio.py
     flow_studio/physics_domains.py
+    flow_studio/solver_artifacts.py
     flow_studio/solver_deps.py
     flow_studio/solver_installer.py
     flow_studio/workflow_guide.py

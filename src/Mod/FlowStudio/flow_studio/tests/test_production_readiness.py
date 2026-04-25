@@ -361,7 +361,7 @@ class TestDependencyDetectionProduction(unittest.TestCase):
     """Ensure dependency system correctly identifies large-scale requirements."""
 
     def setUp(self):
-        from flow_studio import solver_deps
+        from flow_studio.runtime import dependencies as solver_deps
         self.deps = solver_deps
 
     def test_check_all_returns_all_registered_dependency_groups(self):

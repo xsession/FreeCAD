@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.initial_conditions_presenter import InitialConditionsPresenter, InitialConditionsSettings
 
 
 class TaskInitialConditions(FloEFDTaskPanel):
@@ -16,35 +17,14 @@ class TaskInitialConditions(FloEFDTaskPanel):
         "Set the starting field values and turbulence initialization for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = InitialConditionsPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign target regions",
-                "Select one or more bodies, faces, or regions so these initial conditions apply somewhere in the model.",
-            )
-
-        if float(getattr(self.obj, "Temperature", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Initial temperature required",
-                "Enter a positive starting temperature in kelvin before solving.",
-            )
-
-        if float(getattr(self.obj, "TurbulentKineticEnergy", 0.0)) < 0.0:
-            return (
-                "warning",
-                "Turbulent kinetic energy cannot be negative",
-                "Use zero or a positive k value for turbulence initialization.",
-            )
-
-        if float(getattr(self.obj, "SpecificDissipationRate", 0.0)) < 0.0:
-            return (
-                "warning",
-                "Specific dissipation rate cannot be negative",
-                "Use zero or a positive omega value for turbulence initialization.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -80,12 +60,20 @@ class TaskInitialConditions(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "sp_ux"):
+            return self._presenter.read_settings(self.obj)
+        return InitialConditionsSettings(
+            references=tuple(self._refs()),
+            ux=self.sp_ux.value(),
+            uy=self.sp_uy.value(),
+            uz=self.sp_uz.value(),
+            pressure=self.sp_p.value(),
+            temperature=self.sp_T.value(),
+            turbulent_kinetic_energy=self.sp_k.value(),
+            specific_dissipation_rate=self.sp_omega.value(),
+            use_potential_flow=self.chk_pot.isChecked(),
+        )
+
     def _store(self):
-        self.obj.Ux = self.sp_ux.value()
-        self.obj.Uy = self.sp_uy.value()
-        self.obj.Uz = self.sp_uz.value()
-        self.obj.Pressure = self.sp_p.value()
-        self.obj.Temperature = self.sp_T.value()
-        self.obj.TurbulentKineticEnergy = self.sp_k.value()
-        self.obj.SpecificDissipationRate = self.sp_omega.value()
-        self.obj.UsePotentialFlow = self.chk_pot.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())

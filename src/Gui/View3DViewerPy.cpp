@@ -180,6 +180,16 @@ void View3DInventorViewerPy::init_type()
         "setNaviCubeCorner(int): sets the corner where to show the navi cube:\n"
         "0=top left, 1=top right, 2=bottom left, 3=bottom right"
     );
+    add_varargs_method(
+        "setCornerCrossVisible",
+        &View3DInventorViewerPy::setCornerCrossVisible,
+        "setCornerCrossVisible(bool): defines corner axis cross visibility."
+    );
+    add_varargs_method(
+        "isCornerCrossVisible",
+        &View3DInventorViewerPy::isCornerCrossVisible,
+        "isCornerCrossVisible() -> bool: returns current corner axis cross visibility."
+    );
 
     add_varargs_method(
         "getNavigationStyle",
@@ -741,6 +751,26 @@ Py::Object View3DInventorViewerPy::setNaviCubeCorner(const Py::Tuple& args)
     }
     _viewer->setNaviCubeCorner(pos);
     return Py::None();
+}
+
+Py::Object View3DInventorViewerPy::setCornerCrossVisible(const Py::Tuple& args)
+{
+    PyObject* visible = Py_False;
+    if (!PyArg_ParseTuple(args.ptr(), "O!", &PyBool_Type, &visible)) {
+        throw Py::Exception();
+    }
+    _viewer->setFeedbackVisibility(Base::asBoolean(visible));
+    _viewer->redraw();
+    return Py::None();
+}
+
+Py::Object View3DInventorViewerPy::isCornerCrossVisible(const Py::Tuple& args)
+{
+    if (!PyArg_ParseTuple(args.ptr(), "")) {
+        throw Py::Exception();
+    }
+    bool visible = _viewer->isFeedbackVisible();
+    return Py::Boolean(visible);
 }
 
 Py::Object View3DInventorViewerPy::getNavigationStyle(const Py::Tuple& args)

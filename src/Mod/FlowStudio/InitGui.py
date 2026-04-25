@@ -14,12 +14,44 @@ Inspired by FloEFD's user-friendly workflow:
 import os
 import FreeCAD
 import FreeCADGui
-from flow_studio.physics_domains import all_example_commands, example_command_groups
 from RibbonMetadata import (
     build_contextual_ribbon_toolbar_name,
     build_ribbon_toolbar_name,
     register_contextual_ribbon_panel,
 )
+
+_physics_all_example_commands = lambda: []  # noqa: E731
+_physics_example_command_groups = lambda: ()  # noqa: E731
+
+try:
+    from flow_studio.physics_domains import (  # type: ignore
+        all_example_commands as _physics_all_example_commands,
+        example_command_groups as _physics_example_command_groups,
+    )
+except Exception as exc:  # pragma: no cover - startup resilience path
+    FreeCAD.Console.PrintError(
+        f"FlowStudio: physics domain metadata unavailable ({exc}). Example starters disabled.\n"
+    )
+
+
+def all_example_commands(_resolver=_physics_all_example_commands):
+    try:
+        return list(_resolver())
+    except Exception as exc:  # pragma: no cover - startup resilience path
+        FreeCAD.Console.PrintError(
+            f"FlowStudio: failed to collect example commands ({exc}).\n"
+        )
+        return []
+
+
+def example_command_groups(_resolver=_physics_example_command_groups):
+    try:
+        return tuple(_resolver())
+    except Exception as exc:  # pragma: no cover - startup resilience path
+        FreeCAD.Console.PrintError(
+            f"FlowStudio: failed to collect example command groups ({exc}).\n"
+        )
+        return ()
 
 initialize_workbench = lambda: None  # noqa: E731
 is_enterprise_enabled = lambda *_args, **_kwargs: False  # noqa: E731
@@ -63,8 +95,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
     MenuText = "FlowStudio"
     ToolTip = "Multi-physics simulation workbench (CFD, FEM, EM, Thermal) with multi-solver support."
 
-    EXAMPLE_COMMAND_GROUPS = example_command_groups()
-    EXAMPLE_COMMANDS = all_example_commands()
+    EXAMPLE_COMMAND_GROUPS = ()
+    EXAMPLE_COMMANDS = []
 
     ANALYSIS_COMMANDS = [
         "FlowStudio_Analysis",
@@ -486,6 +518,10 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"
+
+
+FlowStudioWorkbench.EXAMPLE_COMMAND_GROUPS = example_command_groups()
+FlowStudioWorkbench.EXAMPLE_COMMANDS = all_example_commands()
 
 
 FreeCADGui.addWorkbench(FlowStudioWorkbench())

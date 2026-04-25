@@ -13,6 +13,7 @@ import shutil
 import subprocess
 
 from flow_studio.enterprise.core.domain import JobState, PreparedCase
+from flow_studio.runtime.artifacts import resolve_solver_artifact
 
 
 @dataclass(frozen=True)
@@ -106,4 +107,4 @@ class LocalProcessExecutor:
     def _resolve_executable(executable: str) -> str | None:
         if os.path.isabs(executable) and os.path.isfile(executable):
             return executable
-        return shutil.which(executable)
+        return shutil.which(executable) or resolve_solver_artifact(executable)

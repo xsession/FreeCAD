@@ -34,6 +34,7 @@ namespace Gui
 class View3DInventorViewer;
 class AbstractSplitViewPy;
 class View3DSettings;
+class NaviCubeSettings;
 
 /** The SplitView3DInventor class allows one to create a window with two or more Inventor views.
  *  \author Werner Mayer
@@ -77,6 +78,7 @@ protected:
     std::vector<View3DInventorViewer*> _viewer;
     PyObject* _viewerPy;
     std::unique_ptr<View3DSettings> viewSettings;
+    std::vector<std::unique_ptr<NaviCubeSettings>> naviSettings;
 };
 
 class AbstractSplitViewPy: public Py::PythonExtension<AbstractSplitViewPy>

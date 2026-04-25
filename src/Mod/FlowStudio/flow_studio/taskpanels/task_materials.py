@@ -7,62 +7,9 @@
 
 from PySide import QtGui
 
-from flow_studio.catalog.database import material_presets
 from flow_studio.catalog.editor import show_engineering_database_editor
-from flow_studio.catalog.optics import OPTICAL_MATERIAL_PRESETS
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
-
-
-SOLID_PRESETS = {
-    "Steel (Structural)": {
-        "MaterialName": "Steel",
-        "Density": 7850.0,
-        "YoungsModulus": 2.1e11,
-        "PoissonRatio": 0.30,
-        "ThermalExpansionCoeff": 1.2e-5,
-        "YieldStrength": 2.5e8,
-    },
-    "Aluminum 6061-T6": {
-        "MaterialName": "Aluminum 6061-T6",
-        "Density": 2700.0,
-        "YoungsModulus": 6.9e10,
-        "PoissonRatio": 0.33,
-        "ThermalExpansionCoeff": 2.36e-5,
-        "YieldStrength": 2.75e8,
-    },
-    "Copper": {
-        "MaterialName": "Copper",
-        "Density": 8960.0,
-        "YoungsModulus": 1.1e11,
-        "PoissonRatio": 0.34,
-        "ThermalExpansionCoeff": 1.65e-5,
-        "YieldStrength": 7.0e7,
-    },
-}
-
-THERMAL_PRESETS = {
-    "Steel": {"MaterialName": "Steel", "Density": 7850.0, "ThermalConductivity": 50.0, "SpecificHeat": 500.0, "Emissivity": 0.3},
-    "Aluminum": {"MaterialName": "Aluminum", "Density": 2700.0, "ThermalConductivity": 205.0, "SpecificHeat": 900.0, "Emissivity": 0.09},
-    "Copper": {"MaterialName": "Copper", "Density": 8960.0, "ThermalConductivity": 385.0, "SpecificHeat": 385.0, "Emissivity": 0.03},
-    "Insulation (Mineral Wool)": {"MaterialName": "Mineral Wool", "Density": 80.0, "ThermalConductivity": 0.04, "SpecificHeat": 840.0, "Emissivity": 0.9},
-}
-
-ELECTROSTATIC_PRESETS = {
-    "Vacuum": {"MaterialName": "Vacuum", "RelativePermittivity": 1.0, "ElectricConductivity": 0.0},
-    "Air": {"MaterialName": "Air", "RelativePermittivity": 1.0006, "ElectricConductivity": 0.0},
-    "PTFE (Teflon)": {"MaterialName": "PTFE", "RelativePermittivity": 2.1, "ElectricConductivity": 1e-18},
-    "FR-4 (PCB)": {"MaterialName": "FR-4", "RelativePermittivity": 4.4, "ElectricConductivity": 1e-14},
-    "Water": {"MaterialName": "Water", "RelativePermittivity": 80.0, "ElectricConductivity": 5e-6},
-}
-
-ELECTROMAGNETIC_PRESETS = {
-    "Air / Vacuum": {"MaterialName": "Air", "RelativePermeability": 1.0, "RelativePermittivity": 1.0, "ElectricConductivity": 0.0, "Density": 1.225},
-    "Copper": {"MaterialName": "Copper", "RelativePermeability": 0.999994, "RelativePermittivity": 1.0, "ElectricConductivity": 5.96e7, "Density": 8960.0},
-    "Aluminum": {"MaterialName": "Aluminum", "RelativePermeability": 1.000022, "RelativePermittivity": 1.0, "ElectricConductivity": 3.5e7, "Density": 2700.0},
-    "Iron (soft)": {"MaterialName": "Soft Iron", "RelativePermeability": 5000.0, "RelativePermittivity": 1.0, "ElectricConductivity": 1.0e7, "Density": 7870.0},
-}
-
-OPTICAL_PRESETS = OPTICAL_MATERIAL_PRESETS
+from flow_studio.ui.material_presenter import MaterialPresenter, MaterialSettings
 
 
 class TaskMaterial(FloEFDTaskPanel):
@@ -72,54 +19,29 @@ class TaskMaterial(FloEFDTaskPanel):
         "Assign a preset and edit the domain-specific material properties applied to {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = MaterialPresenter()
+        super().__init__(obj)
+
     def _build_task_summary(self):
-        return self._title(), self.SUMMARY_DETAIL.format(
+        return self._presenter.title(getattr(self.obj, "FlowType", "")), self.SUMMARY_DETAIL.format(
             label=getattr(self.obj, "Label", getattr(self.obj, "Name", "Object"))
         )
 
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign material targets",
-                "Select one or more parts or regions so this material applies to geometry.",
-            )
-
-        if not str(getattr(self.obj, "MaterialName", "") or "").strip():
-            return (
-                "incomplete",
-                "Material name required",
-                "Enter a material name or choose a preset before continuing.",
-            )
-
-        positive_required = (
-            ("Density", "Density must be positive"),
-            ("YoungsModulus", "Young's modulus must be positive"),
-            ("ThermalConductivity", "Thermal conductivity must be positive"),
-            ("SpecificHeat", "Specific heat must be positive"),
-            ("RelativePermittivity", "Relative permittivity must be positive"),
-            ("RelativePermeability", "Relative permeability must be positive"),
-            ("RefractiveIndex", "Refractive index must be positive"),
-        )
-        properties = getattr(self.obj, "PropertiesList", [])
-        for prop, title in positive_required:
-            if prop in properties and float(getattr(self.obj, prop, 0.0)) <= 0.0:
-                return (
-                    "warning",
-                    title,
-                    f"Set a positive {prop} value or choose a preset that provides a valid material property.",
-                )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
-        layout.addWidget(QtGui.QLabel(f"<b>{self._title()}</b>"))
+        layout.addWidget(QtGui.QLabel(f"<b>{self._presenter.title(getattr(self.obj, 'FlowType', ''))}</b>"))
         self._add_selection_section(layout, "Assigned Parts / Regions")
 
         material = self._section(layout, "Material")
-        presets = self._preset_names()
+        presets = self._presenter.preset_names(getattr(self.obj, "FlowType", ""))
         self.cb_preset = self._combo(presets, getattr(self.obj, "MaterialPreset", "Custom"))
         self._add_row(material, "Preset:", self.cb_preset)
         self.cb_preset.currentTextChanged.connect(self._on_preset_changed)
@@ -162,43 +84,6 @@ class TaskMaterial(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
-    def _title(self):
-        flow_type = getattr(self.obj, "FlowType", "")
-        return {
-            "FlowStudio::SolidMaterial": "Solid Material",
-            "FlowStudio::ThermalMaterial": "Thermal Material",
-            "FlowStudio::ElectrostaticMaterial": "Electrostatic Material",
-            "FlowStudio::ElectromagneticMaterial": "Electromagnetic Material",
-            "FlowStudio::OpticalMaterial": "Optical Material",
-        }.get(flow_type, "Material")
-
-    def _preset_db(self):
-        flow_type = getattr(self.obj, "FlowType", "")
-        if flow_type == "FlowStudio::SolidMaterial":
-            presets = material_presets("Solids")
-            presets.update(SOLID_PRESETS)
-            return presets
-        if flow_type == "FlowStudio::ThermalMaterial":
-            presets = material_presets("Solids", "Liquids", "Gases")
-            presets.update(THERMAL_PRESETS)
-            return presets
-        if flow_type == "FlowStudio::ElectrostaticMaterial":
-            presets = material_presets("Dielectrics", "Solids", "Liquids", "Gases")
-            presets.update(ELECTROSTATIC_PRESETS)
-            return presets
-        if flow_type == "FlowStudio::ElectromagneticMaterial":
-            presets = material_presets("Magnetic", "Dielectrics", "Solids")
-            presets.update(ELECTROMAGNETIC_PRESETS)
-            return presets
-        if flow_type == "FlowStudio::OpticalMaterial":
-            presets = material_presets("Optical Glasses", "Optical Coatings", "Dielectrics")
-            presets.update(OPTICAL_PRESETS)
-            return presets
-        return {}
-
-    def _preset_names(self):
-        return ["Custom"] + sorted(self._preset_db())
-
     def _add_float_if_present(self, layout, prop, label, minimum, maximum, decimals, step):
         if prop not in getattr(self.obj, "PropertiesList", []):
             return
@@ -206,23 +91,24 @@ class TaskMaterial(FloEFDTaskPanel):
         self._add_row(layout, label + ":", widget)
         self._widgets[prop] = widget
 
+    def _current_settings(self):
+        if not hasattr(self, "_widgets"):
+            return self._presenter.read_settings(self.obj)
+        return MaterialSettings(
+            flow_type=str(getattr(self.obj, "FlowType", "") or ""),
+            properties=tuple(getattr(self.obj, "PropertiesList", []) or []),
+            references=tuple(self._refs()),
+            material_preset=self.cb_preset.currentText() if hasattr(self, "cb_preset") else str(getattr(self.obj, "MaterialPreset", "Custom") or "Custom"),
+            material_name=self.le_name.text() if hasattr(self, "le_name") else str(getattr(self.obj, "MaterialName", "") or ""),
+            values={prop: widget.value() for prop, widget in getattr(self, "_widgets", {}).items()},
+        )
+
     def _on_preset_changed(self, text):
-        data = self._preset_db().get(text)
-        if not data:
-            return
-        if "MaterialName" in data:
-            self.le_name.setText(str(data["MaterialName"]))
+        settings = self._presenter.apply_preset(self._current_settings(), text)
+        self.le_name.setText(settings.material_name)
         for prop, widget in self._widgets.items():
-            if prop in data:
-                widget.setValue(float(data[prop]))
+            if prop in settings.values:
+                widget.setValue(float(settings.values[prop]))
 
     def _store(self):
-        if "MaterialPreset" in getattr(self.obj, "PropertiesList", []):
-            try:
-                self.obj.MaterialPreset = self.cb_preset.currentText()
-            except Exception:
-                self.obj.MaterialPreset = "Custom"
-        if "MaterialName" in getattr(self.obj, "PropertiesList", []):
-            self.obj.MaterialName = self.le_name.text()
-        for prop, widget in self._widgets.items():
-            setattr(self.obj, prop, widget.value())
+        self._presenter.persist_settings(self.obj, self._current_settings())

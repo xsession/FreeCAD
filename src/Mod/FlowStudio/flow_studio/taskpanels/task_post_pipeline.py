@@ -8,6 +8,7 @@
 import FreeCAD
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.post_pipeline_presenter import PostPipelinePresenter, PostPipelineSettings
 
 
 class TaskPostPipeline(BaseTaskPanel):
@@ -17,31 +18,14 @@ class TaskPostPipeline(BaseTaskPanel):
         "Choose how {label} should visualize fields, ranges, and loaded result data."
     )
 
+    def __init__(self, obj):
+        self._presenter = PostPipelinePresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        result_file = str(getattr(self.obj, "ResultFile", "") or "").strip()
-        available_fields = list(getattr(self.obj, "AvailableFields", []) or [])
-
-        if not result_file and not available_fields:
-            return (
-                "info",
-                "Load results to begin post-processing",
-                "Choose a result file or run the solver so fields become available for visualization.",
-            )
-
-        if available_fields and str(getattr(self.obj, "ActiveField", "") or "") not in available_fields:
-            return (
-                "warning",
-                "Active field is not available",
-                "Select one of the loaded result fields before updating the post-processing view.",
-            )
-
-        if not bool(getattr(self.obj, "AutoRange", True)) and float(getattr(self.obj, "MinRange", 0.0)) >= float(getattr(self.obj, "MaxRange", 0.0)):
-            return (
-                "warning",
-                "Manual range is invalid",
-                "Set a minimum value smaller than the maximum value or re-enable automatic range.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -80,14 +64,23 @@ class TaskPostPipeline(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_vis"):
+            return self._presenter.read_settings(self.obj)
+        return PostPipelineSettings(
+            visualization_type=self.cb_vis.currentText(),
+            active_field=self.cb_field.currentText(),
+            auto_range=self.chk_auto.isChecked(),
+            min_range=self.sp_min.value(),
+            max_range=self.sp_max.value(),
+            available_fields=tuple(str(field) for field in (getattr(self.obj, "AvailableFields", []) or [])),
+            result_file=str(getattr(self.obj, "ResultFile", "") or ""),
+        )
+
     def _load_results(self):
         FreeCAD.Console.PrintMessage(
             "FlowStudio: Loading results... (VTK pipeline pending)\n"
         )
 
     def _store(self):
-        self.obj.VisualizationType = self.cb_vis.currentText()
-        self.obj.ActiveField = self.cb_field.currentText()
-        self.obj.AutoRange = self.chk_auto.isChecked()
-        self.obj.MinRange = self.sp_min.value()
-        self.obj.MaxRange = self.sp_max.value()
+        self._presenter.persist_settings(self.obj, self._current_settings())

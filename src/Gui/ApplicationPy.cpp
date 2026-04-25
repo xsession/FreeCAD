@@ -492,6 +492,23 @@ PyMethodDef ApplicationPy::Methods[] = {
      "Remove an added workbench manipulator.\n"
      "\n"
      "obj : object"},
+    {"registerRibbonPanel",
+     (PyCFunction)ApplicationPy::sRegisterRibbonPanel,
+     METH_VARARGS,
+     "registerRibbonPanel(name, commands) -> None\n"
+     "\n"
+     "Register a persistent ribbon panel definition.\n"
+     "\n"
+     "name : str\n    Ribbon metadata name.\n"
+     "commands : sequence[str]\n    Commands shown inside the ribbon panel."},
+    {"unregisterRibbonPanel",
+     (PyCFunction)ApplicationPy::sUnregisterRibbonPanel,
+     METH_VARARGS,
+     "unregisterRibbonPanel(name) -> None\n"
+     "\n"
+     "Remove a previously registered persistent ribbon panel.\n"
+     "\n"
+     "name : str"},
     {"registerContextualRibbonPanel",
      (PyCFunction)ApplicationPy::sRegisterContextualRibbonPanel,
      METH_VARARGS,
@@ -1913,6 +1930,43 @@ PyObject* ApplicationPy::sRegisterContextualRibbonPanel(PyObject* /*self*/, PyOb
         }
 
         RibbonBar::registerContextualRibbonPanel(QString::fromUtf8(name), commandNames);
+        Py_Return;
+    }
+    PY_CATCH;
+}
+
+PyObject* ApplicationPy::sRegisterRibbonPanel(PyObject* /*self*/, PyObject* args)
+{
+    char* name = nullptr;
+    PyObject* commandsObj = nullptr;
+    if (!PyArg_ParseTuple(args, "sO", &name, &commandsObj)) {
+        return nullptr;
+    }
+
+    PY_TRY
+    {
+        Py::Sequence commands(commandsObj);
+        QStringList commandNames;
+        for (Py::Sequence::size_type index = 0; index < commands.length(); ++index) {
+            commandNames.append(QString::fromStdString(Py::String(commands[index]).as_std_string()));
+        }
+
+        RibbonBar::registerRibbonPanel(QString::fromUtf8(name), commandNames);
+        Py_Return;
+    }
+    PY_CATCH;
+}
+
+PyObject* ApplicationPy::sUnregisterRibbonPanel(PyObject* /*self*/, PyObject* args)
+{
+    char* name = nullptr;
+    if (!PyArg_ParseTuple(args, "s", &name)) {
+        return nullptr;
+    }
+
+    PY_TRY
+    {
+        RibbonBar::unregisterRibbonPanel(QString::fromUtf8(name));
         Py_Return;
     }
     PY_CATCH;

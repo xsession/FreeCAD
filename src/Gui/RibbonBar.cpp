@@ -71,6 +71,7 @@ using namespace Gui;
 RibbonBar* RibbonBar::_instance = nullptr;
 
 namespace {
+QMap<QString, QStringList> g_registeredRibbonPanels;
 QMap<QString, QStringList> g_registeredContextualRibbonPanels;
 }
 
@@ -1080,11 +1081,39 @@ RibbonBar::RibbonBar(QWidget* parent)
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(0);
 
-    // Top row: quick access toolbar on the left, command search on the right.
+    // Top row: application shell button + quick access on the left, command search on the right.
     auto* topRow = new QWidget(this);
     auto* topRowLayout = new QHBoxLayout(topRow);
     topRowLayout->setContentsMargins(0, 0, 0, 0);
     topRowLayout->setSpacing(8);
+
+    applicationButton = new QToolButton(topRow);
+    applicationButton->setObjectName(QStringLiteral("ribbonApplicationButton"));
+    applicationButton->setAutoRaise(true);
+    applicationButton->setFocusPolicy(Qt::NoFocus);
+    applicationButton->setFixedHeight(QATBarHeight - 2);
+    applicationButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    applicationButton->setText(qApp->applicationName().isEmpty() ? QStringLiteral("FreeCAD")
+                                                                  : qApp->applicationName());
+    applicationButton->setToolTip(tr("Open Backstage view"));
+    applicationButton->setCursor(Qt::PointingHandCursor);
+    applicationButton->setStyleSheet(QStringLiteral(
+        "QToolButton#ribbonApplicationButton {"
+        "  margin-left: 6px;"
+        "  padding: 0 10px;"
+        "  border: 1px solid palette(mid);"
+        "  border-radius: 8px;"
+        "  font-weight: 600;"
+        "  background: palette(button);"
+        "}"
+        "QToolButton#ribbonApplicationButton:hover {"
+        "  background: palette(light);"
+        "}"
+        "QToolButton#ribbonApplicationButton:pressed {"
+        "  background: palette(midlight);"
+        "}"
+    ));
+    topRowLayout->addWidget(applicationButton, 0, Qt::AlignLeft | Qt::AlignVCenter);
 
     qatBar = new QuickAccessToolBar(topRow);
     topRowLayout->addWidget(qatBar, 1);
@@ -1175,6 +1204,9 @@ RibbonBar::RibbonBar(QWidget* parent)
             lastContentTabIndex = index;
         }
     });
+    connect(applicationButton, &QToolButton::clicked, this, [this]() {
+        openBackstage();
+    });
     connect(minimizeButton, &QToolButton::clicked, this, [this]() {
         toggleMinimized();
     });
@@ -1222,6 +1254,54 @@ RibbonBar::~RibbonBar()
     if (_instance == this) {
         _instance = nullptr;
     }
+}
+
+void RibbonBar::scheduleRibbonSetupRefresh()
+{
+    if (!_instance || _instance->ribbonSetupRefreshPending || !_instance->configuredToolbarRoot
+        || (Application::Instance && Application::Instance->isClosing())) {
+        return;
+    }
+
+    _instance->ribbonSetupRefreshPending = true;
+    QPointer<RibbonBar> instance(_instance);
+    QMetaObject::invokeMethod(
+        _instance,
+        [instance]() {
+            if (!instance) {
+                return;
+            }
+
+            instance->ribbonSetupRefreshPending = false;
+            if (!instance->configuredToolbarRoot) {
+                return;
+            }
+
+            ToolBarItem* toolbars = instance->configuredToolbarRoot->copy();
+            instance->setup(toolbars);
+            delete toolbars;
+        },
+        Qt::QueuedConnection);
+}
+
+void RibbonBar::registerRibbonPanel(const QString& name, const QStringList& commandNames)
+{
+    if (name.isEmpty()) {
+        return;
+    }
+
+    g_registeredRibbonPanels.insert(name, commandNames);
+    scheduleRibbonSetupRefresh();
+}
+
+void RibbonBar::unregisterRibbonPanel(const QString& name)
+{
+    if (name.isEmpty()) {
+        return;
+    }
+
+    g_registeredRibbonPanels.remove(name);
+    scheduleRibbonSetupRefresh();
 }
 
 void RibbonBar::scheduleContextualTabsRefresh()
@@ -1553,6 +1633,7 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
 
     // Group toolbars into ribbon tabs by category
     QMap<QString, QList<ToolBarItem*>> tabMap;
+    QMap<QString, QList<QPair<RibbonToolbarMetadata, QStringList>>> registeredPanelMap;
     QStringList tabOrder;
     for (ToolBarItem* it : items) {
         QString tbName = QString::fromUtf8(it->command().c_str());
@@ -1568,6 +1649,18 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         tabMap[tabName].append(it);
     }
 
+    for (auto it = g_registeredRibbonPanels.begin(); it != g_registeredRibbonPanels.end(); ++it) {
+        const auto metadata = parseRibbonToolbarMetadata(it.key());
+        if (!metadata.isValid()) {
+            continue;
+        }
+
+        if (!tabMap.contains(metadata.tabName) && !registeredPanelMap.contains(metadata.tabName)) {
+            tabOrder.append(metadata.tabName);
+        }
+        registeredPanelMap[metadata.tabName].append({metadata, it.value()});
+    }
+
     for (auto it = tabMap.begin(); it != tabMap.end(); ++it) {
         auto& tabItems = it.value();
         std::stable_sort(tabItems.begin(), tabItems.end(), [](ToolBarItem* left, ToolBarItem* right) {
@@ -1577,7 +1670,14 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         });
     }
 
-    if (!items.isEmpty()) {
+    for (auto it = registeredPanelMap.begin(); it != registeredPanelMap.end(); ++it) {
+        auto& panels = it.value();
+        std::stable_sort(panels.begin(), panels.end(), [](const auto& left, const auto& right) {
+            return left.first.order < right.first.order;
+        });
+    }
+
+    if (!items.isEmpty() || !g_registeredRibbonPanels.isEmpty()) {
         auto* homePage = new RibbonTabPage(tabWidget);
         int homeTabIndex = tabWidget->addTab(homePage, tr("Home"));
         tabWidget->setTabToolTip(homeTabIndex, tr("Most common actions for the active workflow context"));
@@ -1610,6 +1710,16 @@ void RibbonBar::setup(ToolBarItem* toolBarItems)
         for (ToolBarItem* tbItem : tabMap[tabName]) {
             RibbonPanel* panel = createPanel(
                 QString::fromUtf8(tbItem->command().c_str()), tbItem);
+            if (panel && panel->buttonCount() > 0) {
+                tabPage->addPanel(panel);
+            }
+            else {
+                delete panel;
+            }
+        }
+
+        for (const auto& panelEntry : registeredPanelMap.value(tabName)) {
+            auto* panel = createContextPanel(panelEntry.first.panelName, panelEntry.second);
             if (panel && panel->buttonCount() > 0) {
                 tabPage->addPanel(panel);
             }
@@ -1935,6 +2045,12 @@ void RibbonBar::refreshContextualTabs()
             int priority = DefaultRibbonPanelOrder;
         };
 
+        struct RegisteredRibbonHomeCandidate {
+            RibbonToolbarMetadata metadata;
+            QStringList commands;
+            int priority = DefaultRibbonPanelOrder;
+        };
+
         QList<ToolbarHomeCandidate> contextualHomeCandidates;
         for (auto it = contextualToolbarMap.begin(); it != contextualToolbarMap.end(); ++it) {
             for (ToolBarItem* tbItem : std::as_const(it.value())) {
@@ -1965,6 +2081,27 @@ void RibbonBar::refreshContextualTabs()
         std::stable_sort(registeredHomeCandidates.begin(),
                          registeredHomeCandidates.end(),
                          [](const RegisteredHomeCandidate& left, const RegisteredHomeCandidate& right) {
+                             if (left.priority != right.priority) {
+                                 return left.priority < right.priority;
+                             }
+                             return left.metadata.order < right.metadata.order;
+                         });
+
+        QList<RegisteredRibbonHomeCandidate> registeredRibbonHomeCandidates;
+        for (auto it = g_registeredRibbonPanels.begin(); it != g_registeredRibbonPanels.end(); ++it) {
+            const auto metadata = parseRibbonToolbarMetadata(it.key());
+            if (!metadata.isValid() || !metadata.promoteToHome) {
+                continue;
+            }
+
+            registeredRibbonHomeCandidates.push_back(
+                {metadata, it.value(), toolbarHomePriorityForMetadata(it.key()) * 100}
+            );
+        }
+        std::stable_sort(registeredRibbonHomeCandidates.begin(),
+                         registeredRibbonHomeCandidates.end(),
+                         [](const RegisteredRibbonHomeCandidate& left,
+                            const RegisteredRibbonHomeCandidate& right) {
                              if (left.priority != right.priority) {
                                  return left.priority < right.priority;
                              }
@@ -2013,6 +2150,11 @@ void RibbonBar::refreshContextualTabs()
         }
 
         for (const auto& candidate : registeredHomeCandidates) {
+            addHomePanel(createContextPanel(candidate.metadata.panelName, candidate.commands),
+                         candidate.metadata.tabName + QStringLiteral("::") + candidate.metadata.panelName);
+        }
+
+        for (const auto& candidate : registeredRibbonHomeCandidates) {
             addHomePanel(createContextPanel(candidate.metadata.panelName, candidate.commands),
                          candidate.metadata.tabName + QStringLiteral("::") + candidate.metadata.panelName);
         }

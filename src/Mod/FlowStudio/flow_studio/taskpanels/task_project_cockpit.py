@@ -7,16 +7,13 @@
 
 from __future__ import annotations
 
-import os
-
 import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtGui
 
-from flow_studio.core.workflow import get_active_analysis
 from flow_studio.physics_domains import example_command_groups
-from flow_studio.runtime_monitor import get_run_snapshot, sync_post_pipeline, terminate_run
-from flow_studio.workflow_guide import get_workflow_context, get_workflow_status
+from flow_studio.taskpanels.project_cockpit_desktop_actions import FreeCADProjectCockpitActions
+from flow_studio.ui.project_cockpit_presenter import ProjectCockpitPresenter
 
 
 def _phase_color(level):
@@ -35,6 +32,23 @@ def _style_banner(widget, level):
     bg, fg = _phase_color(level)
     widget.setStyleSheet(
         f"background:{bg}; color:{fg}; padding:8px; border-radius:6px; border:1px solid {fg};"
+    )
+
+
+def _build_starter_command_groups(
+    command_groups_resolver=example_command_groups,
+    example_labels=None,
+):
+    labels = example_labels or {}
+    return tuple(
+        (
+            group_label,
+            tuple(
+                (command_name, labels.get(command_name, command_name.replace("FlowStudio_", "")))
+                for command_name in commands
+            ),
+        )
+        for _group_key, group_label, commands in command_groups_resolver()
     )
 
 
@@ -58,16 +72,7 @@ class ProjectCockpitPanel:
         "FlowStudio_OpticalLensExample": "Opt Ex",
     }
 
-    STARTER_COMMAND_GROUPS = tuple(
-        (
-            group_label,
-            tuple(
-                (command_name, EXAMPLE_LABELS.get(command_name, command_name.replace("FlowStudio_", "")))
-                for command_name in commands
-            ),
-        )
-        for _group_key, group_label, commands in example_command_groups()
-    )
+    STARTER_COMMAND_GROUPS = ()
 
     COMMAND_LABELS = (
         ("FlowStudio_Analysis", "1. Analysis"),
@@ -84,6 +89,8 @@ class ProjectCockpitPanel:
         self.form = QtGui.QWidget()
         self.form.setWindowTitle("FlowStudio Project Cockpit")
         self._command_buttons = {}
+        self._actions = FreeCADProjectCockpitActions()
+        self._presenter = ProjectCockpitPresenter(self.COMMAND_LABELS, actions=self._actions)
         self._build_form()
         self._timer = QtCore.QTimer(self.form)
         self._timer.timeout.connect(self._refresh)
@@ -178,95 +185,38 @@ class ProjectCockpitPanel:
         layout.addWidget(runtime_group)
 
     def _run_command(self, command_name):
-        if not command_name:
-            return
-        if command_name == "FlowStudio_PostPipeline":
-            self._open_results()
-            return
         try:
-            FreeCADGui.runCommand(command_name)
+            self._presenter.handle_command(command_name)
         finally:
             QtCore.QTimer.singleShot(250, self._refresh)
 
-    def _preferred_result_object(self, analysis):
-        if analysis is None:
-            return None
-
-        result_plot = None
-        post_pipeline = None
-        for child in getattr(analysis, "Group", []):
-            flow_type = getattr(child, "FlowType", "")
-            if flow_type == "FlowStudio::ResultPlot" and result_plot is None:
-                result_plot = child
-            elif flow_type == "FlowStudio::PostPipeline" and post_pipeline is None:
-                post_pipeline = child
-
-        return result_plot or post_pipeline
-
     def _open_results(self):
-        analysis = get_active_analysis()
-        target = self._preferred_result_object(analysis)
-        if target is None:
-            FreeCADGui.runCommand("FlowStudio_PostPipeline")
-            QtCore.QTimer.singleShot(250, self._refresh)
-            return
-
         try:
-            FreeCADGui.ActiveDocument.setEdit(target.Name)
-        except Exception:
-            FreeCADGui.runCommand("FlowStudio_PostPipeline")
+            self._presenter.handle_open_results()
         finally:
             QtCore.QTimer.singleShot(250, self._refresh)
 
     def _stop_run(self):
-        analysis = get_active_analysis()
-        if terminate_run(analysis):
+        if self._presenter.stop_run():
             FreeCAD.Console.PrintWarning("FlowStudio: Solver termination requested.\n")
         self._refresh()
 
     def _refresh(self):
-        context = get_workflow_context()
-        steps = get_workflow_status()
-        analysis = context["analysis"]
-        profile = context["profile"]
-
-        completed = sum(1 for step in steps if step.complete)
-        total = max(1, len(steps))
-        percent = int((completed / float(total)) * 100.0)
-        self.progress.setValue(percent)
-
-        next_step = next((step for step in steps if not step.complete and step.active), None)
-        if completed == total:
-            banner_level = "done"
-            banner_title = "Project ready for result review"
-            banner_detail = "All workflow phases are complete. Review results or refine the setup."
-        elif next_step is not None:
-            banner_level = "active"
-            banner_title = f"Next forced step: {next_step.number}. {next_step.name}"
-            banner_detail = next_step.hint or next_step.description
-        else:
-            banner_level = "warning"
-            banner_title = "Workflow is blocked"
-            banner_detail = "Resolve the blocked prerequisites shown below to continue."
-        _style_banner(self.banner, banner_level)
+        state = self._presenter.build_view_state()
+        self.progress.setValue(state.progress_percent)
+        _style_banner(self.banner, state.banner.level)
         self.banner.setText(
-            f"<b>{profile.label} Project Cockpit</b><br>{banner_title}<br>{banner_detail}"
+            f"<b>{state.profile_label} Project Cockpit</b><br>{state.banner.title}<br>{state.banner.detail}"
         )
+        self.summary.setText(state.summary_text)
 
-        self.summary.setText(
-            f"Completed {completed}/{total} steps for "
-            f"{getattr(analysis, 'Label', getattr(analysis, 'Name', 'No Analysis'))}. "
-            f"Color coding is enforced: green = done, blue = ready now, grey = blocked."
-        )
+        self._refresh_study_recipe(state.recipe)
+        self._refresh_step_tree(state.steps)
+        self._refresh_action_buttons(state.actions)
+        self._refresh_runtime(state.runtime)
 
-        self._refresh_study_recipe(context)
-        self._refresh_step_tree(steps)
-        self._refresh_action_buttons(steps)
-        self._refresh_runtime(analysis)
-
-    def _refresh_study_recipe(self, context):
-        recipe = context.get("study_recipe")
-        if recipe is None:
+    def _refresh_study_recipe(self, recipe):
+        if not recipe.visible:
             self.recipe_group.setVisible(False)
             self.recipe_banner.clear()
             self.recipe_details.clear()
@@ -290,107 +240,42 @@ class ProjectCockpitPanel:
     def _refresh_step_tree(self, steps):
         self.steps_tree.clear()
         for step in steps:
-            if step.complete:
-                state = "Done"
-                level = "done"
-                gate = "Unlocked"
-            elif step.active:
-                state = "Ready"
-                level = "active"
-                gate = "Do this now"
-            else:
-                state = "Blocked"
-                level = "blocked"
-                gate = "Waiting for previous step"
-            item = QtGui.QTreeWidgetItem([state, f"{step.number}. {step.name}", gate, step.hint or ""])
-            bg, fg = _phase_color(level)
+            item = QtGui.QTreeWidgetItem([step.state_label, step.title, step.gate, step.hint])
+            bg, fg = _phase_color(step.level)
             for column in range(4):
                 item.setBackground(column, QtGui.QBrush(QtGui.QColor(bg)))
                 item.setForeground(column, QtGui.QBrush(QtGui.QColor(fg)))
             self.steps_tree.addTopLevelItem(item)
         self.steps_tree.expandAll()
 
-    def _refresh_action_buttons(self, steps):
-        step_by_command = {step.command_name: step for step in steps if step.command_name}
-        for command_name, _label in self.COMMAND_LABELS:
-            button = self._command_buttons[command_name]
-            step = step_by_command.get(command_name)
-            enabled = True
-            level = "active"
-            if step is not None:
-                enabled = bool(step.active or step.complete)
-                if step.complete:
-                    level = "done"
-                elif step.active:
-                    level = "active"
-                else:
-                    level = "blocked"
-            bg, fg = _phase_color(level)
-            button.setEnabled(enabled)
+    def _refresh_action_buttons(self, actions):
+        for action in actions:
+            button = self._command_buttons[action.command_name]
+            bg, fg = _phase_color(action.level)
+            button.setEnabled(action.enabled)
             button.setStyleSheet(
                 f"background:{bg}; color:{fg}; border:1px solid {fg}; border-radius:4px; padding:6px;"
             )
 
-    def _refresh_runtime(self, analysis):
-        snapshot = get_run_snapshot(analysis)
-        if snapshot["result_path"]:
-            try:
-                sync_post_pipeline(analysis, snapshot=snapshot)
-            except Exception:
-                pass
-
-        status = snapshot["status"]
-        if status == "RUNNING":
-            level = "running"
-            title = "Simulation is running"
-        elif status == "FINISHED":
-            level = "done"
-            title = "Simulation finished"
-        elif status in {"FAILED", "TERMINATING"}:
-            level = "failed" if status == "FAILED" else "warning"
-            title = "Simulation needs attention"
-        else:
-            level = "blocked"
-            title = "No active simulation"
-
-        _style_banner(self.runtime_banner, level)
+    def _refresh_runtime(self, runtime):
+        _style_banner(self.runtime_banner, runtime.level)
         self.runtime_banner.setText(
-            f"<b>{title}</b><br>{snapshot['phase']}"
+            f"<b>{runtime.title}</b><br>{runtime.phase}"
         )
 
-        progress_percent = snapshot["progress_percent"]
-        if progress_percent is None and status == "RUNNING":
+        if runtime.progress_indeterminate:
             self.runtime_progress.setRange(0, 0)
         else:
             self.runtime_progress.setRange(0, 100)
-            self.runtime_progress.setValue(int(progress_percent or 0))
+            self.runtime_progress.setValue(runtime.progress_percent)
 
-        elapsed = snapshot["elapsed_seconds"]
-        result_path = snapshot["result_path"]
-        details = [
-            f"Backend: {snapshot['backend'] or 'n/a'}",
-            f"PID: {snapshot['pid'] or 'n/a'}",
-            f"Elapsed: {elapsed:.1f}s",
-        ]
-        if snapshot["case_dir"]:
-            details.append(f"Case: {snapshot['case_dir']}")
-        if result_path:
-            details.append(f"Results: {os.path.basename(result_path)}")
-        if snapshot["last_error"]:
-            details.append(f"Last issue: {snapshot['last_error']}")
-        self.runtime_details.setText("<br>".join(details))
-
-        log_tail = snapshot["log_tail"]
-        self.runtime_log.setPlainText("\n".join(log_tail) if log_tail else "No live log output yet.")
+        self.runtime_details.setText("<br>".join(runtime.details))
+        self.runtime_log.setPlainText("\n".join(runtime.log_tail) if runtime.log_tail else "No live log output yet.")
         self.runtime_log.verticalScrollBar().setValue(self.runtime_log.verticalScrollBar().maximum())
 
-        preferred_result = self._preferred_result_object(analysis)
-        self.btn_stop.setEnabled(status == "RUNNING")
-        self.btn_results.setEnabled(preferred_result is not None or bool(result_path))
-        if getattr(preferred_result, "FlowType", "") == "FlowStudio::ResultPlot":
-            self.btn_results.setText("Open Primary Plot")
-        else:
-            self.btn_results.setText("Open Results")
+        self.btn_stop.setEnabled(runtime.stop_enabled)
+        self.btn_results.setEnabled(runtime.results_enabled)
+        self.btn_results.setText(runtime.results_label)
 
     def accept(self):
         self._timer.stop()
@@ -399,3 +284,8 @@ class ProjectCockpitPanel:
     def reject(self):
         self._timer.stop()
         FreeCADGui.Control.closeDialog()
+
+
+ProjectCockpitPanel.STARTER_COMMAND_GROUPS = _build_starter_command_groups(
+    example_labels=ProjectCockpitPanel.EXAMPLE_LABELS
+)

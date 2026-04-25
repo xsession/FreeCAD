@@ -216,6 +216,7 @@ public:
 
     QList<QAction*> getEnabledWbActions() const;
     QList<QAction*> getPrimaryWbActions() const;
+    QList<QAction*> getRecentWbActions() const;
     QList<QAction*> getOverflowWbActions() const;
     QList<QAction*> getDisabledWbActions() const;
 

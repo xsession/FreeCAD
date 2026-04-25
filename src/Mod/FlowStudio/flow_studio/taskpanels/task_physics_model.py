@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.physics_model_presenter import PhysicsModelPresenter, PhysicsModelSettings
 
 
 class TaskPhysicsModel(BaseTaskPanel):
@@ -16,28 +17,14 @@ class TaskPhysicsModel(BaseTaskPanel):
         "Configure the governing flow model, turbulence, and coupling options for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = PhysicsModelPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if self.chk_buoy.isChecked() and not self.chk_gravity.isChecked():
-            return (
-                "warning",
-                "Buoyancy needs gravity",
-                "Enable gravity when buoyancy is active so the body-force direction is defined.",
-            )
-
-        if self.chk_buoy.isChecked() and not self.chk_heat.isChecked():
-            return (
-                "warning",
-                "Buoyancy usually needs heat transfer",
-                "Enable heat transfer when buoyancy is active so density variation has a thermal driver.",
-            )
-
-        if self.cb_flow.currentText() == "Laminar" and self.cb_turb.currentText() != "kOmegaSST":
-            return (
-                "info",
-                "Laminar flow selected",
-                "The turbulence model is currently not driving the solve because the flow regime is laminar.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -93,16 +80,23 @@ class TaskPhysicsModel(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_flow"):
+            return self._presenter.read_settings(self.obj)
+        return PhysicsModelSettings(
+            flow_regime=self.cb_flow.currentText(),
+            turbulence_model=self.cb_turb.currentText(),
+            compressibility=self.cb_comp.currentText(),
+            time_model=self.cb_time.currentText(),
+            gravity=self.chk_gravity.isChecked(),
+            heat_transfer=self.chk_heat.isChecked(),
+            buoyancy=self.chk_buoy.isChecked(),
+            free_surface=self.chk_vof.isChecked(),
+            passive_scalar=self.chk_scalar.isChecked(),
+        )
+
     def _store(self):
-        self.obj.FlowRegime = self.cb_flow.currentText()
-        self.obj.TurbulenceModel = self.cb_turb.currentText()
-        self.obj.Compressibility = self.cb_comp.currentText()
-        self.obj.TimeModel = self.cb_time.currentText()
-        self.obj.Gravity = self.chk_gravity.isChecked()
-        self.obj.HeatTransfer = self.chk_heat.isChecked()
-        self.obj.Buoyancy = self.chk_buoy.isChecked()
-        self.obj.FreeSurface = self.chk_vof.isChecked()
-        self.obj.PassiveScalar = self.chk_scalar.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())
 
     @staticmethod
     def _separator():

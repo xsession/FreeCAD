@@ -8,6 +8,8 @@
 import os
 import FreeCAD
 
+from flow_studio.solver_deps import find_executable
+
 
 class BaseSolverRunner:
     """Abstract base class for CFD solver backends.
@@ -43,6 +45,15 @@ class BaseSolverRunner:
     def check(self):
         """Check that the solver executable is available."""
         raise NotImplementedError
+
+    def _resolve_executable(self, name, backend_name=None, extra_paths=None):
+        """Resolve an executable from PATH or FlowStudio-managed solver artifacts."""
+        path, _version = find_executable(
+            name,
+            extra_paths=extra_paths,
+            backend_name=backend_name,
+        )
+        return path
 
     def write_case(self):
         """Write all input / case files for the solver."""

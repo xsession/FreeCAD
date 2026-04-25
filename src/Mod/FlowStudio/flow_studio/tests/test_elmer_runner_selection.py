@@ -64,9 +64,9 @@ class TestElmerRunnerSelection(unittest.TestCase):
     def test_prefers_serial_solver_by_default(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = self._make_runner(temp_dir)
-            with patch("flow_studio.solvers.elmer_runner.shutil.which") as mock_which, \
+            with patch.object(runner, "_resolve_executable") as mock_resolve, \
                     patch("flow_studio.solvers.elmer_runner.subprocess.Popen") as mock_popen:
-                mock_which.side_effect = lambda name: f"/fake/{name}"
+                mock_resolve.side_effect = lambda name, backend_name=None, extra_paths=None: f"/fake/{name}"
                 mock_popen.return_value = _FakeProcess()
 
                 runner.run()
@@ -78,7 +78,7 @@ class TestElmerRunnerSelection(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = self._make_runner(temp_dir, num_processors=4, solver_binary="ElmerSolver_mpi")
             with patch.object(runner, "_partition_mesh", return_value=True), \
-                    patch("flow_studio.solvers.elmer_runner.shutil.which") as mock_which, \
+                    patch.object(runner, "_resolve_executable") as mock_resolve, \
                     patch("flow_studio.solvers.elmer_runner.subprocess.Popen") as mock_popen:
                 mapping = {
                     "ElmerSolver_mpi": "/fake/ElmerSolver_mpi",
@@ -86,7 +86,7 @@ class TestElmerRunnerSelection(unittest.TestCase):
                     "mpiexec": None,
                     "ElmerSolver": "/fake/ElmerSolver",
                 }
-                mock_which.side_effect = lambda name: mapping.get(name)
+                mock_resolve.side_effect = lambda name, backend_name=None, extra_paths=None: mapping.get(name)
                 mock_popen.return_value = _FakeProcess()
 
                 runner.run()
@@ -101,13 +101,13 @@ class TestElmerRunnerSelection(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             runner = self._make_runner(temp_dir, num_processors=3, solver_binary="ElmerSolver_mpi")
             with patch.object(runner, "_partition_mesh", return_value=True), \
-                    patch("flow_studio.solvers.elmer_runner.shutil.which") as mock_which, \
+                    patch.object(runner, "_resolve_executable") as mock_resolve, \
                     patch("flow_studio.solvers.elmer_runner.subprocess.Popen") as mock_popen:
                 mapping = {
                     "ElmerSolver_mpi": None,
                     "ElmerSolver": "/fake/ElmerSolver",
                 }
-                mock_which.side_effect = lambda name: mapping.get(name)
+                mock_resolve.side_effect = lambda name, backend_name=None, extra_paths=None: mapping.get(name)
                 mock_popen.return_value = _FakeProcess()
 
                 runner.run()

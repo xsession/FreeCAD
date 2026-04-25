@@ -15,12 +15,14 @@ the forces that drove it, the alternatives considered, and the outcome.
 | [ADR-0005](ADR-0005-ribbon-bar-architecture.md) | Ribbon bar replacing classic toolbars | Accepted |
 | [ADR-0006](ADR-0006-plugin-api-v2.md) | Plugin API v2 lifecycle manager | Accepted |
 | [ADR-0007](ADR-0007-pdm-provider-abc.md) | PDM provider Python ABC layer | Accepted |
+| [ADR-0009](ADR-0009-frontend-mvp-architecture.md) | Frontend MVP architecture for FreeCAD | Proposed |
 
 ## Architecture Notes
 
 | Document | Purpose |
 |----------|---------|
 | [frontend-shell-ux-plan.md](frontend-shell-ux-plan.md) | Shell UX direction for ribbon, workbench chooser, and task panels |
+| [freecad-mvp-migration-plan.md](freecad-mvp-migration-plan.md) | Incremental migration plan for applying MVP across FreeCAD frontend surfaces |
 | [freecad-visual-environment-deepsearch.md](freecad-visual-environment-deepsearch.md) | Human-centered visual-environment research synthesis for mechanical engineers |
 | [freecad-visual-environment-implementation-plan.md](freecad-visual-environment-implementation-plan.md) | Phased rollout plan for applying the visual-environment model to the current frontend |
 | [freecad-visual-environment-backlog.md](freecad-visual-environment-backlog.md) | Concrete backlog and milestone structure for implementation |

@@ -28,7 +28,7 @@
 #include <Gui/Command.h>
 #include <Gui/Control.h>
 #include <Gui/MDIView.h>
-#include <Gui/Selection.h>
+#include <Gui/Selection/Selection.h>
 #include <Mod/Sketcher/Gui/Workbench.h>
 #include <Mod/PartDesign/App/Body.h>
 #include <Mod/PartDesign/App/FeatureMultiTransform.h>

@@ -50,12 +50,12 @@ class TestRuntimeMonitor(unittest.TestCase):
         cls._freecad_stub = types.SimpleNamespace(ActiveDocument=None)
         cls._patcher = mock.patch.dict(sys.modules, {"FreeCAD": cls._freecad_stub})
         cls._patcher.start()
-        cls.runtime_monitor = importlib.import_module("flow_studio.runtime_monitor")
+        cls.runtime_monitor = importlib.import_module("flow_studio.runtime.monitor")
 
     @classmethod
     def tearDownClass(cls):
         cls._patcher.stop()
-        sys.modules.pop("flow_studio.runtime_monitor", None)
+        sys.modules.pop("flow_studio.runtime.monitor", None)
 
     def test_register_run_captures_progress_and_results(self):
         analysis = types.SimpleNamespace(Name="Analysis001")

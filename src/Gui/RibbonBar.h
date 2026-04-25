@@ -194,6 +194,8 @@ public:
     explicit RibbonBar(QWidget* parent = nullptr);
     ~RibbonBar() override;
 
+    static void registerRibbonPanel(const QString& name, const QStringList& commandNames);
+    static void unregisterRibbonPanel(const QString& name);
     static void registerContextualRibbonPanel(const QString& name, const QStringList& commandNames);
     static void unregisterContextualRibbonPanel(const QString& name);
 
@@ -241,6 +243,7 @@ Q_SIGNALS:
     void contextualTabHidden(const QString& name);
 
 private:
+    static void scheduleRibbonSetupRefresh();
     static void scheduleContextualTabsRefresh();
     void setupStyle();
     RibbonPanel* createPanel(const QString& name, ToolBarItem* toolbarItem);
@@ -256,6 +259,7 @@ private:
     void collapseMinimizedPreview();
 
     QuickAccessToolBar* qatBar{nullptr};
+    QToolButton* applicationButton{nullptr};
     QToolButton* minimizeButton{nullptr};
     QLabel* ribbonStateBadge{nullptr};
     RibbonKeyTip* keyTipOverlay{nullptr};
@@ -278,6 +282,7 @@ private:
     bool previewExpandedWhileMinimized{false};
     bool pendingShowPanelArea{true};
     QVariantAnimation* ribbonHeightAnimation{nullptr};
+    bool ribbonSetupRefreshPending{false};
     bool contextualTabsRefreshPending{false};
     fastsignals::scoped_connection inEditConnection;
     fastsignals::scoped_connection resetEditConnection;

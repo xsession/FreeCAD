@@ -41,6 +41,7 @@
 #include <Gui/ViewParams.h>
 #include <Mod/PartDesign/App/ShapeBinder.h>
 
+#include "Utils.h"
 #include "ViewProviderShapeBinder.h"
 #include "TaskShapeBinder.h"
 
@@ -227,9 +228,8 @@ void ViewProviderShapeBinder::setupContextMenu(QMenu* menu, QObject* receiver, c
         QString text = QObject::tr("Edit %1").arg(QString::fromUtf8(getObject()->Label.getValue()));
         getDocument()->openCommand(text.toUtf8());
 
-        Gui::Document* document = this->getDocument();
-        if (document) {
-            document->setEdit(this, ViewProvider::Default);
+        if (!PartDesignGui::setEdit(getObject())) {
+            getDocument()->abortCommand();
         }
     });
 }

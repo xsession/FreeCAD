@@ -156,6 +156,52 @@ void applyWorkbenchMenuFilter(const QList<QAction*>& actions, const QString& fil
     }
 }
 
+QList<QAction*> visibleWorkbenchComboActions(WorkbenchGroup* wbActionGroup)
+{
+    if (!wbActionGroup) {
+        return {};
+    }
+
+    QList<QAction*> visibleActions = wbActionGroup->getPrimaryWbActions();
+    auto appendIfMissing = [&visibleActions](QAction* action) {
+        if (action && !visibleActions.contains(action)) {
+            visibleActions.push_back(action);
+        }
+    };
+
+    for (auto* action : wbActionGroup->getEnabledWbActions()) {
+        if (action && action->isChecked()) {
+            appendIfMissing(action);
+        }
+    }
+
+    for (auto* action : wbActionGroup->getDisabledWbActions()) {
+        if (action && action->text() != QStringLiteral("<none>") && action->isChecked()) {
+            appendIfMissing(action);
+        }
+    }
+
+    if (visibleActions.isEmpty()) {
+        return wbActionGroup->getEnabledWbActions();
+    }
+
+    return visibleActions;
+}
+
+QString workbenchComboLabel(QAction* action)
+{
+    if (!action) {
+        return {};
+    }
+
+    const QString category = action->property("workbenchCategory").toString().trimmed();
+    if (category.isEmpty() || category == QObject::tr("Other")) {
+        return action->text();
+    }
+
+    return QObject::tr("%1 (%2)").arg(action->text(), category);
+}
+
 void buildWorkbenchOverflowMenu(QMenu* menu, WorkbenchGroup* wbActionGroup, QObject* owner)
 {
     if (!menu || !wbActionGroup || !owner) {
@@ -184,12 +230,31 @@ void buildWorkbenchOverflowMenu(QMenu* menu, WorkbenchGroup* wbActionGroup, QObj
         QObject::tr("Other")
     };
 
+    const auto recentActions = wbActionGroup->getRecentWbActions();
     const auto overflowActions = wbActionGroup->getOverflowWbActions();
-    if (!overflowActions.isEmpty()) {
+    QList<QAction*> categorizedOverflowActions;
+    for (auto* action : overflowActions) {
+        if (!recentActions.contains(action)) {
+            categorizedOverflowActions.push_back(action);
+        }
+    }
+
+    if (!recentActions.isEmpty()) {
+        menu->addSection(QObject::tr("Recent Workbenches"));
+        for (auto* action : recentActions) {
+            if (auto* overflowAction = createWorkbenchOverflowAction(action, wbActionGroup, owner)) {
+                menu->addAction(overflowAction);
+                filterableActions.push_back(overflowAction);
+            }
+        }
+        menu->addSeparator();
+    }
+
+    if (!categorizedOverflowActions.isEmpty()) {
         for (const auto& category : categories) {
             addWorkbenchCategorySection(
                 menu,
-                overflowActions,
+                categorizedOverflowActions,
                 category,
                 filterableActions,
                 wbActionGroup,
@@ -260,14 +325,16 @@ void buildWorkbenchOverflowMenu(QMenu* menu, WorkbenchGroup* wbActionGroup, QObj
 
 WorkbenchComboBox::WorkbenchComboBox(WorkbenchGroup* aGroup, QWidget* parent)
     : QComboBox(parent)
+    , wbActionGroup(aGroup)
 {
     setIconSize(QSize(16, 16));
     setToolTip(aGroup->toolTip());
     setStatusTip(aGroup->action()->statusTip());
     setWhatsThis(aGroup->action()->whatsThis());
-    refreshList(aGroup->getEnabledWbActions());
+    refreshList({});
     connect(aGroup, &WorkbenchGroup::workbenchListRefreshed, this, &WorkbenchComboBox::refreshList);
     connect(aGroup->groupAction(), &QActionGroup::triggered, this, [this, aGroup](QAction* action) {
+        refreshList({});
         setCurrentIndex(displayedActions.indexOf(action));
     });
     connect(this, qOverload<int>(&WorkbenchComboBox::activated), aGroup, [this](int index) {
@@ -291,7 +358,7 @@ void WorkbenchComboBox::showPopup()
 
 void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
 {
-    displayedActions = actionList;
+    displayedActions = wbActionGroup ? visibleWorkbenchComboActions(wbActionGroup) : actionList;
     clear();
 
     ParameterGrp::handle hGrp = App::GetApplication().GetParameterGroupByPath(
@@ -302,15 +369,16 @@ void WorkbenchComboBox::refreshList(QList<QAction*> actionList)
 
     for (QAction* action : displayedActions) {
         QIcon icon = action->icon();
+        const QString label = workbenchComboLabel(action);
 
         if (icon.isNull() || itemStyle == WorkbenchItemStyle::TextOnly) {
-            addItem(action->text());
+            addItem(label);
         }
         else if (itemStyle == WorkbenchItemStyle::IconOnly) {
             addItem(icon, {});  // empty string to ensure that only icon is displayed
         }
         else {
-            addItem(icon, action->text());
+            addItem(icon, label);
         }
 
         setItemData(count() - 1, action->toolTip(), Qt::ToolTipRole);
@@ -348,7 +416,7 @@ WorkbenchComboWidget::WorkbenchComboWidget(WorkbenchGroup* aGroup, QWidget* pare
     layout->addWidget(comboBox, 1);
     layout->addWidget(moreButton);
 
-    refreshList(aGroup->getEnabledWbActions());
+    refreshList({});
     connect(aGroup, &WorkbenchGroup::workbenchListRefreshed, this, &WorkbenchComboWidget::refreshList);
 }
 

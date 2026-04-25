@@ -8,8 +8,8 @@
 import FreeCAD
 from PySide import QtGui
 
-from flow_studio.geometry_tools import generate_mesh_from_geometry
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.mesh_gmsh_presenter import MeshGmshPresenter
 
 
 class TaskMeshGmsh(BaseTaskPanel):
@@ -19,25 +19,14 @@ class TaskMeshGmsh(BaseTaskPanel):
         "Define the mesh sizing, algorithm, and export format used to discretize {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = MeshGmshPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        min_size = float(getattr(self.obj, "MinElementSize", 0.0))
-        max_size = float(getattr(self.obj, "MaxElementSize", 0.0))
-        base_size = float(getattr(self.obj, "CharacteristicLength", 0.0))
-
-        if base_size <= 0.0:
-            return (
-                "error",
-                "Base mesh size must be positive",
-                "Set a positive base size before generating the mesh.",
-            )
-
-        if min_size > max_size:
-            return (
-                "warning",
-                "Minimum size exceeds maximum size",
-                "Reduce the minimum element size or increase the maximum element size before meshing.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level or title or detail:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -100,31 +89,30 @@ class TaskMeshGmsh(BaseTaskPanel):
 
     def _run_mesh(self):
         """Validate geometry and launch mesh generation."""
-        self._store()
-        result = generate_mesh_from_geometry(self.obj)
-        if result.status != "SUCCESSFUL":
-            issues = list(result.issues) or ["Unknown mesh generation error."]
-            message = "FlowStudio: Mesh generation blocked:\n- " + "\n- ".join(issues)
-            self.lbl_stats.setText("Mesh blocked by geometry issues")
-            FreeCAD.Console.PrintWarning(message + "\n")
-            QtGui.QMessageBox.warning(None, "FlowStudio Mesh Generation", message)
+        state = self._presenter.run_mesh(self.obj, self._current_settings())
+        self.lbl_stats.setText(state.stats_text)
+        if state.show_warning:
+            FreeCAD.Console.PrintWarning(state.console_message + "\n")
+            QtGui.QMessageBox.warning(None, state.dialog_title, state.dialog_message)
             return
 
-        self.lbl_stats.setText(f"Cells: {result.num_cells} | Points: {result.num_points}")
-        FreeCAD.Console.PrintMessage(
-            "FlowStudio: Mesh generated successfully\n"
-            f"  file: {result.mesh_file}\n"
-            f"  cells: {result.num_cells}\n"
-            f"  points: {result.num_points}\n"
-        )
+        FreeCAD.Console.PrintMessage(state.console_message)
 
     def _store(self):
-        self.obj.CharacteristicLength = self.sp_char.value()
-        self.obj.MinElementSize = self.sp_min.value()
-        self.obj.MaxElementSize = self.sp_max.value()
-        self.obj.Algorithm3D = self.cb_algo.currentText()
-        self.obj.ElementOrder = self.cb_order.currentText()
-        self.obj.ElementType = self.cb_type.currentText()
-        self.obj.GrowthRate = self.sp_growth.value()
-        self.obj.CellsInGap = self.sp_gap.value()
-        self.obj.MeshFormat = self.cb_format.currentText()
+        self._presenter.persist_settings(self.obj, self._current_settings())
+
+    def _current_settings(self):
+        if not hasattr(self, "sp_char"):
+            return self._presenter.read_settings(self.obj)
+
+        return self._presenter._coerce_settings({
+            "CharacteristicLength": self.sp_char.value(),
+            "MinElementSize": self.sp_min.value(),
+            "MaxElementSize": self.sp_max.value(),
+            "Algorithm3D": self.cb_algo.currentText(),
+            "ElementOrder": self.cb_order.currentText(),
+            "ElementType": self.cb_type.currentText(),
+            "GrowthRate": self.sp_growth.value(),
+            "CellsInGap": self.sp_gap.value(),
+            "MeshFormat": self.cb_format.currentText(),
+        })

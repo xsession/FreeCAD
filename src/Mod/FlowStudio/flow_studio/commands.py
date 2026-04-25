@@ -1764,7 +1764,7 @@ class _CmdImportStep:
             return
 
         from PySide import QtWidgets
-        from flow_studio.geometry_tools import import_step_optimized
+        from flow_studio.tools.geometry import import_step_optimized
 
         selected_path, _filter = QtWidgets.QFileDialog.getOpenFileName(
             None,
@@ -2034,7 +2034,7 @@ class _CmdRunSolver:
             return
 
         try:
-            from flow_studio.runtime_monitor import register_run
+            from flow_studio.runtime.monitor import register_run
 
             register_run(analysis, solver_obj, runner)
         except Exception as exc:
@@ -3306,7 +3306,7 @@ class _CmdWorkflowGuide:
         return FreeCAD.ActiveDocument is not None
 
     def Activated(self):
-        from flow_studio.workflow_guide import get_workflow_context, get_workflow_status
+        from flow_studio.core.workflow import get_workflow_context, get_workflow_status
         context = get_workflow_context()
         steps = get_workflow_status()
         profile = context["profile"]
@@ -3397,7 +3397,7 @@ class _CmdStopSolver:
         return has_analysis()
 
     def Activated(self):
-        from flow_studio.runtime_monitor import terminate_run
+        from flow_studio.runtime.monitor import terminate_run
 
         if terminate_run(_get_active_analysis()):
             FreeCAD.Console.PrintWarning("FlowStudio: Stop requested for active solver run.\n")

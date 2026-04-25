@@ -45,3 +45,11 @@ def register_contextual_ribbon_panel(name, commands):
 
 def unregister_contextual_ribbon_panel(name):
     FreeCADGui.unregisterContextualRibbonPanel(name)
+
+
+def register_ribbon_panel(name, commands):
+    FreeCADGui.registerRibbonPanel(name, list(commands))
+
+
+def unregister_ribbon_panel(name):
+    FreeCADGui.unregisterRibbonPanel(name)

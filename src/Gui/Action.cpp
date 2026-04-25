@@ -23,6 +23,7 @@
 #include <QActionEvent>
 #include <QActionGroup>
 #include <QApplication>
+#include <QCollator>
 #include <QEvent>
 #include <QFileInfo>
 #include <QMenu>
@@ -168,6 +169,20 @@ QList<QAction*> orderWorkbenchActions(const QList<QAction*>& actions, const QStr
     }
 
     return orderedActions;
+}
+
+QList<QAction*> sortWorkbenchActionsAlphabetically(const QList<QAction*>& actions)
+{
+    QList<QAction*> sortedActions = actions;
+    QCollator collator;
+    collator.setNumericMode(true);
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+
+    std::sort(sortedActions.begin(), sortedActions.end(), [&collator](QAction* lhs, QAction* rhs) {
+        return collator.compare(lhs->text(), rhs->text()) < 0;
+    });
+
+    return sortedActions;
 }
 
 QString workbenchPurpose(const QString& wbName)
@@ -943,16 +958,7 @@ void WorkbenchGroup::refreshWorkbenchList()
         index++;
     }
 
-    enabledWbsActions = orderWorkbenchActions(enabledWbsActions, readFavoriteWorkbenchNames());
-
-    auto favoriteWorkbenchNames = readFavoriteWorkbenchNames();
-    QStringList remainingRecentNames;
-    for (const auto& recentName : readRecentWorkbenchNames()) {
-        if (!favoriteWorkbenchNames.contains(recentName)) {
-            remainingRecentNames.push_back(recentName);
-        }
-    }
-    enabledWbsActions = orderWorkbenchActions(enabledWbsActions, remainingRecentNames);
+    enabledWbsActions = sortWorkbenchActionsAlphabetically(enabledWbsActions);
 
     // Signal to the widgets (WorkbenchComboBox & menu) to update the wb list
     workbenchListRefreshed(enabledWbsActions);
@@ -1017,6 +1023,29 @@ QList<QAction*> WorkbenchGroup::getPrimaryWbActions() const
     }
 
     return primaryActions;
+}
+
+QList<QAction*> WorkbenchGroup::getRecentWbActions() const
+{
+    const auto recentWorkbenchNames = readRecentWorkbenchNames();
+    if (recentWorkbenchNames.isEmpty()) {
+        return {};
+    }
+
+    const auto primaryActions = getPrimaryWbActions();
+    const auto orderedActions = orderWorkbenchActions(enabledWbsActions, recentWorkbenchNames);
+
+    QList<QAction*> recentActions;
+    for (auto* action : orderedActions) {
+        if (!action || primaryActions.contains(action)) {
+            continue;
+        }
+        if (recentWorkbenchNames.contains(action->objectName())) {
+            recentActions.push_back(action);
+        }
+    }
+
+    return recentActions;
 }
 
 QList<QAction*> WorkbenchGroup::getOverflowWbActions() const

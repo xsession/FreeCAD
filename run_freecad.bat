@@ -6,6 +6,7 @@ REM
 REM Usage:
 REM   run_freecad.bat              Launch FreeCAD GUI
 REM   run_freecad.bat --console    Launch FreeCAD console (no GUI)
+REM   run_freecad.bat script.py    Execute a Python GUI script via a temporary FCMacro wrapper
 REM   run_freecad.bat [any args]   Launch FreeCAD GUI with extra arguments
 REM
 REM This script auto-detects the pixi environment, build output directory,
@@ -20,6 +21,8 @@ set "AUTO_LOG=1"
 set "DIAGNOSTIC_STARTUP=0"
 set "USER_SUPPLIED_LOG=0"
 set "FC_LOG_FILE="
+set "LAUNCH_SCRIPT="
+set "LAUNCH_WRAPPER="
 
 REM ---- Detect build directory (debug first, then release) ----
 set "BUILD_BIN="
@@ -101,6 +104,16 @@ if /i "%~1"=="--console" (
     shift
     goto :parse_args
 )
+if /i "%~1"=="--run-script" (
+    if "%~2"=="" (
+        echo [ERROR] --run-script requires a Python file path.
+        exit /b 1
+    )
+    set "LAUNCH_SCRIPT=%~f2"
+    shift
+    shift
+    goto :parse_args
+)
 if /i "%~1"=="--diagnostic-startup" (
     set "DIAGNOSTIC_STARTUP=1"
     shift
@@ -124,12 +137,18 @@ if /i "%~1"=="--log-dir" (
 if /i "%~1"=="--log-file" set "USER_SUPPLIED_LOG=1"
 if /i "%~1"=="--write-log" set "USER_SUPPLIED_LOG=1"
 if /i "%~1"=="-l" set "USER_SUPPLIED_LOG=1"
+if not defined LAUNCH_SCRIPT if /i "%~x1"==".py" if exist "%~1" (
+    set "LAUNCH_SCRIPT=%~f1"
+    shift
+    goto :parse_args
+)
 REM Collect remaining args
 set "FC_ARGS=!FC_ARGS! %1"
 shift
 goto :parse_args
 
 :launch
+if defined LAUNCH_SCRIPT call :prepare_python_launcher
 if "%AUTO_LOG%"=="1" if "%USER_SUPPLIED_LOG%"=="0" call :configure_log_file
 if "%DIAGNOSTIC_STARTUP%"=="1" call :enable_diagnostic_startup
 
@@ -137,6 +156,7 @@ echo [LAUNCHER] Starting !FC_EXE!...
 echo [LAUNCHER] QT_PLUGIN_PATH = !QT_PLUGIN_PATH!
 echo [LAUNCHER] PYTHONHOME     = !PYTHONHOME!
 echo [LAUNCHER] PROJ_DATA      = !PROJ_DATA!
+if defined LAUNCH_SCRIPT echo [LAUNCHER] SCRIPT         = !LAUNCH_SCRIPT!
 if defined FC_LOG_FILE echo [LAUNCHER] LOG_FILE       = !FC_LOG_FILE!
 if "%DIAGNOSTIC_STARTUP%"=="1" echo [LAUNCHER] Diagnostic startup logging enabled
 echo.
@@ -173,6 +193,18 @@ goto :eof
 set "QT_DEBUG_PLUGINS=1"
 set "QT_LOGGING_RULES=qt.qpa.*=true;qt.core.plugin.*=true"
 set "FC_LAUNCH_DIAGNOSTIC_STARTUP=1"
+goto :eof
+
+:prepare_python_launcher
+if not exist "%TEMP%\FreeCAD\launcher-scripts" mkdir "%TEMP%\FreeCAD\launcher-scripts" >nul 2>&1
+set "LAUNCH_WRAPPER=%TEMP%\FreeCAD\launcher-scripts\run_python_script.FCMacro"
+powershell -NoProfile -Command "$content = @('import os','import runpy','import sys','','script = os.environ.get(''FREECAD_LAUNCH_SCRIPT'', '''')','if not script:','    raise RuntimeError(''FREECAD_LAUNCH_SCRIPT not set'')','','sys.argv = [script]','runpy.run_path(script, run_name=''__main__'')'); Set-Content -LiteralPath '!LAUNCH_WRAPPER!' -Value $content -Encoding ASCII"
+if errorlevel 1 (
+    echo [ERROR] Failed to prepare Python launcher wrapper.
+    exit /b 1
+)
+set "FREECAD_LAUNCH_SCRIPT=!LAUNCH_SCRIPT!"
+set "FC_ARGS=!FC_ARGS! ^"!LAUNCH_WRAPPER!^""
 goto :eof
 
 :print_log_summary

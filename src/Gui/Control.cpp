@@ -183,6 +183,7 @@ void ControlSingleton::showDialog(Gui::TaskView::TaskDialog* dlg, App::Document*
         dw->setVisible(true);
         dw->toggleViewAction()->setVisible(true);
         dw->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+        Application::Instance->refreshActiveWorkbench();
     }
 
     if (!addedDialog) {
@@ -267,6 +268,7 @@ void ControlSingleton::closedDialog(App::Document* attachedTo)
             QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
             | QDockWidget::DockWidgetFloatable
         );
+        Application::Instance->refreshActiveWorkbench();
     }
 }
 

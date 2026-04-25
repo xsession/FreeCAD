@@ -27,6 +27,7 @@
 #include <Gui/CommandT.h>
 #include <Mod/PartDesign/App/FeatureBase.h>
 
+#include "Utils.h"
 #include "ViewProviderBase.h"
 
 
@@ -54,12 +55,16 @@ bool ViewProviderBase::doubleClicked()
             std::string Msg("Edit ");
             Msg += base->Label.getValue();
             getDocument()->openCommand(Msg.c_str());
-            Gui::cmdSetEdit(base, Gui::Application::Instance->getUserEditMode());
+            const bool started = PartDesignGui::setEdit(base);
+            if (!started) {
+                getDocument()->abortCommand();
+            }
+            return started;
         }
         catch (const Base::Exception&) {
-            getDocument()->commitCommand();
+            getDocument()->abortCommand();
         }
-        return true;
+        return false;
     }
 
     return false;

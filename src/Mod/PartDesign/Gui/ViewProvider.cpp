@@ -49,6 +49,7 @@
 
 #include "TaskFeatureParameters.h"
 #include "StyleParameters.h"
+#include "Utils.h"
 
 #include "ViewProvider.h"
 #include "ViewProviderPy.h"
@@ -93,12 +94,16 @@ bool ViewProvider::doubleClicked()
     try {
         QString text = QObject::tr("Edit %1").arg(QString::fromUtf8(getObject()->Label.getValue()));
         getDocument()->openCommand(text.toUtf8());
-        Gui::cmdSetEdit(pcObject, Gui::Application::Instance->getUserEditMode());
+        const bool started = PartDesignGui::setEdit(pcObject);
+        if (!started) {
+            getDocument()->abortCommand();
+        }
+        return started;
     }
     catch (const Base::Exception&) {
         getDocument()->abortCommand();
     }
-    return true;
+    return false;
 }
 
 void ViewProvider::setupContextMenu(QMenu* menu, QObject* receiver, const char* member)

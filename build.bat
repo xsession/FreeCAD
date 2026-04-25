@@ -8,6 +8,11 @@ REM Commands:
 REM   (none)     Full build (install pixi, configure, build, install)
 REM   configure  CMake configure only
 REM   build      Compile only (incremental)
+REM   flowstudio Build only the FlowStudio target
+REM   solver-openfoam  Build vendored OpenFOAM in WSL
+REM   solver-elmer     Build vendored ElmerFEM with CMake + Ninja + MinGW
+REM   solver-fluidx3d  Build vendored FluidX3D with MSBuild
+REM   solvers          Build the vendored primary solver repos
 REM   test       Run all tests
 REM   run        Launch FreeCAD
 REM   clean      Remove build directory
@@ -114,6 +119,11 @@ REM ---- Parse command ----
 if "%CMD%"=="" goto :full_build
 if "%CMD%"=="configure" goto :configure
 if "%CMD%"=="build" goto :build
+if "%CMD%"=="flowstudio" goto :build_flowstudio
+if "%CMD%"=="solver-openfoam" goto :build_solver_openfoam
+if "%CMD%"=="solver-elmer" goto :build_solver_elmer
+if "%CMD%"=="solver-fluidx3d" goto :build_solver_fluidx3d
+if "%CMD%"=="solvers" goto :build_solvers
 if "%CMD%"=="test" goto :test
 if "%CMD%"=="run" goto :run
 if "%CMD%"=="clean" goto :clean
@@ -121,7 +131,7 @@ if "%CMD%"=="release" goto :release
 if "%CMD%"=="debug" goto :debug_build
 if "%CMD%"=="all" goto :all
 echo [ERROR] Unknown command: %CMD%
-echo Usage: build.bat [configure^|build^|test^|run^|clean^|release^|debug^|all]
+echo Usage: build.bat [configure^|build^|flowstudio^|solver-openfoam^|solver-elmer^|solver-fluidx3d^|solvers^|test^|run^|clean^|release^|debug^|all]
 exit /b 1
 
 REM ---- Commands ----
@@ -209,6 +219,145 @@ goto :build_attempt
 :build_done
 if exist "!BUILD_LOG!" del "!BUILD_LOG!"
 echo [BUILD] Build complete.
+goto :eof
+
+:build_flowstudio
+echo [BUILD] Building FlowStudio target only...
+cd "%SCRIPT_DIR%"
+cmake --build "%SCRIPT_DIR%build\debug" --target FlowStudio --parallel %NPROC%
+if %errorlevel% neq 0 (
+    echo [ERROR] FlowStudio target build failed.
+    exit /b 1
+)
+echo [BUILD] FlowStudio target complete.
+goto :eof
+
+:resolve_msbuild
+set "MSBUILD_EXE="
+where msbuild.exe >nul 2>&1
+if %errorlevel% equ 0 (
+    for /f "usebackq delims=" %%i in (`where msbuild.exe`) do (
+        set "MSBUILD_EXE=%%i"
+        goto :eof
+    )
+)
+if exist "!VSWHERE!" (
+    for /f "usebackq delims=" %%i in (`"!VSWHERE!" -latest -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe`) do (
+        set "MSBUILD_EXE=%%i"
+        goto :eof
+    )
+)
+goto :eof
+
+:build_solver_openfoam
+echo [BUILD] Building vendored OpenFOAM solver repo in WSL...
+set "OPENFOAM_DIR=%SCRIPT_DIR%src\Mod\FlowStudio\solver_repos\openfoam"
+if not exist "!OPENFOAM_DIR!\Allwmake" (
+    echo [ERROR] OpenFOAM repo not found at !OPENFOAM_DIR!
+    exit /b 1
+)
+where wsl.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] WSL is required to build the vendored OpenFOAM repo on Windows.
+    echo         Install WSL and a Linux toolchain, then rerun this command.
+    exit /b 1
+)
+for /f "usebackq delims=" %%i in (`wsl.exe wslpath -a "!OPENFOAM_DIR!"`) do set "OPENFOAM_WSL_DIR=%%i"
+if not defined OPENFOAM_WSL_DIR (
+    echo [ERROR] Failed to translate the OpenFOAM repo path for WSL.
+    exit /b 1
+)
+set "OPENFOAM_STAGE_DIR=/tmp/flowstudio-openfoam-stage"
+echo [BUILD] OpenFOAM WSL stage dir: !OPENFOAM_STAGE_DIR!
+wsl.exe bash -lc "set -e; echo '[WSL] Checking OpenFOAM build prerequisites'; for tool in bash gcc g++ make rsync; do command -v $tool >/dev/null 2>&1 || { echo '[WSL][ERROR] Missing required tool:' $tool; exit 1; }; done; echo '[WSL] Preparing staged OpenFOAM tree'; mkdir -p '!OPENFOAM_STAGE_DIR!/OpenFOAM-dev'; echo '[WSL] Syncing sources into stage dir'; rsync -a --delete --exclude '.git' '!OPENFOAM_WSL_DIR!'/ '!OPENFOAM_STAGE_DIR!/OpenFOAM-dev/'; cd '!OPENFOAM_STAGE_DIR!/OpenFOAM-dev'; echo '[WSL] Normalizing shell scripts'; find ./bin ./etc ./wmake -type f -exec sed -i 's/\r$//' {} +; find . -maxdepth 1 -type f -name 'All*' -exec sed -i 's/\r$//' {} +; export WM_NCOMPPROCS=%NPROC%; echo '[WSL] Sourcing OpenFOAM environment'; set +e; . ./etc/bashrc; source_rc=$?; set -e; echo '[WSL] OpenFOAM environment source status:' $source_rc; command -v foamEtcFile >/dev/null 2>&1 || { echo '[WSL][ERROR] foamEtcFile missing after sourcing OpenFOAM environment'; exit 1; }; command -v wmake >/dev/null 2>&1 || { echo '[WSL][ERROR] wmake missing after sourcing OpenFOAM environment'; exit 1; }; sh -lc 'command -v flex >/dev/null 2>&1' || { echo '[WSL][ERROR] flex missing from the OpenFOAM build environment'; exit 1; }; echo '[WSL] Starting Allwmake'; ./Allwmake -j%NPROC%; echo '[WSL] Syncing built platforms back to vendored repo'; rm -rf '!OPENFOAM_WSL_DIR!'/platforms; if [ -d ./platforms ]; then mkdir -p '!OPENFOAM_WSL_DIR!'; rsync -a --delete ./platforms/ '!OPENFOAM_WSL_DIR!'/platforms/; fi"
+if %errorlevel% neq 0 (
+    echo [ERROR] OpenFOAM build failed.
+    exit /b 1
+)
+echo [BUILD] OpenFOAM solver repo build complete.
+goto :eof
+
+:build_solver_elmer
+echo [BUILD] Building vendored ElmerFEM solver repo...
+set "ELMER_DIR=%SCRIPT_DIR%src\Mod\FlowStudio\solver_repos\elmerfem"
+set "ELMER_BUILD_DIR=!ELMER_DIR!\build"
+set "ELMER_INSTALL_DIR=!ELMER_DIR!\install"
+if not exist "!ELMER_DIR!\CMakeLists.txt" (
+    echo [ERROR] ElmerFEM repo not found at !ELMER_DIR!
+    exit /b 1
+)
+where gcc.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] gcc.exe not found. Elmer build requires MinGW GCC/G++/gfortran on PATH.
+    exit /b 1
+)
+where g++.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] g++.exe not found. Elmer build requires MinGW GCC/G++/gfortran on PATH.
+    exit /b 1
+)
+where gfortran.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] gfortran.exe not found. Elmer build requires MinGW GCC/G++/gfortran on PATH.
+    exit /b 1
+)
+where ninja.exe >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] ninja.exe not found. Install Ninja and rerun the Elmer build.
+    exit /b 1
+)
+set "CC=gcc"
+set "CXX=g++"
+set "FC=gfortran"
+cmake -S "!ELMER_DIR!" -B "!ELMER_BUILD_DIR!" -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="!ELMER_INSTALL_DIR!" -DCPACK_BUNDLE_EXTRA_WINDOWS_DLLS=OFF -DBLA_VENDOR=OpenBLAS -DWITH_MPI=OFF -DWITH_VTK=OFF -DWITH_ELMERGUI=OFF -DWITH_QT6=OFF -DWITH_OCC=OFF -DWITH_PARAVIEW=OFF -DWITH_ElmerIce=OFF -DWITH_LUA=OFF
+if %errorlevel% neq 0 (
+    echo [ERROR] Elmer CMake configure failed.
+    echo         The vendored Windows build expects OpenBLAS/LAPACK to be installed for the MinGW toolchain.
+    echo         Install OpenBLAS ^(for example via MSYS2 UCRT64^) or preseed BLAS_LIBRARIES/LAPACK_LIBRARIES, then rerun.
+    exit /b 1
+)
+cmake --build "!ELMER_BUILD_DIR!" --parallel %NPROC%
+if %errorlevel% neq 0 (
+    echo [ERROR] Elmer build failed.
+    exit /b 1
+)
+cmake --install "!ELMER_BUILD_DIR!"
+if %errorlevel% neq 0 (
+    echo [ERROR] Elmer install failed.
+    exit /b 1
+)
+echo [BUILD] Elmer solver repo build complete.
+goto :eof
+
+:build_solver_fluidx3d
+echo [BUILD] Building vendored FluidX3D solver repo...
+set "FLUIDX3D_DIR=%SCRIPT_DIR%src\Mod\FlowStudio\solver_repos\fluidx3d"
+if not exist "!FLUIDX3D_DIR!\FluidX3D.sln" (
+    echo [ERROR] FluidX3D repo not found at !FLUIDX3D_DIR!
+    exit /b 1
+)
+call :resolve_msbuild
+if not defined MSBUILD_EXE (
+    echo [ERROR] MSBuild.exe not found. Install Visual Studio Build Tools with MSBuild support.
+    exit /b 1
+)
+"!MSBUILD_EXE!" "!FLUIDX3D_DIR!\FluidX3D.sln" /m:%NPROC% /p:Configuration=Release /p:Platform=x64 /nologo
+if %errorlevel% neq 0 (
+    echo [ERROR] FluidX3D build failed.
+    exit /b 1
+)
+echo [BUILD] FluidX3D solver repo build complete.
+goto :eof
+
+:build_solvers
+echo [BUILD] Building vendored primary solver repos...
+call :build_solver_fluidx3d
+if %errorlevel% neq 0 exit /b 1
+call :build_solver_elmer
+if %errorlevel% neq 0 exit /b 1
+call :build_solver_openfoam
+if %errorlevel% neq 0 exit /b 1
+echo [BUILD] Vendored solver repo builds complete.
 goto :eof
 
 :test

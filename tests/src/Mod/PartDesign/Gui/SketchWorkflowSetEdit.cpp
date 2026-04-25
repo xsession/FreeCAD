@@ -118,8 +118,8 @@ private Q_SLOTS:
                  "active view should be a 3D Inventor view");
     }
 
-    // Source guard: ensure setEdit() still activates a 3D view before reading
-    // activeView(). This protects against accidental reordering/removal.
+    // Source guard: ensure setEdit() still normalizes the sketch edit viewport
+    // before reading activeView(). This protects against accidental reordering/removal.
     void test_setEdit_sourceContainsActivateViewBeforeActiveViewFetch()  // NOLINT
     {
         QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
@@ -134,20 +134,18 @@ private Q_SLOTS:
         QVERIFY2(file.open(QIODevice::ReadOnly | QIODevice::Text), qPrintable(utilsPath));
         const QString source = QString::fromUtf8(file.readAll());
 
-        const QString backstageNeedle = QStringLiteral("backstage->hide();");
-        const QString activateNeedle =
-            QStringLiteral("activateView(Gui::View3DInventor::getClassTypeId(), true)");
+        const QString viewportPrepNeedle
+            = QStringLiteral("SketchWorkflowController::prepareSketchEditViewport(guiDocument);");
         const QString activeViewNeedle = QStringLiteral("auto* activeView = Gui::Application::Instance->activeView();");
 
-        const int backstagePos = source.indexOf(backstageNeedle);
-        const int activatePos = source.indexOf(activateNeedle);
+        const int viewportPrepPos = source.indexOf(viewportPrepNeedle);
         const int activeViewPos = source.indexOf(activeViewNeedle);
 
-        QVERIFY2(backstagePos >= 0, "Backstage hide call missing in Utils.cpp::setEdit");
-        QVERIFY2(activatePos >= 0, "activateView guard call missing in Utils.cpp::setEdit");
+        QVERIFY2(viewportPrepPos >= 0,
+                 "Sketch workflow viewport normalization missing in Utils.cpp::setEdit");
         QVERIFY2(activeViewPos >= 0, "activeView fetch line not found in Utils.cpp::setEdit");
-        QVERIFY2(backstagePos < activatePos, "Backstage hide should run before activateView");
-        QVERIFY2(activatePos < activeViewPos, "activateView guard must be before activeView fetch");
+        QVERIFY2(viewportPrepPos < activeViewPos,
+                 "Viewport normalization must happen before activeView fetch");
     }
 
     void test_sketchWorkflow_sourceActivates3DViewBeforeSetEdit()  // NOLINT
@@ -539,6 +537,109 @@ private Q_SLOTS:
                  "Shape binder dialogs should publish a stable summary title");
         QVERIFY2(binderSource.contains(QStringLiteral("PartDesign::Body::findBodyOf(binder)")),
                  "Shape binder task context should mention the owning body when available");
+    }
+
+    void test_partDesignViewProviders_routeEditEntryThroughSharedHelper()  // NOLINT
+    {
+        QDir repoRoot(QStringLiteral(QT_TESTCASE_SOURCEDIR));
+        QVERIFY(repoRoot.cdUp());  // PartDesign
+        QVERIFY(repoRoot.cdUp());  // Mod
+        QVERIFY(repoRoot.cdUp());  // src
+        QVERIFY(repoRoot.cdUp());  // tests
+        QVERIFY(repoRoot.cdUp());  // repo root
+
+        const QString featureProviderPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/ViewProvider.cpp"));
+        QFile featureProviderFile(featureProviderPath);
+        QVERIFY2(featureProviderFile.open(QIODevice::ReadOnly | QIODevice::Text),
+                 qPrintable(featureProviderPath));
+        const QString featureProviderSource = QString::fromUtf8(featureProviderFile.readAll());
+
+        const QString featureDoubleClickNeedle
+            = QStringLiteral("bool ViewProvider::doubleClicked()");
+        const QString sharedHelperNeedle = QStringLiteral("PartDesignGui::setEdit(pcObject)");
+        const QString directEditNeedle = QStringLiteral("Gui::cmdSetEdit(pcObject");
+        const QString nextMethodNeedle = QStringLiteral("void ViewProvider::setupContextMenu(");
+
+        const int featureDoubleClickPos = featureProviderSource.indexOf(featureDoubleClickNeedle);
+        const int sharedHelperPos = featureProviderSource.indexOf(sharedHelperNeedle, featureDoubleClickPos);
+        const int directEditPos = featureProviderSource.indexOf(directEditNeedle, featureDoubleClickPos);
+        const int nextMethodPos = featureProviderSource.indexOf(nextMethodNeedle, featureDoubleClickPos);
+
+        QVERIFY2(featureDoubleClickPos >= 0, "PartDesign ViewProvider::doubleClicked not found");
+        QVERIFY2(sharedHelperPos >= 0,
+                 "PartDesign ViewProvider::doubleClicked should route through PartDesignGui::setEdit");
+        QVERIFY2(nextMethodPos >= 0, "PartDesign ViewProvider::setupContextMenu not found");
+        QVERIFY2(sharedHelperPos < nextMethodPos,
+                 "PartDesign ViewProvider::doubleClicked should call the shared helper inside the method body");
+        QVERIFY2(directEditPos < 0 || directEditPos > nextMethodPos,
+                 "PartDesign ViewProvider::doubleClicked should not call Gui::cmdSetEdit directly");
+
+        const QString binderProviderPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/ViewProviderShapeBinder.cpp"));
+        QFile binderProviderFile(binderProviderPath);
+        QVERIFY2(binderProviderFile.open(QIODevice::ReadOnly | QIODevice::Text),
+                 qPrintable(binderProviderPath));
+        const QString binderProviderSource = QString::fromUtf8(binderProviderFile.readAll());
+
+        const QString binderContextMenuNeedle
+            = QStringLiteral("void ViewProviderShapeBinder::setupContextMenu(");
+        const QString binderSharedHelperNeedle
+            = QStringLiteral("PartDesignGui::setEdit(getObject())");
+        const QString binderDirectEditNeedle
+            = QStringLiteral("document->setEdit(this, ViewProvider::Default)");
+        const QString binderNextNeedle
+            = QStringLiteral("PROPERTY_SOURCE(PartDesignGui::ViewProviderSubShapeBinder");
+
+        const int binderContextMenuPos = binderProviderSource.indexOf(binderContextMenuNeedle);
+        const int binderSharedHelperPos
+            = binderProviderSource.indexOf(binderSharedHelperNeedle, binderContextMenuPos);
+        const int binderDirectEditPos
+            = binderProviderSource.indexOf(binderDirectEditNeedle, binderContextMenuPos);
+        const int binderNextPos = binderProviderSource.indexOf(binderNextNeedle, binderContextMenuPos);
+
+        QVERIFY2(binderContextMenuPos >= 0,
+                 "PartDesign ViewProviderShapeBinder::setupContextMenu not found");
+        QVERIFY2(binderSharedHelperPos >= 0,
+                 "Shape binder edit action should route through PartDesignGui::setEdit");
+        QVERIFY2(binderNextPos >= 0,
+                 "PartDesign ViewProviderSubShapeBinder definition not found after shape binder context menu");
+        QVERIFY2(binderSharedHelperPos < binderNextPos,
+                 "Shape binder context-menu edit should call the shared helper inside setupContextMenu");
+        QVERIFY2(binderDirectEditPos < 0 || binderDirectEditPos > binderNextPos,
+                 "Shape binder context-menu edit should not call document->setEdit directly");
+
+        const QString baseProviderPath
+            = repoRoot.filePath(QStringLiteral("src/Mod/PartDesign/Gui/ViewProviderBase.cpp"));
+        QFile baseProviderFile(baseProviderPath);
+        QVERIFY2(baseProviderFile.open(QIODevice::ReadOnly | QIODevice::Text),
+                 qPrintable(baseProviderPath));
+        const QString baseProviderSource = QString::fromUtf8(baseProviderFile.readAll());
+
+        const QString baseDoubleClickNeedle
+            = QStringLiteral("bool ViewProviderBase::doubleClicked()");
+        const QString baseSharedHelperNeedle = QStringLiteral("PartDesignGui::setEdit(base)");
+        const QString baseDirectEditNeedle = QStringLiteral("Gui::cmdSetEdit(base");
+        const QString baseNextMethodNeedle
+            = QStringLiteral("void ViewProviderBase::setupContextMenu(");
+
+        const int baseDoubleClickPos = baseProviderSource.indexOf(baseDoubleClickNeedle);
+        const int baseSharedHelperPos
+            = baseProviderSource.indexOf(baseSharedHelperNeedle, baseDoubleClickPos);
+        const int baseDirectEditPos
+            = baseProviderSource.indexOf(baseDirectEditNeedle, baseDoubleClickPos);
+        const int baseNextMethodPos = baseProviderSource.indexOf(baseNextMethodNeedle, baseDoubleClickPos);
+
+        QVERIFY2(baseDoubleClickPos >= 0,
+                 "PartDesign ViewProviderBase::doubleClicked not found");
+        QVERIFY2(baseSharedHelperPos >= 0,
+                 "PartDesign ViewProviderBase::doubleClicked should route through PartDesignGui::setEdit");
+        QVERIFY2(baseNextMethodPos >= 0,
+                 "PartDesign ViewProviderBase::setupContextMenu not found");
+        QVERIFY2(baseSharedHelperPos < baseNextMethodPos,
+                 "PartDesign ViewProviderBase::doubleClicked should call the shared helper inside the method body");
+        QVERIFY2(baseDirectEditPos < 0 || baseDirectEditPos > baseNextMethodPos,
+                 "PartDesign ViewProviderBase::doubleClicked should not call Gui::cmdSetEdit directly");
     }
 
     void test_sketcherDialogs_publishTaskViewContextMetadata()  // NOLINT

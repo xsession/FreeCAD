@@ -54,9 +54,13 @@ class FluidX3DRunner(BaseSolverRunner):
         """Check FluidX3D repo / executable availability."""
         exe = getattr(self.solver_obj, "FluidX3DExecutable", "")
         if exe and os.path.isfile(exe):
-            return True
-        # Check if FluidX3D repo is cloned nearby
-        return os.path.isdir(os.path.join(self.case_dir, "FluidX3D"))
+            return []
+        if self._resolve_executable("FluidX3D", backend_name="FluidX3D"):
+            return []
+        return [
+            "Could not resolve 'FluidX3D' from PATH or FlowStudio solver build artifacts. "
+            "Set FluidX3DExecutable or point FLOWSTUDIO_SOLVER_ARTIFACTS at the built output."
+        ]
 
     # ------------------------------------------------------------------
     def write_case(self):
@@ -314,7 +318,10 @@ class FluidX3DRunner(BaseSolverRunner):
     # ------------------------------------------------------------------
     def run(self):
         """Compile and run FluidX3D (single or multi-GPU)."""
-        exe = getattr(self.solver_obj, "FluidX3DExecutable", "")
+        exe = getattr(self.solver_obj, "FluidX3DExecutable", "") or self._resolve_executable(
+            "FluidX3D",
+            backend_name="FluidX3D",
+        ) or ""
         multi_gpu = getattr(self.solver_obj, "FluidX3DMultiGPU", False)
         num_gpus = max(1, getattr(self.solver_obj, "FluidX3DNumGPUs", 1))
 

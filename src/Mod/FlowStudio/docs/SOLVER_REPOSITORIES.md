@@ -2,7 +2,9 @@
 
 This note records the canonical upstream solver repositories vendored under `src/Mod/FlowStudio/solver_repos`.
 
-These submodules are reference source trees for adapter development, case-export validation, and reproducible backend integration work. They are not linked directly into the FreeCAD build by default.
+These submodules are reference source trees for adapter development, case-export validation, and reproducible backend integration work.
+
+They are still not compiled by the top-level FreeCAD build by default, but FlowStudio now treats their common build/install output directories as first-class executable artifact roots during local dependency checks and simulation launch.
 
 ## Core CFD and Multiphysics
 
@@ -40,5 +42,19 @@ Geant4 is the canonical radiation transport and particle-scoring backend for Flo
 ## Operating Notes
 
 - The source of truth for submodule registration is the top-level `.gitmodules` file.
+- FlowStudio executable resolution now prefers, in order:
+	- explicit absolute executable paths stored on solver objects
+	- normal `PATH` resolution
+	- directories listed in `FLOWSTUDIO_SOLVER_ARTIFACTS`
+	- common build/install output folders under `src/Mod/FlowStudio/solver_repos/<backend>`
+- This means local simulations can use solver binaries built from the vendored repositories without copying them into the system `PATH`, as long as they land in a supported artifact directory or `FLOWSTUDIO_SOLVER_ARTIFACTS` points at the build root.
+- Windows build entry points are now exposed through `build.bat` and the matching VS Code tasks:
+	- `build.bat solver-fluidx3d` builds the vendored FluidX3D Visual Studio solution
+	- `build.bat solver-elmer` configures, builds, and installs the vendored ElmerFEM tree with CMake + Ninja + MinGW toolchains
+	  - the current Windows path expects OpenBLAS/LAPACK to be installed for the MinGW toolchain, or `BLAS_LIBRARIES` and `LAPACK_LIBRARIES` to be preseeded for CMake
+	- `build.bat solver-openfoam` dispatches the vendored OpenFOAM `Allwmake` flow through WSL
+	  - because upstream startup scripts require a canonical `OpenFOAM-dev` layout, the wrapper stages the repo into a temporary WSL work tree, normalizes shell scripts to LF there, runs `Allwmake`, and syncs the resulting `platforms/` artifacts back into the vendored checkout
+	  - the current WSL path also expects a Linux build toolchain including `bash`, `gcc`, `g++`, `make`, `flex`, and `rsync`
+	- `build.bat solvers` runs the primary vendored solver builds in sequence
 - Backend adapters should treat these repositories as upstream references, not as an excuse to hard-wire solver-specific assumptions into the frontend model.
 - Some upstream repositories, notably OpenFOAM on Windows, can report local checkout noise because of filesystem and case-sensitivity differences even when the recorded submodule gitlink is correct.

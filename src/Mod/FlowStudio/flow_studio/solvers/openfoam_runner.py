@@ -68,11 +68,13 @@ class OpenFOAMRunner(BaseSolverRunner):
     def check(self):
         """Check that OpenFOAM commands are on PATH or configured."""
         of_dir = getattr(self.solver_obj, "OpenFOAMDir", "")
-        if of_dir and os.path.isdir(of_dir):
-            return True
-        # Try to find on PATH (Linux/WSL)
-        result = shutil.which("simpleFoam")
-        return result is not None
+        extra_paths = [os.path.join(of_dir, "bin")] if of_dir else None
+        if self._resolve_executable("simpleFoam", backend_name="OpenFOAM", extra_paths=extra_paths):
+            return []
+        return [
+            "Could not resolve 'simpleFoam' from PATH or FlowStudio solver build artifacts. "
+            "Configure OpenFOAMDir, add the solver to PATH, or point FLOWSTUDIO_SOLVER_ARTIFACTS at the built output."
+        ]
 
     # ------------------------------------------------------------------
     # write_case
@@ -711,11 +713,12 @@ class OpenFOAMRunner(BaseSolverRunner):
 
         # ---- Build command ----
         of_dir = getattr(self.solver_obj, "OpenFOAMDir", "")
-        solver_path = solver_app
-        if of_dir:
-            candidate = os.path.join(of_dir, "bin", solver_app)
-            if os.path.isfile(candidate):
-                solver_path = candidate
+        extra_paths = [os.path.join(of_dir, "bin")] if of_dir else None
+        solver_path = self._resolve_executable(
+            solver_app,
+            backend_name="OpenFOAM",
+            extra_paths=extra_paths,
+        ) or solver_app
 
         if np > 1:
             # Find MPI launcher
@@ -757,8 +760,9 @@ class OpenFOAMRunner(BaseSolverRunner):
     def _find_mpi_executable(self):
         """Find mpirun or mpiexec on PATH or in OpenFOAM dir."""
         of_dir = getattr(self.solver_obj, "OpenFOAMDir", "")
+        extra_paths = [os.path.join(of_dir, "bin")] if of_dir else None
         for name in ("mpirun", "mpiexec"):
-            path = shutil.which(name)
+            path = self._resolve_executable(name, extra_paths=extra_paths)
             if path:
                 return path
             if of_dir:
@@ -769,12 +773,13 @@ class OpenFOAMRunner(BaseSolverRunner):
 
     def _run_decompose_par(self):
         """Run decomposePar to split the domain for parallel execution."""
-        exe = "decomposePar"
         of_dir = getattr(self.solver_obj, "OpenFOAMDir", "")
-        if of_dir:
-            candidate = os.path.join(of_dir, "bin", exe)
-            if os.path.isfile(candidate):
-                exe = candidate
+        extra_paths = [os.path.join(of_dir, "bin")] if of_dir else None
+        exe = self._resolve_executable(
+            "decomposePar",
+            backend_name="OpenFOAM",
+            extra_paths=extra_paths,
+        ) or "decomposePar"
 
         try:
             result = subprocess.run(
@@ -813,12 +818,13 @@ class OpenFOAMRunner(BaseSolverRunner):
         FreeCAD.Console.PrintMessage(
             "FlowStudio: Reconstructing parallel results...\n"
         )
-        exe = "reconstructPar"
         of_dir = getattr(self.solver_obj, "OpenFOAMDir", "")
-        if of_dir:
-            candidate = os.path.join(of_dir, "bin", exe)
-            if os.path.isfile(candidate):
-                exe = candidate
+        extra_paths = [os.path.join(of_dir, "bin")] if of_dir else None
+        exe = self._resolve_executable(
+            "reconstructPar",
+            backend_name="OpenFOAM",
+            extra_paths=extra_paths,
+        ) or "reconstructPar"
 
         try:
             result = subprocess.run(

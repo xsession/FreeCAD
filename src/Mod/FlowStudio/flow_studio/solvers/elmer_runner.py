@@ -67,10 +67,11 @@ class ElmerRunner(BaseSolverRunner):
         """Verify that ElmerSolver and ElmerGrid are available."""
         errors = []
         for exe in ("ElmerSolver", "ElmerGrid"):
-            if shutil.which(exe) is None:
+            if self._resolve_executable(exe, backend_name="Elmer") is None:
                 errors.append(
                     f"{exe} not found in PATH. "
-                    f"Install Elmer FEM (https://www.elmerfem.org)."
+                    "Install Elmer FEM, build the vendored Elmer sources, or point "
+                    "FLOWSTUDIO_SOLVER_ARTIFACTS at the built output."
                 )
         return errors
 
@@ -117,7 +118,7 @@ class ElmerRunner(BaseSolverRunner):
             )
             return False
 
-        elmer_grid = shutil.which("ElmerGrid")
+        elmer_grid = self._resolve_executable("ElmerGrid", backend_name="Elmer")
         if elmer_grid is None:
             FreeCAD.Console.PrintError(
                 "FlowStudio [Elmer]: ElmerGrid not found for partitioning.\n"
@@ -174,16 +175,16 @@ class ElmerRunner(BaseSolverRunner):
             )
 
         if is_parallel:
-            exe = shutil.which(preferred_solver)
+            exe = self._resolve_executable(preferred_solver, backend_name="Elmer")
             if exe is None:
                 FreeCAD.Console.PrintWarning(
                     "FlowStudio [Elmer]: ElmerSolver_mpi not found, "
                     "falling back to serial ElmerSolver.\n"
                 )
-                exe = shutil.which("ElmerSolver")
+                exe = self._resolve_executable("ElmerSolver", backend_name="Elmer")
                 is_parallel = False
         else:
-            exe = shutil.which("ElmerSolver")
+            exe = self._resolve_executable("ElmerSolver", backend_name="Elmer")
 
         if exe is None:
             FreeCAD.Console.PrintError(
@@ -193,7 +194,7 @@ class ElmerRunner(BaseSolverRunner):
 
         if is_parallel:
             # Find mpirun/mpiexec
-            mpi_exe = shutil.which("mpirun") or shutil.which("mpiexec")
+            mpi_exe = self._resolve_executable("mpirun") or self._resolve_executable("mpiexec")
             if mpi_exe is None:
                 FreeCAD.Console.PrintWarning(
                     "FlowStudio [Elmer]: mpirun/mpiexec not found, "
@@ -265,7 +266,7 @@ class ElmerRunner(BaseSolverRunner):
             )
             return
 
-        elmer_grid = shutil.which("ElmerGrid")
+        elmer_grid = self._resolve_executable("ElmerGrid", backend_name="Elmer")
         if elmer_grid is None:
             FreeCAD.Console.PrintError(
                 "FlowStudio [Elmer]: ElmerGrid not found.\n"

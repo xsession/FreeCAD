@@ -25,6 +25,8 @@ import importlib
 from functools import lru_cache
 from dataclasses import dataclass, field
 
+from flow_studio.runtime.artifacts import artifact_search_dirs, resolve_solver_artifact
+
 
 # ======================================================================
 # Data structures
@@ -133,7 +135,7 @@ def _extra_dirs():
     return dirs
 
 
-def find_executable(name, extra_paths=None):
+def find_executable(name, extra_paths=None, backend_name=None):
     """Find an executable on PATH or in common locations.
 
     Returns (path, version_string) or (None, "").
@@ -143,8 +145,20 @@ def find_executable(name, extra_paths=None):
     if path:
         return os.path.abspath(path), _detect_version(path, name)
 
-    # 2. Extra dirs
-    search_dirs = _extra_dirs() + (extra_paths or [])
+    # 2. FlowStudio-managed build/install artifacts
+    artifact_path = resolve_solver_artifact(
+        name,
+        backend_name=backend_name,
+        extra_paths=extra_paths,
+    )
+    if artifact_path:
+        return os.path.abspath(artifact_path), _detect_version(artifact_path, name)
+
+    # 3. Extra dirs
+    search_dirs = _extra_dirs() + artifact_search_dirs(
+        backend_name=backend_name,
+        extra_paths=extra_paths,
+    )
     for d in search_dirs:
         if not os.path.isdir(d):
             continue
@@ -338,7 +352,7 @@ def check_backend(backend_name, extra_paths=None):
     deps = []
     for name, kind, required, hint in dep_defs:
         if kind == "executable":
-            path, ver = find_executable(name, extra_paths)
+            path, ver = find_executable(name, extra_paths, backend_name=backend_name)
             deps.append(DependencyStatus(
                 name=name, kind=kind, required=required,
                 found=path is not None,
@@ -603,7 +617,7 @@ def recommend_parallel_settings():
         },
         "Elmer": {
             "NumProcessors": elmer_procs,
-            "mpi_available": find_executable("ElmerSolver_mpi")[0] is not None,
+            "mpi_available": find_executable("ElmerSolver_mpi", backend_name="Elmer")[0] is not None,
         },
         "FluidX3D": {
             "NumGPUs": max(1, gpu_count),
