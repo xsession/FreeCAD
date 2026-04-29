@@ -8,6 +8,7 @@
 from PySide import QtGui
 
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.generic_bc_presenter import GenericBoundaryPresenter, GenericBoundarySettings
 
 
 BC_FIELDS = {
@@ -112,52 +113,14 @@ class TaskGenericBC(FloEFDTaskPanel):
         "Assign geometry and edit the boundary parameters for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = GenericBoundaryPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign boundary targets",
-                "Select one or more faces, bodies, or regions so this boundary condition applies to geometry.",
-            )
-
-        title = self._title()
-        values = {}
-        for prop, widget in getattr(self, "_widgets", {}).items():
-            if isinstance(widget, QtGui.QCheckBox):
-                values[prop] = widget.isChecked()
-            elif isinstance(widget, QtGui.QComboBox):
-                values[prop] = widget.currentText()
-            else:
-                values[prop] = widget.value()
-
-        if "Temperature" in values and float(values["Temperature"]) <= 0.0:
-            return (
-                "warning",
-                f"{title} temperature required",
-                "Enter a positive temperature in kelvin before using this thermal boundary condition.",
-            )
-
-        if "AmbientTemperature" in values and float(values["AmbientTemperature"]) <= 0.0:
-            return (
-                "warning",
-                f"{title} ambient temperature required",
-                "Enter a positive ambient temperature in kelvin before solving.",
-            )
-
-        if "HeatTransferCoefficient" in values and float(values["HeatTransferCoefficient"]) <= 0.0:
-            return (
-                "warning",
-                f"{title} coefficient required",
-                "Enter a positive heat-transfer coefficient for this convection boundary condition.",
-            )
-
-        if "Emissivity" in values and not 0.0 <= float(values["Emissivity"]) <= 1.0:
-            return (
-                "warning",
-                f"{title} emissivity out of range",
-                "Keep emissivity between 0 and 1 for this radiation boundary condition.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -194,11 +157,32 @@ class TaskGenericBC(FloEFDTaskPanel):
     def _title(self):
         return getattr(self.obj, "BCLabel", getattr(self.obj, "Label", "Boundary Condition"))
 
-    def _store(self):
+    def _field_names(self):
+        field_names = []
+        for prop, _label in BC_FIELDS.get(getattr(self.obj, "FlowType", ""), []):
+            if prop in getattr(self.obj, "PropertiesList", []):
+                field_names.append(prop)
+        return field_names
+
+    def _current_settings(self):
+        if not hasattr(self, "_widgets"):
+            return self._presenter.read_settings(self.obj, self._field_names())
+
+        values = {}
         for prop, widget in self._widgets.items():
             if isinstance(widget, QtGui.QCheckBox):
-                setattr(self.obj, prop, widget.isChecked())
+                values[prop] = widget.isChecked()
             elif isinstance(widget, QtGui.QComboBox):
-                setattr(self.obj, prop, widget.currentText())
+                values[prop] = widget.currentText()
             else:
-                setattr(self.obj, prop, widget.value())
+                values[prop] = widget.value()
+
+        return GenericBoundarySettings(
+            title=self._title(),
+            flow_type=getattr(self.obj, "FlowType", ""),
+            references=tuple(self._refs()),
+            values=values,
+        )
+
+    def _store(self):
+        self._presenter.persist_settings(self.obj, self._current_settings())

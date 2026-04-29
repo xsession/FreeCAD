@@ -11,7 +11,19 @@ from importlib import import_module
 
 
 _SERVICE_MODULES = {
+	"FlowStudioFanService": ".flowefd_features_service",
+	"FlowStudioGeant4ResultComponentService": ".geant4_result_service",
+	"FlowStudioGeant4ResultService": ".geant4_result_service",
+	"FlowStudioGenericBoundaryService": ".generic_bc_service",
+	"FlowStudioGeometryCheckService": ".geometry_tools_service",
+	"FlowStudioInletBoundaryService": ".bc_inlet_service",
+	"FlowStudioLeakTrackingService": ".geometry_tools_service",
+	"FlowStudioMeasurementPointService": ".measurement_point_service",
+	"FlowStudioMeasurementSurfaceService": ".measurement_surface_service",
+	"FlowStudioMeasurementVolumeService": ".measurement_volume_service",
 	"FlowStudioOpenBoundaryService": ".bc_open_service",
+	"FlowStudioOutletBoundaryService": ".bc_outlet_service",
+	"FlowStudioParticleStudyService": ".flowefd_features_service",
     "FlowStudioFluidMaterialService": ".fluid_material_service",
 	"FlowStudioInitialConditionsService": ".initial_conditions_service",
 	"FlowStudioMaterialService": ".material_service",
@@ -19,11 +31,26 @@ _SERVICE_MODULES = {
     "FlowStudioPhysicsModelService": ".physics_model_service",
 	"FlowStudioPostPipelineService": ".post_pipeline_service",
 	"FlowStudioProjectCockpitService": ".project_cockpit_service",
+	"FlowStudioResultPlotService": ".flowefd_features_service",
 	"FlowStudioSolverService": ".solver_service",
+	"FlowStudioVolumeSourceService": ".flowefd_features_service",
+	"FlowStudioWallBoundaryService": ".bc_wall_service",
 }
 
 __all__ = [
+	"FlowStudioFanService",
+	"FlowStudioGeant4ResultComponentService",
+	"FlowStudioGeant4ResultService",
+	"FlowStudioGenericBoundaryService",
+	"FlowStudioGeometryCheckService",
+	"FlowStudioInletBoundaryService",
+	"FlowStudioLeakTrackingService",
+	"FlowStudioMeasurementPointService",
+	"FlowStudioMeasurementSurfaceService",
+	"FlowStudioMeasurementVolumeService",
 	"FlowStudioOpenBoundaryService",
+	"FlowStudioOutletBoundaryService",
+	"FlowStudioParticleStudyService",
 	"FlowStudioFluidMaterialService",
 	"FlowStudioInitialConditionsService",
 	"FlowStudioMaterialService",
@@ -31,7 +58,10 @@ __all__ = [
 	"FlowStudioPhysicsModelService",
 	"FlowStudioPostPipelineService",
 	"FlowStudioProjectCockpitService",
+	"FlowStudioResultPlotService",
 	"FlowStudioSolverService",
+	"FlowStudioVolumeSourceService",
+	"FlowStudioWallBoundaryService",
 ]
 
 

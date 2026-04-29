@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.bc_wall_presenter import WallBoundaryPresenter, WallBoundarySettings
 
 
 class TaskBCWall(FloEFDTaskPanel):
@@ -16,38 +17,14 @@ class TaskBCWall(FloEFDTaskPanel):
         "Set wall motion, thermal behavior, and surface roughness for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = WallBoundaryPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign wall faces",
-                "Select one or more wall faces so this boundary condition applies to geometry.",
-            )
-
-        thermal_type = str(getattr(self.obj, "ThermalType", "Adiabatic"))
-        if thermal_type == "Fixed Temperature" and float(getattr(self.obj, "WallTemperature", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Wall temperature required",
-                "Enter a positive wall temperature in kelvin for a fixed-temperature wall.",
-            )
-        if thermal_type == "Heat Transfer Coefficient" and float(getattr(self.obj, "HeatTransferCoeff", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Heat-transfer coefficient required",
-                "Enter a positive heat-transfer coefficient before solving with this wall mode.",
-            )
-
-        if (
-            str(getattr(self.obj, "WallType", "No-Slip")) == "Rough Wall"
-            and float(getattr(self.obj, "RoughnessHeight", 0.0)) <= 0.0
-        ):
-            return (
-                "incomplete",
-                "Wall roughness required",
-                "Enter a positive roughness height before solving with a rough-wall boundary.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -88,10 +65,18 @@ class TaskBCWall(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_type"):
+            return self._presenter.read_settings(self.obj)
+        return WallBoundarySettings(
+            references=tuple(self._refs()),
+            wall_type=self.cb_type.currentText(),
+            thermal_type=self.cb_thermal.currentText(),
+            wall_temperature=self.sp_temp.value(),
+            heat_flux=self.sp_flux.value(),
+            heat_transfer_coeff=self.sp_htc.value(),
+            roughness_height=self.sp_rough.value(),
+        )
+
     def _store(self):
-        self.obj.WallType = self.cb_type.currentText()
-        self.obj.ThermalType = self.cb_thermal.currentText()
-        self.obj.WallTemperature = self.sp_temp.value()
-        self.obj.HeatFlux = self.sp_flux.value()
-        self.obj.HeatTransferCoeff = self.sp_htc.value()
-        self.obj.RoughnessHeight = self.sp_rough.value()
+        self._presenter.persist_settings(self.obj, self._current_settings())

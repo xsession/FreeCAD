@@ -8,6 +8,7 @@
 import FreeCAD
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.measurement_volume_presenter import MeasurementVolumePresenter, MeasurementVolumeSettings
 
 
 class TaskMeasurementVolume(BaseTaskPanel):
@@ -17,71 +18,14 @@ class TaskMeasurementVolume(BaseTaskPanel):
         "Define a volume extraction for {label}, then choose sampled fields and statistics to compute."
     )
 
+    def __init__(self, obj):
+        self._presenter = MeasurementVolumePresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
-        if not fields:
-            return (
-                "incomplete",
-                "Select sampled fields",
-                "Enter at least one field name so the volume measurement has data to evaluate.",
-            )
-
-        volume_type = self.cb_type.currentText()
-        if volume_type == "Box":
-            if not (
-                self.sp_bx0.value() < self.sp_bx1.value()
-                and self.sp_by0.value() < self.sp_by1.value()
-                and self.sp_bz0.value() < self.sp_bz1.value()
-            ):
-                return (
-                    "warning",
-                    "Box limits are invalid",
-                    "Set each minimum corner value below its corresponding maximum value.",
-                )
-
-        if volume_type == "Sphere" and self.sp_sr.value() <= 0.0:
-            return (
-                "warning",
-                "Sphere radius required",
-                "Enter a positive sphere radius before evaluating this volume measurement.",
-            )
-
-        if volume_type == "Cylinder":
-            axis = (self.sp_cax.value(), self.sp_cay.value(), self.sp_caz.value())
-            if axis == (0.0, 0.0, 0.0):
-                return (
-                    "warning",
-                    "Cylinder axis cannot be zero",
-                    "Set a non-zero cylinder axis vector so the volume orientation is defined.",
-                )
-            if self.sp_cr.value() <= 0.0 or self.sp_ch.value() <= 0.0:
-                return (
-                    "warning",
-                    "Cylinder size required",
-                    "Enter positive cylinder radius and height values before evaluating this region.",
-                )
-
-        if volume_type == "Threshold (field-based)":
-            if not self.le_thrfield.text().strip():
-                return (
-                    "incomplete",
-                    "Threshold field required",
-                    "Choose the field used to create the threshold-based measurement region.",
-                )
-            if self.sp_thrmin.value() >= self.sp_thrmax.value():
-                return (
-                    "warning",
-                    "Threshold range is invalid",
-                    "Set a threshold minimum smaller than the threshold maximum.",
-                )
-
-        if not any((self.chk_avg.isChecked(), self.chk_minmax.isChecked(), self.chk_integ.isChecked())):
-            return (
-                "warning",
-                "Select a statistic to compute",
-                "Enable at least one evaluation output such as average, min/max, or integral.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -195,41 +139,32 @@ class TaskMeasurementVolume(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "le_desc"):
+            return self._presenter.read_settings(self.obj)
+
+        fields = tuple(field.strip() for field in self.le_fields.text().split(",") if field.strip())
+        return MeasurementVolumeSettings(
+            label2=self.le_desc.text(),
+            volume_type=self.cb_type.currentText(),
+            box_min=(self.sp_bx0.value(), self.sp_by0.value(), self.sp_bz0.value()),
+            box_max=(self.sp_bx1.value(), self.sp_by1.value(), self.sp_bz1.value()),
+            sphere_center=(self.sp_scx.value(), self.sp_scy.value(), self.sp_scz.value()),
+            sphere_radius=self.sp_sr.value(),
+            cylinder_center=(self.sp_ccx.value(), self.sp_ccy.value(), self.sp_ccz.value()),
+            cylinder_axis=(self.sp_cax.value(), self.sp_cay.value(), self.sp_caz.value()),
+            cylinder_radius=self.sp_cr.value(),
+            cylinder_height=self.sp_ch.value(),
+            threshold_field=self.le_thrfield.text(),
+            threshold_min=self.sp_thrmin.value(),
+            threshold_max=self.sp_thrmax.value(),
+            sample_fields=fields,
+            compute_average=self.chk_avg.isChecked(),
+            compute_min_max=self.chk_minmax.isChecked(),
+            compute_integral=self.chk_integ.isChecked(),
+            export_csv=self.chk_csv.isChecked(),
+            time_series=self.chk_ts.isChecked(),
+        )
+
     def _store(self):
-        self.obj.Label2 = self.le_desc.text()
-        self.obj.VolumeType = self.cb_type.currentText()
-
-        self.obj.BoxMin = FreeCAD.Vector(
-            self.sp_bx0.value(), self.sp_by0.value(), self.sp_bz0.value()
-        )
-        self.obj.BoxMax = FreeCAD.Vector(
-            self.sp_bx1.value(), self.sp_by1.value(), self.sp_bz1.value()
-        )
-
-        self.obj.SphereCenter = FreeCAD.Vector(
-            self.sp_scx.value(), self.sp_scy.value(), self.sp_scz.value()
-        )
-        self.obj.SphereRadius = self.sp_sr.value()
-
-        self.obj.CylinderCenter = FreeCAD.Vector(
-            self.sp_ccx.value(), self.sp_ccy.value(), self.sp_ccz.value()
-        )
-        self.obj.CylinderAxis = FreeCAD.Vector(
-            self.sp_cax.value(), self.sp_cay.value(), self.sp_caz.value()
-        )
-        self.obj.CylinderRadius = self.sp_cr.value()
-        self.obj.CylinderHeight = self.sp_ch.value()
-
-        self.obj.ThresholdField = self.le_thrfield.text()
-        self.obj.ThresholdMin = self.sp_thrmin.value()
-        self.obj.ThresholdMax = self.sp_thrmax.value()
-
-        fields = [f.strip() for f in self.le_fields.text().split(",") if f.strip()]
-        self.obj.SampleFields = fields
-
-        self.obj.ComputeAverage = self.chk_avg.isChecked()
-        self.obj.ComputeMinMax = self.chk_minmax.isChecked()
-        self.obj.ComputeIntegral = self.chk_integ.isChecked()
-
-        self.obj.ExportCSV = self.chk_csv.isChecked()
-        self.obj.TimeSeries = self.chk_ts.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings(), FreeCAD.Vector)

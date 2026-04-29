@@ -105,6 +105,9 @@ public Q_SLOTS:
 private:
     /// This get called by the TaskView when the Dialog is finished
     void closedDialog(App::Document* attachedTo = nullptr);
+    void finishDialog(const char* actionName, App::Document* attachedTo, bool acceptDialog);
+    void showDialogDockWidget(QDockWidget* widget);
+    void hideDialogDockWidget(QDockWidget* widget);
 
 private:
     struct status

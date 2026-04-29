@@ -232,6 +232,9 @@ protected:
     void clicked(QAbstractButton* button, App::Document* doc);
 
 private:
+    std::vector<TaskInfo>::iterator taskInfoForDocument(App::Document* doc);
+    std::vector<TaskInfo>::iterator taskInfoForDocument(const App::Document& doc);
+    void finishDialog(App::Document* doc, bool acceptDialog);
     void triggerMinimumSizeHint();
     void adjustMinimumSizeHint();
     void saveCurrentWidth();

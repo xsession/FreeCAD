@@ -13,6 +13,7 @@ from PySide import QtCore, QtGui
 
 from flow_studio.physics_domains import example_command_groups
 from flow_studio.taskpanels.project_cockpit_desktop_actions import FreeCADProjectCockpitActions
+from flow_studio.taskpanels.taskpanel_desktop_lifecycle import FreeCADTaskPanelDesktopLifecycle
 from flow_studio.ui.project_cockpit_presenter import ProjectCockpitPresenter
 
 
@@ -85,11 +86,12 @@ class ProjectCockpitPanel:
         ("FlowStudio_CheckWorkflow", "Validate"),
     )
 
-    def __init__(self):
+    def __init__(self, lifecycle=None):
         self.form = QtGui.QWidget()
         self.form.setWindowTitle("FlowStudio Project Cockpit")
         self._command_buttons = {}
         self._actions = FreeCADProjectCockpitActions()
+        self._lifecycle = lifecycle or FreeCADTaskPanelDesktopLifecycle()
         self._presenter = ProjectCockpitPresenter(self.COMMAND_LABELS, actions=self._actions)
         self._build_form()
         self._timer = QtCore.QTimer(self.form)
@@ -279,11 +281,11 @@ class ProjectCockpitPanel:
 
     def accept(self):
         self._timer.stop()
-        FreeCADGui.Control.closeDialog()
+        self._lifecycle.close_dialog()
 
     def reject(self):
         self._timer.stop()
-        FreeCADGui.Control.closeDialog()
+        self._lifecycle.close_dialog()
 
 
 ProjectCockpitPanel.STARTER_COMMAND_GROUPS = _build_starter_command_groups(

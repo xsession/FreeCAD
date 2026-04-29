@@ -1517,9 +1517,29 @@ bool Application::isInEdit(Gui::Document* pcDocument) const
 {
     return std::ranges::find(d->editDocuments, pcDocument) != d->editDocuments.end();
 }
+
+bool Application::removeEditDocument(Gui::Document* pcDocument)
+{
+    return std::erase(d->editDocuments, pcDocument) != 0;
+}
+
+bool Application::removeEditDocumentsIf(const std::function<bool(Gui::Document*)>& eval)
+{
+    const auto initialSize = d->editDocuments.size();
+    std::erase_if(d->editDocuments, [&](Gui::Document* doc) {
+        if (eval(doc)) {
+            doc->_resetEdit();
+            return true;
+        }
+        return false;
+    });
+
+    return d->editDocuments.size() != initialSize;
+}
+
 void Application::unsetEditDocument(Gui::Document* pcDocument)
 {
-    if (std::erase(d->editDocuments, pcDocument) == 0) {
+    if (!removeEditDocument(pcDocument)) {
         return;
     }
 
@@ -1528,13 +1548,10 @@ void Application::unsetEditDocument(Gui::Document* pcDocument)
 }
 void Application::unsetEditDocumentIf(const std::function<bool(Gui::Document*)>& eval)
 {
-    std::erase_if(d->editDocuments, [&](Gui::Document* doc) {
-        if (eval(doc)) {
-            doc->_resetEdit();
-            return true;
-        }
-        return false;
-    });
+    if (!removeEditDocumentsIf(eval)) {
+        return;
+    }
+
     updateActions();
 }
 Gui::MDIView* Application::editViewOfNode(SoNode* node) const
@@ -1547,15 +1564,24 @@ Gui::MDIView* Application::editViewOfNode(SoNode* node) const
     return nullptr;
 }
 
-void Application::setEditDocument(Gui::Document* pcDocument)
+bool Application::addEditDocument(Gui::Document* pcDocument)
 {
     if (pcDocument == nullptr) {
-        return;
+        return false;
     }
     if (std::ranges::find(d->editDocuments, pcDocument) != d->editDocuments.end()) {
+        return false;
+    }
+
+    d->editDocuments.push_back(pcDocument);
+    return true;
+}
+
+void Application::setEditDocument(Gui::Document* pcDocument)
+{
+    if (!addEditDocument(pcDocument)) {
         return;
     }
-    d->editDocuments.push_back(pcDocument);
 
     updateActions();
 }

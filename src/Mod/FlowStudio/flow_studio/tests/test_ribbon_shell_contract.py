@@ -38,14 +38,17 @@ class TestRibbonShellContract(unittest.TestCase):
         self.assertIn('parts.append("HomePrimary")', source, path)
         self.assertIn('parts.append("HomeSecondary")', source, path)
         self.assertIn("def build_contextual_ribbon_toolbar_name(", source, path)
+        self.assertIn("class FreeCADRibbonRegistryAdapter", source, path)
+        self.assertIn("def get_ribbon_registry(", source, path)
         self.assertIn("def register_ribbon_panel(", source, path)
         self.assertIn("def unregister_ribbon_panel(", source, path)
         self.assertIn("def register_contextual_ribbon_panel(", source, path)
         self.assertIn("def unregister_contextual_ribbon_panel(", source, path)
-        self.assertIn("FreeCADGui.registerRibbonPanel", source, path)
-        self.assertIn("FreeCADGui.unregisterRibbonPanel", source, path)
-        self.assertIn("FreeCADGui.registerContextualRibbonPanel", source, path)
-        self.assertIn("FreeCADGui.unregisterContextualRibbonPanel", source, path)
+        self.assertIn("registerRibbonPanel(name, list(commands))", source, path)
+        self.assertIn("unregisterRibbonPanel(name)", source, path)
+        self.assertIn("registerContextualRibbonPanel(name, list(commands))", source, path)
+        self.assertIn("unregisterContextualRibbonPanel(name)", source, path)
+        self.assertIn("(registry or get_ribbon_registry())", source, path)
 
     def test_application_py_exposes_contextual_registry(self):
         header_path, header_source = self._read("src/Gui/ApplicationPy.h")
@@ -292,6 +295,71 @@ class TestRibbonShellContract(unittest.TestCase):
         self.assertIn('dlg->property("taskview_context_detail")', source, path)
         self.assertIn("outInfo.taskPanel->setContext", source, path)
         self.assertIn('contextMode = tr("Edit")', source, path)
+        self.assertIn("std::vector<TaskInfo>::iterator TaskView::taskInfoForDocument(App::Document* doc)", source, path)
+        self.assertIn("std::vector<TaskInfo>::iterator TaskView::taskInfoForDocument(const App::Document& doc)", source, path)
+        self.assertIn("void TaskView::finishDialog(App::Document* doc, bool acceptDialog)", source, path)
+        self.assertIn("finishDialog(doc, true);", source, path)
+        self.assertIn("finishDialog(doc, false);", source, path)
+        self.assertIn("taskInfoForDocument(doc);", source, path)
+        self.assertIn("return taskInfoForDocument(const_cast<App::Document*>(&doc));", source, path)
+        self.assertIn("bool TaskView::showDialog(TaskDialog* dlg, App::Document* doc)", source, path)
+        self.assertIn("void TaskView::removeDialog(App::Document* doc)", source, path)
+        self.assertIn("TaskDialog* TaskView::dialog(App::Document* doc)", source, path)
+        self.assertIn("void TaskView::addContextualPanel(QWidget* panel, App::Document* doc)", source, path)
+        self.assertIn("void TaskView::removeContextualPanel(QWidget* panel, App::Document* doc)", source, path)
+        self.assertIn('foundTaskInfo->ActiveDialog->setProperty("taskview_accept_or_reject", true);', source, path)
+        self.assertIn('foundTaskInfo->ActiveDialog->property("taskview_remove_dialog").isValid()', source, path)
+
+    def test_control_routes_task_dialog_shell_state_through_helpers(self):
+        header_path, header_source = self._read("src/Gui/Control.h")
+        impl_path, impl_source = self._read("src/Gui/Control.cpp")
+
+        self.assertIn(
+            "void finishDialog(const char* actionName, App::Document* attachedTo, bool acceptDialog);",
+            header_source,
+            header_path,
+        )
+        self.assertIn("void showDialogDockWidget(QDockWidget* widget);", header_source, header_path)
+        self.assertIn("void hideDialogDockWidget(QDockWidget* widget);", header_source, header_path)
+        self.assertIn(
+            "void ControlSingleton::finishDialog(const char* actionName, App::Document* attachedTo, bool acceptDialog)",
+            impl_source,
+            impl_path,
+        )
+        self.assertIn("void ControlSingleton::showDialogDockWidget(QDockWidget* widget)", impl_source, impl_path)
+        self.assertIn("void ControlSingleton::hideDialogDockWidget(QDockWidget* widget)", impl_source, impl_path)
+        self.assertIn('finishDialog("accept", attachedTo, true);', impl_source, impl_path)
+        self.assertIn('finishDialog("reject", attachedTo, false);', impl_source, impl_path)
+        self.assertIn("qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);", impl_source, impl_path)
+        self.assertIn("showDialogDockWidget(dw);", impl_source, impl_path)
+        self.assertIn("hideDialogDockWidget(dw);", impl_source, impl_path)
+        self.assertIn("Application::Instance->refreshActiveWorkbench();", impl_source, impl_path)
+
+    def test_document_routes_edit_restore_through_helper(self):
+        header_path, header_source = self._read("src/Gui/Document.h")
+        impl_path, impl_source = self._read("src/Gui/Document.cpp")
+
+        self.assertIn("void restorePreviousEditIfNeeded();", header_source, header_path)
+        self.assertIn("void Document::restorePreviousEditIfNeeded()", impl_source, impl_path)
+        self.assertIn("Application::Instance->unsetEditDocument(this);", impl_source, impl_path)
+        self.assertIn("restorePreviousEditIfNeeded();", impl_source, impl_path)
+        self.assertIn("setEdit(vpToRestore, modeToRestore);", impl_source, impl_path)
+
+    def test_application_routes_edit_document_stack_through_helpers(self):
+        header_path, header_source = self._read("src/Gui/Application.h")
+        impl_path, impl_source = self._read("src/Gui/Application.cpp")
+
+        self.assertIn("bool addEditDocument(Gui::Document* pcDocument);", header_source, header_path)
+        self.assertIn("bool removeEditDocument(Gui::Document* pcDocument);", header_source, header_path)
+        self.assertIn("bool removeEditDocumentsIf(const std::function<bool(Gui::Document*)>& eval);", header_source, header_path)
+        self.assertIn("bool Application::addEditDocument(Gui::Document* pcDocument)", impl_source, impl_path)
+        self.assertIn("bool Application::removeEditDocument(Gui::Document* pcDocument)", impl_source, impl_path)
+        self.assertIn("bool Application::removeEditDocumentsIf(const std::function<bool(Gui::Document*)>& eval)", impl_source, impl_path)
+        self.assertIn("if (!addEditDocument(pcDocument)) {", impl_source, impl_path)
+        self.assertIn("if (!removeEditDocument(pcDocument)) {", impl_source, impl_path)
+        self.assertIn("if (!removeEditDocumentsIf(eval)) {", impl_source, impl_path)
+        self.assertIn("pcDocument->_resetEdit();", impl_source, impl_path)
+        self.assertIn("updateActions();", impl_source, impl_path)
 
 
 if __name__ == "__main__":

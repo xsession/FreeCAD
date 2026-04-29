@@ -8,51 +8,22 @@
 from PySide import QtGui
 
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.geant4_result_presenter import (
+    Geant4ResultComponentPresenter,
+    Geant4ResultComponentSettings,
+)
 
 
 class TaskGeant4ResultComponent(BaseTaskPanel):
     SUMMARY_TITLE = "Geant4 Result Component"
     SUMMARY_DETAIL = "Inspect imported Geant4 component metadata for {label}."
 
+    def __init__(self, obj):
+        self._presenter = Geant4ResultComponentPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        parent_result = getattr(self.obj, "ParentResult", None)
-        flow_type = getattr(self.obj, "FlowType", "")
-        available_fields = list(getattr(self.obj, "AvailableFields", []) or [])
-        active_field = str(getattr(self.obj, "ActiveField", "") or "").strip()
-
-        if parent_result is None:
-            return (
-                "info",
-                "Parent Geant4 result missing",
-                "Link this component back to a Geant4 result so its source context is clear.",
-            )
-
-        if flow_type == "FlowStudio::Geant4ScoringResult":
-            if available_fields and active_field not in available_fields:
-                return (
-                    "warning",
-                    "Selected field is unavailable",
-                    "Choose an active field that exists in this scoring result.",
-                )
-            if not available_fields:
-                return (
-                    "info",
-                    "No scoring fields available",
-                    "The scoring result is linked, but no imported fields are available yet.",
-                )
-
-        if not list(getattr(self.obj, "ArtifactFiles", []) or []):
-            return (
-                "info",
-                "No component artifacts recorded",
-                "This result component has metadata, but no exported artifact files are attached yet.",
-            )
-
-        return (
-            "success",
-            "Geant4 component ready",
-            "Imported metadata and artifacts are available for this Geant4 result component.",
-        )
+        return self._presenter.build_validation(self._current_settings())
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -105,6 +76,17 @@ class TaskGeant4ResultComponent(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_field"):
+            return self._presenter.read_settings(self.obj)
+        return Geant4ResultComponentSettings(
+            parent_result=getattr(self.obj, "ParentResult", None),
+            flow_type=getattr(self.obj, "FlowType", ""),
+            available_fields=tuple(getattr(self.obj, "AvailableFields", []) or []),
+            active_field=(self.cb_field.currentText().strip() if self.cb_field is not None else str(getattr(self.obj, "ActiveField", "") or "").strip()),
+            artifact_files=tuple(getattr(self.obj, "ArtifactFiles", []) or []),
+        )
+
     def _store(self):
         if self.cb_field is not None:
-            self.obj.ActiveField = self.cb_field.currentText()
+            self._presenter.persist_settings(self.obj, self._current_settings())

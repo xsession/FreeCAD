@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.bc_outlet_presenter import OutletBoundaryPresenter, OutletBoundarySettings
 
 
 class TaskBCOutlet(FloEFDTaskPanel):
@@ -16,24 +17,14 @@ class TaskBCOutlet(FloEFDTaskPanel):
         "Define how flow exits {label}, including pressure and backflow behavior."
     )
 
+    def __init__(self, obj):
+        self._presenter = OutletBoundaryPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign outlet faces",
-                "Select one or more outlet faces so the exit condition is attached to geometry.",
-            )
-
-        if (
-            str(getattr(self.obj, "OutletType", "Static Pressure")) == "Mass Flow Rate"
-            and float(getattr(self.obj, "OutletMassFlowRate", 0.0)) <= 0.0
-        ):
-            return (
-                "incomplete",
-                "Outlet mass flow rate required",
-                "Enter a positive outlet mass flow rate before solving with this outlet mode.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -61,8 +52,16 @@ class TaskBCOutlet(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_type"):
+            return self._presenter.read_settings(self.obj)
+        return OutletBoundarySettings(
+            references=tuple(self._refs()),
+            outlet_type=self.cb_type.currentText(),
+            static_pressure=self.sp_p.value(),
+            mass_flow_rate=self.sp_mfr.value(),
+            prevent_backflow=self.chk_backflow.isChecked(),
+        )
+
     def _store(self):
-        self.obj.OutletType = self.cb_type.currentText()
-        self.obj.StaticPressure = self.sp_p.value()
-        self.obj.OutletMassFlowRate = self.sp_mfr.value()
-        self.obj.PreventBackflow = self.chk_backflow.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())

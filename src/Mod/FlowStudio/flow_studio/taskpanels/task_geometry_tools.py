@@ -9,21 +9,13 @@ import FreeCAD
 import FreeCADGui
 from PySide import QtCore, QtGui
 
+from flow_studio.app import FlowStudioGeometryCheckService, FlowStudioLeakTrackingService
+from flow_studio.taskpanels.geometry_tools_desktop_adapter import FreeCADGeometryToolsDesktopAdapter
+from flow_studio.ui.geometry_tools_presenter import GeometryCheckPresenter, LeakTrackingPresenter
+
 from flow_studio.tools.geometry import (
     GeometryCheckOptions,
-    check_geometry,
-    create_or_update_fluid_volume,
-    describe_face_ref,
-    fluid_volume_is_visible,
-    hide_fluid_volume,
-    iter_geometry_objects,
-    run_leak_tracking,
-    selected_face_refs,
 )
-
-
-def _format_volume(value):
-    return f"{value:.6g} m^3"
 
 
 _USER_ROLE = QtCore.Qt.UserRole
@@ -120,6 +112,9 @@ class TaskCheckGeometry(_SimpleTaskPanel):
 
     def __init__(self):
         self.last_result = None
+        self._service = FlowStudioGeometryCheckService()
+        self._presenter = GeometryCheckPresenter()
+        self._desktop = FreeCADGeometryToolsDesktopAdapter()
         self.form = self._build_form()
         self._reload_objects()
         self._update_volume_button()
@@ -127,39 +122,7 @@ class TaskCheckGeometry(_SimpleTaskPanel):
 
     def _build_task_validation(self):
         checked_count = len(self._checked_objects()) if hasattr(self, "state_tree") else 0
-        if checked_count == 0:
-            return (
-                "incomplete",
-                "Select geometry to analyze",
-                "Check at least one body before running geometry validation or generating a fluid volume.",
-            )
-
-        if self.last_result is None:
-            return (
-                "info",
-                "Run geometry check",
-                "Use Check to confirm the current model is closed enough for fluid setup.",
-            )
-
-        if getattr(self.last_result, "errors", None):
-            return (
-                "warning",
-                "Geometry blocks meshing",
-                "Resolve the reported topology errors before generating the mesh or starting the solver.",
-            )
-
-        if getattr(self.last_result, "issues", None):
-            return (
-                "warning",
-                "Geometry issues detected",
-                "Review the reported issues before creating the final fluid domain or starting meshing.",
-            )
-
-        return (
-            "success",
-            "Geometry looks ready",
-            "The checked bodies appear closed enough to continue with fluid-volume creation or meshing.",
-        )
+        return self._presenter.build_validation(checked_count, self.last_result)
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -230,14 +193,14 @@ class TaskCheckGeometry(_SimpleTaskPanel):
             item = self.state_tree.topLevelItem(index)
             obj_name = item.data(0, _USER_ROLE)
             if item.checkState(0) == _CHECKED_STATE and obj_name:
-                obj = FreeCAD.ActiveDocument.getObject(obj_name) if FreeCAD.ActiveDocument else None
+                obj = self._desktop.get_document_object(obj_name)
                 if obj is not None:
                     objects.append(obj)
         return objects
 
     def _reload_objects(self):
         self.state_tree.clear()
-        for obj in iter_geometry_objects():
+        for obj in self._service.iter_geometry_objects():
             item = QtGui.QTreeWidgetItem([getattr(obj, "Label", obj.Name)])
             item.setData(0, _USER_ROLE, obj.Name)
             item.setCheckState(0, _CHECKED_STATE)
@@ -253,55 +216,26 @@ class TaskCheckGeometry(_SimpleTaskPanel):
         self.state_tree.expandAll()
 
     def _check(self):
-        self.last_result = check_geometry(self._checked_objects(), self._options())
-        lines = [
-            f"Status: {self.last_result.status}. Geometry is "
-            f"{'OK' if self.last_result.status == 'SUCCESSFUL' else 'not fully closed'}",
-            f"Analysis type: {self.last_result.analysis_type}",
-            f"Fluid volume: {_format_volume(self.last_result.fluid_volume)}",
-            f"Solid volume: {_format_volume(self.last_result.solid_volume)}",
-            f"Mesh readiness: {'ready' if getattr(self.last_result, 'mesh_ready', False) else 'blocked'}",
-        ]
-        for info in self.last_result.objects:
-            lines.append(
-                f"{info.label}: {info.solids} solids, {info.shells} shells, "
-                f"{info.faces} faces, volume {_format_volume(info.volume)}"
-            )
-        if getattr(self.last_result, "errors", None):
-            lines.append("Errors:")
-            lines.extend(f"- {issue}" for issue in self.last_result.errors)
-        if getattr(self.last_result, "warnings", None):
-            lines.append("Warnings:")
-            lines.extend(f"- {issue}" for issue in self.last_result.warnings)
-        if self.last_result.issues:
-            lines.append("Issues summary:")
-            lines.extend(f"- {issue}" for issue in self.last_result.issues)
-        else:
-            lines.append("All checked bodies look closed enough for setup.")
+        self.last_result = self._service.run_check(self._checked_objects(), self._options())
+        lines = self._presenter.build_results(self.last_result)
         self.results.setPlainText("\n".join(lines))
-        FreeCAD.Console.PrintMessage("[FlowStudio] Check Geometry completed.\n")
-        for line in lines:
-            FreeCAD.Console.PrintMessage(f"{line}\n")
+        self._desktop.report_check_completed(lines)
 
     def _toggle_volume(self):
-        if fluid_volume_is_visible():
-            hide_fluid_volume()
+        if self._service.is_fluid_volume_visible():
+            self._service.hide_fluid_volume()
         else:
             if self.last_result is None:
-                self.last_result = check_geometry(self._checked_objects(), self._options())
-            create_or_update_fluid_volume(self.last_result)
+                self.last_result = self._service.run_check(self._checked_objects(), self._options())
+            self._service.show_fluid_volume(self.last_result)
         self._update_volume_button()
 
     def _update_volume_button(self):
         if hasattr(self, "btn_volume"):
-            self.btn_volume.setText("Hide Fluid Volume" if fluid_volume_is_visible() else "Show Fluid Volume")
+            self.btn_volume.setText(self._presenter.volume_button_text(self._service.is_fluid_volume_visible()))
 
     def _open_leak_tracking(self):
-        try:
-            FreeCADGui.Control.closeDialog()
-        except Exception:
-            pass
-        FreeCADGui.Control.showDialog(TaskLeakTracking())
+        self._desktop.open_leak_tracking_dialog(TaskLeakTracking())
 
 
 class TaskLeakTracking(_SimpleTaskPanel):
@@ -315,30 +249,15 @@ class TaskLeakTracking(_SimpleTaskPanel):
     def __init__(self):
         self.face_a = None
         self.face_b = None
+        self._service = FlowStudioLeakTrackingService()
+        self._presenter = LeakTrackingPresenter()
+        self._desktop = FreeCADGeometryToolsDesktopAdapter()
         self.form = self._build_form()
         self._load_selection()
         self._finalize_form()
 
     def _build_task_validation(self):
-        if not self.face_a or not self.face_b:
-            return (
-                "incomplete",
-                "Select internal and external faces",
-                "Capture one internal face and one external face before searching for a connection.",
-            )
-
-        if self.face_a == self.face_b:
-            return (
-                "warning",
-                "Faces must be different",
-                "Use two different faces so leak tracking can evaluate a real path through the model.",
-            )
-
-        return (
-            "info",
-            "Ready to find connection",
-            "Run Find Connection to trace a possible leak path between the selected faces.",
-        )
+        return self._presenter.build_validation(self.face_a, self.face_b)
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -385,7 +304,7 @@ class TaskLeakTracking(_SimpleTaskPanel):
         return group
 
     def _load_selection(self):
-        refs = selected_face_refs()
+        refs = self._service.selected_face_refs()
         if refs:
             self.face_a = refs[0]
         if len(refs) > 1:
@@ -393,13 +312,13 @@ class TaskLeakTracking(_SimpleTaskPanel):
         self._refresh()
 
     def _use_selection_a(self):
-        refs = selected_face_refs()
+        refs = self._service.selected_face_refs()
         if refs:
             self.face_a = refs[0]
         self._refresh()
 
     def _use_selection_b(self):
-        refs = selected_face_refs()
+        refs = self._service.selected_face_refs()
         if refs:
             self.face_b = refs[-1]
         self._refresh()
@@ -407,15 +326,13 @@ class TaskLeakTracking(_SimpleTaskPanel):
     def _refresh(self):
         self.face_a_list.clear()
         self.face_b_list.clear()
-        self.face_a_list.addItem(describe_face_ref(self.face_a) if self.face_a else "(no internal face)")
-        self.face_b_list.addItem(describe_face_ref(self.face_b) if self.face_b else "(no external face)")
+        self.face_a_list.addItem(self._service.describe_face_ref(self.face_a) if self.face_a else "(no internal face)")
+        self.face_b_list.addItem(self._service.describe_face_ref(self.face_b) if self.face_b else "(no external face)")
         self._refresh_taskview_metadata()
 
     def _find_connection(self):
-        report = run_leak_tracking(self.face_a, self.face_b)
-        lines = [f"Status: {report['status']}"] + report["messages"]
+        report = self._service.run_leak_tracking(self.face_a, self.face_b)
+        lines = self._presenter.build_results(report)
         self.results.setPlainText("\n".join(lines))
         self._refresh_taskview_metadata()
-        FreeCAD.Console.PrintMessage("[FlowStudio] Leak Tracking completed.\n")
-        for line in lines:
-            FreeCAD.Console.PrintMessage(f"{line}\n")
+        self._desktop.report_leak_tracking_completed(lines)

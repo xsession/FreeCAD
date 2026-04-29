@@ -12,6 +12,18 @@ from PySide import QtGui
 from flow_studio.catalog.database import fan_presets
 from flow_studio.catalog.editor import show_engineering_database_editor
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.taskpanels.selection_desktop_adapter import FreeCADSelectionDesktopAdapter
+from flow_studio.ui.flowefd_features_presenter import (
+    FanPresenter,
+    FanSettings,
+    ParticleStudyPresenter,
+    ParticleStudySettings,
+    ResultPlotPresenter,
+    ResultPlotSettings,
+    VolumeSourcePresenter,
+    VolumeSourceSettings,
+)
+from flow_studio.ui.selection_presenter import SelectionPresenter
 
 
 RESULT_FIELDS = [
@@ -26,25 +38,15 @@ RESULT_FIELDS = [
     "Turbulent Kinetic Energy",
     "Wall Heat Flux",
 ]
-
-
-def _selection_labels(refs):
-    labels = []
-    for ref_obj, sub_names in refs or []:
-        base = getattr(ref_obj, "Label", getattr(ref_obj, "Name", "Object"))
-        if isinstance(sub_names, str):
-            sub_names = [sub_names]
-        if sub_names:
-            labels.extend(f"{base}:{sub}" for sub in sub_names)
-        else:
-            labels.append(base)
-    return labels
-
-
 class FloEFDTaskPanel(BaseTaskPanel):
     """Base panel with a Creo/FloEFD-like selection header."""
 
     reference_property = "References"
+
+    def __init__(self, obj):
+        self._selection_presenter = SelectionPresenter()
+        self._selection_adapter = FreeCADSelectionDesktopAdapter()
+        super().__init__(obj)
 
     def _add_selection_section(self, layout, title="Selection"):
         group = QtGui.QGroupBox(title)
@@ -75,7 +77,7 @@ class FloEFDTaskPanel(BaseTaskPanel):
         if not hasattr(self, "selection_list"):
             return
         self.selection_list.clear()
-        labels = _selection_labels(self._refs())
+        labels = self._selection_presenter.build_labels(self._refs())
         if not labels:
             self.selection_list.addItem("(no geometry assigned)")
             return
@@ -83,19 +85,7 @@ class FloEFDTaskPanel(BaseTaskPanel):
             self.selection_list.addItem(label)
 
     def _use_current_selection(self):
-        refs = []
-        try:
-            selection = FreeCADGui.Selection.getSelectionEx()
-        except Exception:
-            selection = []
-        for item in selection:
-            obj = getattr(item, "Object", None)
-            if obj is None:
-                continue
-            flow_type = getattr(obj, "FlowType", "")
-            if isinstance(flow_type, str) and flow_type.startswith("FlowStudio::"):
-                continue
-            refs.append((obj, list(getattr(item, "SubElementNames", []) or [])))
+        refs = self._selection_adapter.get_selected_references()
         self._set_refs(refs)
         self._refresh_selection_list()
 
@@ -125,6 +115,10 @@ class FloEFDTaskPanel(BaseTaskPanel):
 
 
 class TaskVolumeSource(FloEFDTaskPanel):
+    def __init__(self, obj):
+        self._presenter = VolumeSourcePresenter()
+        super().__init__(obj)
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -143,14 +137,26 @@ class TaskVolumeSource(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_type"):
+            return self._presenter.read_settings(self.obj)
+        return VolumeSourceSettings(
+            references=tuple(self._refs()),
+            source_type=self.cb_type.currentText(),
+            heat_power_density=self.sp_q.value(),
+            mass_source=self.sp_m.value(),
+            create_associated_goals=self.chk_goals.isChecked(),
+        )
+
     def _store(self):
-        self.obj.SourceType = self.cb_type.currentText()
-        self.obj.HeatPowerDensity = self.sp_q.value()
-        self.obj.MassSource = self.sp_m.value()
-        self.obj.CreateAssociatedGoals = self.chk_goals.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())
 
 
 class TaskFan(FloEFDTaskPanel):
+    def __init__(self, obj):
+        self._presenter = FanPresenter()
+        super().__init__(obj)
+
     def _build_form(self):
         widget = QtGui.QWidget()
         layout = QtGui.QVBoxLayout(widget)
@@ -184,25 +190,33 @@ class TaskFan(FloEFDTaskPanel):
         return widget
 
     def _on_curve_changed(self, name):
-        data = self.fan_database.get(name, {})
-        if "FanType" in data:
-            idx = self.cb_type.findText(str(data["FanType"]))
+        curve_state = self._presenter.build_curve_state(name, self.fan_database)
+        if curve_state["FanType"]:
+            idx = self.cb_type.findText(curve_state["FanType"])
             if idx >= 0:
                 self.cb_type.setCurrentIndex(idx)
-        if "ReferencePressure" in data:
-            self.sp_p.setValue(float(data["ReferencePressure"]))
+        if curve_state["ReferencePressure"] is not None:
+            self.sp_p.setValue(curve_state["ReferencePressure"])
         self.curve_table.setRowCount(0)
-        for flow, pressure in data.get("curve", []):
+        for flow, pressure in curve_state["Curve"]:
             row = self.curve_table.rowCount()
             self.curve_table.insertRow(row)
-            self.curve_table.setItem(row, 0, QtGui.QTableWidgetItem(str(flow)))
-            self.curve_table.setItem(row, 1, QtGui.QTableWidgetItem(str(pressure)))
+            self.curve_table.setItem(row, 0, QtGui.QTableWidgetItem(flow))
+            self.curve_table.setItem(row, 1, QtGui.QTableWidgetItem(pressure))
+
+    def _current_settings(self):
+        if not hasattr(self, "cb_type"):
+            return self._presenter.read_settings(self.obj)
+        return FanSettings(
+            references=tuple(self._refs()),
+            fan_type=self.cb_type.currentText(),
+            fan_curve_preset=self.cb_curve.currentText(),
+            reference_pressure=self.sp_p.value(),
+            create_associated_goals=self.chk_goals.isChecked(),
+        )
 
     def _store(self):
-        self.obj.FanType = self.cb_type.currentText()
-        self.obj.FanCurvePreset = self.cb_curve.currentText()
-        self.obj.ReferencePressure = self.sp_p.value()
-        self.obj.CreateAssociatedGoals = self.chk_goals.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())
 
 
 class TaskResultPlot(FloEFDTaskPanel):
@@ -211,33 +225,14 @@ class TaskResultPlot(FloEFDTaskPanel):
         "Define how {label} should visualize a result field across the selected geometry or seed locations."
     )
 
+    def __init__(self, obj):
+        self._presenter = ResultPlotPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign plot targets",
-                "Select faces, parts, or seed locations before creating a result plot.",
-            )
-
-        if not self.cb_field.currentText().strip():
-            return (
-                "incomplete",
-                "Result field required",
-                "Choose the field this result plot should visualize.",
-            )
-
-        if not any((
-            self.chk_contours.isChecked(),
-            self.chk_isolines.isChecked(),
-            self.chk_vectors.isChecked(),
-            self.chk_streamlines.isChecked(),
-        )):
-            return (
-                "warning",
-                "Enable a display mode",
-                "Turn on at least one display style such as contours, isolines, vectors, or streamlines.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -278,19 +273,27 @@ class TaskResultPlot(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_kind"):
+            return self._presenter.read_settings(self.obj)
+        return ResultPlotSettings(
+            references=tuple(self._refs()),
+            plot_kind=self.cb_kind.currentText(),
+            field=self.cb_field.currentText(),
+            contour_count=self.sp_contours.value(),
+            contours=self.chk_contours.isChecked(),
+            isolines=self.chk_isolines.isChecked(),
+            vectors=self.chk_vectors.isChecked(),
+            streamlines=self.chk_streamlines.isChecked(),
+            cut_plane=self.cb_plane.currentText(),
+            plane_offset=self.sp_offset.value(),
+            use_cad_geometry=self.chk_cad.isChecked(),
+            interpolate=self.chk_interp.isChecked(),
+            export_excel=self.chk_excel.isChecked(),
+        )
+
     def _store(self):
-        self.obj.PlotKind = self.cb_kind.currentText()
-        self.obj.Field = self.cb_field.currentText()
-        self.obj.ContourCount = self.sp_contours.value()
-        self.obj.Contours = self.chk_contours.isChecked()
-        self.obj.Isolines = self.chk_isolines.isChecked()
-        self.obj.Vectors = self.chk_vectors.isChecked()
-        self.obj.Streamlines = self.chk_streamlines.isChecked()
-        self.obj.CutPlane = self.cb_plane.currentText()
-        self.obj.PlaneOffset = self.sp_offset.value()
-        self.obj.UseCADGeometry = self.chk_cad.isChecked()
-        self.obj.Interpolate = self.chk_interp.isChecked()
-        self.obj.ExportExcel = self.chk_excel.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings())
 
 
 class TaskParticleStudy(FloEFDTaskPanel):
@@ -301,36 +304,14 @@ class TaskParticleStudy(FloEFDTaskPanel):
 
     reference_property = "Injections"
 
+    def __init__(self, obj):
+        self._presenter = ParticleStudyPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign particle injections",
-                "Select one or more injection faces, edges, or seed regions before configuring a particle study.",
-            )
-
-        gravity = (self.sp_gx.value(), self.sp_gy.value(), self.sp_gz.value())
-        if self.chk_grav.isChecked() and gravity == (0.0, 0.0, 0.0):
-            return (
-                "warning",
-                "Gravity vector is zero",
-                "Use a non-zero gravity vector or disable gravity for this particle study.",
-            )
-
-        if self.sp_d.value() <= 0.0:
-            return (
-                "warning",
-                "Particle diameter required",
-                "Enter a positive particle diameter before tracing particles.",
-            )
-
-        if self.sp_len.value() <= 0.0 or self.sp_time.value() <= 0.0:
-            return (
-                "warning",
-                "Tracking limits required",
-                "Set positive tracking length and time limits before running the particle study.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -372,14 +353,22 @@ class TaskParticleStudy(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "chk_acc"):
+            return self._presenter.read_settings(self.obj)
+        return ParticleStudySettings(
+            injections=tuple(self._refs()),
+            accretion=self.chk_acc.isChecked(),
+            erosion=self.chk_ero.isChecked(),
+            gravity=self.chk_grav.isChecked(),
+            gravity_vector=(self.sp_gx.value(), self.sp_gy.value(), self.sp_gz.value()),
+            particle_shape=self.cb_shape.currentText(),
+            particle_diameter=self.sp_d.value(),
+            color_by_field=self.cb_color.currentText(),
+            track_length=self.sp_len.value(),
+            track_time=self.sp_time.value(),
+            max_particles=self.sp_max.value(),
+        )
+
     def _store(self):
-        self.obj.Accretion = self.chk_acc.isChecked()
-        self.obj.Erosion = self.chk_ero.isChecked()
-        self.obj.Gravity = self.chk_grav.isChecked()
-        self.obj.GravityVector = FreeCAD.Vector(self.sp_gx.value(), self.sp_gy.value(), self.sp_gz.value())
-        self.obj.ParticleShape = self.cb_shape.currentText()
-        self.obj.ParticleDiameter = self.sp_d.value()
-        self.obj.ColorByField = self.cb_color.currentText()
-        self.obj.TrackLength = self.sp_len.value()
-        self.obj.TrackTime = self.sp_time.value()
-        self.obj.MaxParticles = self.sp_max.value()
+        self._presenter.persist_settings(self.obj, self._current_settings(), FreeCAD.Vector)

@@ -8,6 +8,7 @@
 import FreeCAD
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.measurement_point_presenter import MeasurementPointPresenter, MeasurementPointSettings
 
 
 class TaskMeasurementPoint(BaseTaskPanel):
@@ -17,26 +18,14 @@ class TaskMeasurementPoint(BaseTaskPanel):
         "Define a point or line probe for {label}, then choose which fields to sample."
     )
 
+    def __init__(self, obj):
+        self._presenter = MeasurementPointPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
-
-        if not fields:
-            return (
-                "incomplete",
-                "Select sampled fields",
-                "Enter at least one field name such as U, p, or T so the probe captures useful data.",
-            )
-
-        if self.chk_line.isChecked():
-            start = (self.sp_sx.value(), self.sp_sy.value(), self.sp_sz.value())
-            end = (self.sp_ex.value(), self.sp_ey.value(), self.sp_ez.value())
-            if start == end:
-                return (
-                    "warning",
-                    "Line probe needs distinct endpoints",
-                    "Move the line end point away from the start point so the probe spans a real path.",
-                )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -106,24 +95,22 @@ class TaskMeasurementPoint(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "le_desc"):
+            return self._presenter.read_settings(self.obj)
+
+        fields = tuple(field.strip() for field in self.le_fields.text().split(",") if field.strip())
+        return MeasurementPointSettings(
+            label2=self.le_desc.text(),
+            probe_location=(self.sp_px.value(), self.sp_py.value(), self.sp_pz.value()),
+            use_line=self.chk_line.isChecked(),
+            line_start=(self.sp_sx.value(), self.sp_sy.value(), self.sp_sz.value()),
+            line_end=(self.sp_ex.value(), self.sp_ey.value(), self.sp_ez.value()),
+            line_resolution=self.sp_res.value(),
+            sample_fields=fields,
+            export_csv=self.chk_csv.isChecked(),
+            time_series=self.chk_ts.isChecked(),
+        )
+
     def _store(self):
-        self.obj.Label2 = self.le_desc.text()
-
-        self.obj.ProbeLocation = FreeCAD.Vector(
-            self.sp_px.value(), self.sp_py.value(), self.sp_pz.value()
-        )
-
-        self.obj.UseLine = self.chk_line.isChecked()
-        self.obj.LineStart = FreeCAD.Vector(
-            self.sp_sx.value(), self.sp_sy.value(), self.sp_sz.value()
-        )
-        self.obj.LineEnd = FreeCAD.Vector(
-            self.sp_ex.value(), self.sp_ey.value(), self.sp_ez.value()
-        )
-        self.obj.LineResolution = self.sp_res.value()
-
-        fields = [f.strip() for f in self.le_fields.text().split(",") if f.strip()]
-        self.obj.SampleFields = fields
-
-        self.obj.ExportCSV = self.chk_csv.isChecked()
-        self.obj.TimeSeries = self.chk_ts.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings(), FreeCAD.Vector)

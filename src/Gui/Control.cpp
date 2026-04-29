@@ -146,6 +146,25 @@ void ControlSingleton::showModelView()
     }
 }
 
+void ControlSingleton::showDialogDockWidget(QDockWidget* widget)
+{
+    aboutToShowDialog(widget);
+    widget->setVisible(true);
+    widget->toggleViewAction()->setVisible(true);
+    widget->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
+    Application::Instance->refreshActiveWorkbench();
+}
+
+void ControlSingleton::hideDialogDockWidget(QDockWidget* widget)
+{
+    aboutToHideDialog(widget);
+    widget->setFeatures(
+        QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
+        | QDockWidget::DockWidgetFloatable
+    );
+    Application::Instance->refreshActiveWorkbench();
+}
+
 void ControlSingleton::showDialog(Gui::TaskView::TaskDialog* dlg, App::Document* attachTo)
 {
     attachTo = docOrDefault(attachTo);
@@ -179,11 +198,7 @@ void ControlSingleton::showDialog(Gui::TaskView::TaskDialog* dlg, App::Document*
 
     // make sure that the combo view is shown
     if (auto dw = qobject_cast<QDockWidget*>(taskView->parentWidget())) {
-        aboutToShowDialog(dw);
-        dw->setVisible(true);
-        dw->toggleViewAction()->setVisible(true);
-        dw->setFeatures(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
-        Application::Instance->refreshActiveWorkbench();
+        showDialogDockWidget(dw);
     }
 
     if (!addedDialog) {
@@ -210,35 +225,38 @@ Gui::TaskView::TaskDialog* ControlSingleton::activeDialog(App::Document* attache
     return nullptr;
 }
 
-void ControlSingleton::accept(App::Document* attachedTo)
+void ControlSingleton::finishDialog(const char* actionName, App::Document* attachedTo, bool acceptDialog)
 {
     attachedTo = docOrDefault(attachedTo);
     if (!attachedTo) {
-        qWarning() << "ControlSingleton::accept: Cannot accept dialog of nullptr document";
+        qWarning() << "ControlSingleton::" << actionName
+                   << ": Cannot finish dialog of nullptr document";
         return;
     }
 
     Gui::TaskView::TaskView* taskView = taskPanel();
-    if (taskView) {
-        taskView->accept(attachedTo);
-        qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
+    if (!taskView) {
+        return;
     }
+
+    if (acceptDialog) {
+        taskView->accept(attachedTo);
+    }
+    else {
+        taskView->reject(attachedTo);
+    }
+
+    qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
+}
+
+void ControlSingleton::accept(App::Document* attachedTo)
+{
+    finishDialog("accept", attachedTo, true);
 }
 
 void ControlSingleton::reject(App::Document* attachedTo)
 {
-    attachedTo = docOrDefault(attachedTo);
-    if (!attachedTo) {
-        qWarning() << "ControlSingleton::reject: Cannot reject dialog of nullptr document";
-        return;
-    }
-
-
-    Gui::TaskView::TaskView* taskView = taskPanel();
-    if (taskView) {
-        taskView->reject(attachedTo);
-        qApp->processEvents(QEventLoop::ExcludeUserInputEvents | QEventLoop::ExcludeSocketNotifiers);
-    }
+    finishDialog("reject", attachedTo, false);
 }
 
 void ControlSingleton::closeDialog(App::Document* attachedTo)
@@ -263,12 +281,7 @@ void ControlSingleton::closedDialog(App::Document* attachedTo)
     // make sure that the combo view is shown
     auto dw = qobject_cast<QDockWidget*>(taskView->parentWidget());
     if (dw) {
-        aboutToHideDialog(dw);
-        dw->setFeatures(
-            QDockWidget::DockWidgetClosable | QDockWidget::DockWidgetMovable
-            | QDockWidget::DockWidgetFloatable
-        );
-        Application::Instance->refreshActiveWorkbench();
+        hideDialogDockWidget(dw);
     }
 }
 

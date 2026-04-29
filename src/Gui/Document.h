@@ -356,6 +356,7 @@ protected:
 private:
     bool trySetEdit(Gui::ViewProvider* p, int ModNum, const char* subname);
     void resetIfEditing();
+    void restorePreviousEditIfNeeded();
     // handles the scene graph nodes to correctly group child and parents
     void handleChildren3D(ViewProvider* viewProvider, bool deleting = false);
 

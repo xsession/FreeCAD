@@ -8,6 +8,7 @@
 import FreeCAD
 from PySide import QtGui
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.measurement_surface_presenter import MeasurementSurfacePresenter, MeasurementSurfaceSettings
 
 
 class TaskMeasurementSurface(BaseTaskPanel):
@@ -17,51 +18,14 @@ class TaskMeasurementSurface(BaseTaskPanel):
         "Define a surface extraction for {label}, then choose sampled fields and evaluation outputs."
     )
 
+    def __init__(self, obj):
+        self._presenter = MeasurementSurfacePresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        fields = [field.strip() for field in self.le_fields.text().split(",") if field.strip()]
-        if not fields:
-            return (
-                "incomplete",
-                "Select sampled fields",
-                "Enter at least one field name so the surface measurement produces useful results.",
-            )
-
-        surface_type = self.cb_type.currentText()
-        if surface_type == "Iso-Surface" and not self.le_isofield.text().strip():
-            return (
-                "incomplete",
-                "Iso field required",
-                "Choose the scalar field used to define the iso-surface before exporting or evaluating it.",
-            )
-
-        if surface_type == "Geometry Faces" and not list(getattr(self.obj, "FaceRefs", []) or []):
-            return (
-                "incomplete",
-                "Assign geometry faces",
-                "Pick one or more geometry faces when using a face-based measurement surface.",
-            )
-
-        if self.cb_normal.currentText() == "Custom":
-            normal = (self.sp_nx.value(), self.sp_ny.value(), self.sp_nz.value())
-            if normal == (0.0, 0.0, 0.0):
-                return (
-                    "warning",
-                    "Custom normal cannot be zero",
-                    "Set a non-zero custom normal vector so the cut or clip direction is defined.",
-                )
-
-        if not any((
-            self.chk_avg.isChecked(),
-            self.chk_integ.isChecked(),
-            self.chk_mflow.isChecked(),
-            self.chk_force.isChecked(),
-        )):
-            return (
-                "warning",
-                "Select an evaluation output",
-                "Enable at least one surface evaluation such as average, integral, mass flow, or force.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -151,32 +115,30 @@ class TaskMeasurementSurface(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "le_desc"):
+            return self._presenter.read_settings(self.obj)
+
+        fields = tuple(field.strip() for field in self.le_fields.text().split(",") if field.strip())
+        return MeasurementSurfaceSettings(
+            label2=self.le_desc.text(),
+            surface_type=self.cb_type.currentText(),
+            plane_origin=(self.sp_ox.value(), self.sp_oy.value(), self.sp_oz.value()),
+            plane_normal=self.cb_normal.currentText(),
+            custom_normal=(self.sp_nx.value(), self.sp_ny.value(), self.sp_nz.value()),
+            iso_field=self.le_isofield.text(),
+            iso_value=self.sp_isoval.value(),
+            sample_fields=fields,
+            compute_average=self.chk_avg.isChecked(),
+            compute_integral=self.chk_integ.isChecked(),
+            compute_mass_flow=self.chk_mflow.isChecked(),
+            compute_force=self.chk_force.isChecked(),
+            force_ref_point=(self.sp_rpx.value(), self.sp_rpy.value(), self.sp_rpz.value()),
+            export_csv=self.chk_csv.isChecked(),
+            export_vtk=self.chk_vtk.isChecked(),
+            time_series=self.chk_ts.isChecked(),
+            face_refs=tuple(getattr(self.obj, "FaceRefs", []) or []),
+        )
+
     def _store(self):
-        self.obj.Label2 = self.le_desc.text()
-        self.obj.SurfaceType = self.cb_type.currentText()
-
-        self.obj.PlaneOrigin = FreeCAD.Vector(
-            self.sp_ox.value(), self.sp_oy.value(), self.sp_oz.value()
-        )
-        self.obj.PlaneNormal = self.cb_normal.currentText()
-        self.obj.CustomNormal = FreeCAD.Vector(
-            self.sp_nx.value(), self.sp_ny.value(), self.sp_nz.value()
-        )
-
-        self.obj.IsoField = self.le_isofield.text()
-        self.obj.IsoValue = self.sp_isoval.value()
-
-        fields = [f.strip() for f in self.le_fields.text().split(",") if f.strip()]
-        self.obj.SampleFields = fields
-
-        self.obj.ComputeAverage = self.chk_avg.isChecked()
-        self.obj.ComputeIntegral = self.chk_integ.isChecked()
-        self.obj.ComputeMassFlow = self.chk_mflow.isChecked()
-        self.obj.ComputeForce = self.chk_force.isChecked()
-        self.obj.ForceRefPoint = FreeCAD.Vector(
-            self.sp_rpx.value(), self.sp_rpy.value(), self.sp_rpz.value()
-        )
-
-        self.obj.ExportCSV = self.chk_csv.isChecked()
-        self.obj.ExportVTK = self.chk_vtk.isChecked()
-        self.obj.TimeSeries = self.chk_ts.isChecked()
+        self._presenter.persist_settings(self.obj, self._current_settings(), FreeCAD.Vector)

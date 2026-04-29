@@ -8,6 +8,7 @@
 from PySide import QtGui
 
 from flow_studio.taskpanels.base_taskpanel import BaseTaskPanel
+from flow_studio.ui.geant4_result_presenter import Geant4ResultPresenter, Geant4ResultSettings
 
 
 class TaskGeant4Result(BaseTaskPanel):
@@ -16,38 +17,12 @@ class TaskGeant4Result(BaseTaskPanel):
         "Inspect imported Geant4 artifacts, parsed fields, and monitors for {label}."
     )
 
+    def __init__(self, obj):
+        self._presenter = Geant4ResultPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        result_file = str(getattr(self.obj, "ResultFile", "") or "").strip()
-        artifact_files = list(getattr(self.obj, "ArtifactFiles", []) or [])
-        available_fields = list(getattr(self.obj, "AvailableFields", []) or [])
-        active_field = str(getattr(self.obj, "ActiveField", "") or "").strip()
-
-        if not result_file and not artifact_files:
-            return (
-                "info",
-                "Import a Geant4 result",
-                "Load a Geant4 summary or artifact set before inspecting fields and monitor data.",
-            )
-
-        if available_fields and active_field not in available_fields:
-            return (
-                "warning",
-                "Selected field is unavailable",
-                "Choose an active field that exists in the imported Geant4 result set.",
-            )
-
-        if not available_fields:
-            return (
-                "info",
-                "No parsed fields available yet",
-                "The result object is present, but no parsed Geant4 fields are available for inspection yet.",
-            )
-
-        return (
-            "success",
-            "Geant4 result ready",
-            "Imported artifacts and parsed fields are available for inspection.",
-        )
+        return self._presenter.build_validation(self._current_settings())
 
     def _build_form(self):
         widget = QtGui.QWidget()
@@ -87,5 +62,15 @@ class TaskGeant4Result(BaseTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_field"):
+            return self._presenter.read_settings(self.obj)
+        return Geant4ResultSettings(
+            result_file=str(getattr(self.obj, "ResultFile", "") or "").strip(),
+            artifact_files=tuple(getattr(self.obj, "ArtifactFiles", []) or []),
+            available_fields=tuple(getattr(self.obj, "AvailableFields", []) or []),
+            active_field=self.cb_field.currentText().strip(),
+        )
+
     def _store(self):
-        self.obj.ActiveField = self.cb_field.currentText()
+        self._presenter.persist_settings(self.obj, self._current_settings())

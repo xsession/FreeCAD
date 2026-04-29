@@ -473,14 +473,19 @@ class TestTaskPanelWiring(unittest.TestCase):
         cockpit_path, cockpit_source = self._read_source(os.path.join("taskpanels", "task_project_cockpit.py"))
 
         self.assertIn(
-            'STARTER_COMMAND_GROUPS = tuple(',
+            'def _build_starter_command_groups(',
             cockpit_source,
             f"Cockpit should derive starter groups dynamically: {cockpit_path}",
         )
         self.assertIn(
-            'for _group_key, group_label, commands in example_command_groups()',
+            'for _group_key, group_label, commands in command_groups_resolver()',
             cockpit_source,
             f"Cockpit should iterate over grouped domain example commands: {cockpit_path}",
+        )
+        self.assertIn(
+            'ProjectCockpitPanel.STARTER_COMMAND_GROUPS = _build_starter_command_groups(',
+            cockpit_source,
+            f"Cockpit should populate starter groups from the helper: {cockpit_path}",
         )
         self.assertIn(
             'starter_group = QtGui.QGroupBox("Starter Examples")',
@@ -489,7 +494,7 @@ class TestTaskPanelWiring(unittest.TestCase):
         )
 
     def test_project_cockpit_prioritizes_primary_result_objects(self):
-        cockpit_path, cockpit_source = self._read_source(os.path.join("taskpanels", "task_project_cockpit.py"))
+        cockpit_path, cockpit_source = self._read_source(os.path.join("ui", "project_cockpit_presenter.py"))
 
         self.assertIn(
             'if command_name == "FlowStudio_PostPipeline":',
@@ -507,14 +512,14 @@ class TestTaskPanelWiring(unittest.TestCase):
             f"Cockpit should prefer starter result plots when available: {cockpit_path}",
         )
         self.assertIn(
-            "FreeCADGui.ActiveDocument.setEdit(target.Name)",
+            "self._actions.activate_result_target(target.Name)",
             cockpit_source,
-            f"Cockpit should open the preferred result object directly: {cockpit_path}",
+            f"Cockpit should open the preferred result object through the action port: {cockpit_path}",
         )
         self.assertIn(
-            'self.btn_results.setEnabled(preferred_result is not None or bool(result_path))',
+            'results_enabled=preferred_result is not None or bool(snapshot["result_path"])',
             cockpit_source,
-            f"Open Results should stay enabled when a starter result object already exists: {cockpit_path}",
+            f"Open Results availability should be derived from presenter runtime state: {cockpit_path}",
         )
 
     def test_connected_self_methods_exist(self):
@@ -552,10 +557,13 @@ class TestTaskPanelWiring(unittest.TestCase):
             abs_path, source = self._read_source(os.path.join("taskpanels", rel_path))
             for class_name, attrs in class_map.items():
                 store_source = self._class_method_source(source, class_name, "_store")
+                current_settings_source = self._class_method_source(source, class_name, "_current_settings") if "def _current_settings" in source else ""
+                helper_source = self._class_method_source(source, class_name, "_selected_multi_solver_backends") if "def _selected_multi_solver_backends" in source else ""
+                persistence_source = f"{store_source}\n{current_settings_source}\n{helper_source}"
                 for attr in attrs:
                     self.assertIn(
                         f"self.{attr}",
-                        store_source,
+                        persistence_source,
                         f"{abs_path}: {class_name} does not persist widget {attr} in _store()",
                     )
 
@@ -571,9 +579,9 @@ class TestTaskPanelWiring(unittest.TestCase):
 
     def test_dynamic_widget_maps_are_persisted(self):
         abs_path, source = self._read_source(os.path.join("taskpanels", "task_materials.py"))
-        store_source = self._class_method_source(source, "TaskMaterial", "_store")
-        self.assertIn("for prop, widget in self._widgets.items()", store_source)
-        self.assertIn("setattr(self.obj, prop, widget.value())", store_source)
+        current_settings_source = self._class_method_source(source, "TaskMaterial", "_current_settings")
+        self.assertIn('getattr(self, "_widgets", {})', current_settings_source)
+        self.assertIn("values={prop: widget.value()", current_settings_source)
 
     def test_base_task_panel_publishes_context_metadata(self):
         abs_path, source = self._read_source(os.path.join("taskpanels", "base_taskpanel.py"))
@@ -585,11 +593,11 @@ class TestTaskPanelWiring(unittest.TestCase):
         self.assertIn("CONTEXT_MODE = \"Edit\"", source, abs_path)
 
         abs_path, source = self._read_source(os.path.join("taskpanels", "task_generic_bc.py"))
-        store_source = self._class_method_source(source, "TaskGenericBC", "_store")
-        self.assertIn("for prop, widget in self._widgets.items()", store_source)
-        self.assertIn("widget.isChecked()", store_source)
-        self.assertIn("widget.currentText()", store_source)
-        self.assertIn("widget.value()", store_source)
+        current_settings_source = self._class_method_source(source, "TaskGenericBC", "_current_settings")
+        self.assertIn("for prop, widget in self._widgets.items()", current_settings_source)
+        self.assertIn("widget.isChecked()", current_settings_source)
+        self.assertIn("widget.currentText()", current_settings_source)
+        self.assertIn("widget.value()", current_settings_source)
 
     def test_taskfan_curve_table_is_display_only(self):
         abs_path, source = self._read_source(os.path.join("taskpanels", "task_flowefd_features.py"))

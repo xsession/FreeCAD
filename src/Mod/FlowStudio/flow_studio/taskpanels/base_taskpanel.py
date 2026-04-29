@@ -9,6 +9,8 @@ import FreeCAD
 import FreeCADGui
 from PySide import QtGui, QtCore
 
+from flow_studio.taskpanels.taskpanel_desktop_lifecycle import FreeCADTaskPanelDesktopLifecycle
+
 
 class BaseTaskPanel:
     """Common task panel base with accept/reject."""
@@ -22,8 +24,9 @@ class BaseTaskPanel:
     VALIDATION_TITLE = ""
     VALIDATION_DETAIL = ""
 
-    def __init__(self, obj):
+    def __init__(self, obj, lifecycle=None):
         self.obj = obj
+        self._lifecycle = lifecycle or FreeCADTaskPanelDesktopLifecycle()
         self.form = self._build_form()
         self._refresh_taskview_metadata()
         self._connect_taskview_metadata_signals()
@@ -37,12 +40,11 @@ class BaseTaskPanel:
 
     def accept(self):
         self._store()
-        FreeCADGui.ActiveDocument.resetEdit()
-        FreeCAD.ActiveDocument.recompute()
+        self._lifecycle.accept_edit()
         return True
 
     def reject(self):
-        FreeCADGui.ActiveDocument.resetEdit()
+        self._lifecycle.reject_edit()
         return True
 
     def _store(self):

@@ -201,6 +201,11 @@ public:
     void unsetEditDocument(Gui::Document* pcDocument);
     void unsetEditDocumentIf(const std::function<bool(Gui::Document*)>& eval);
 
+protected:
+    bool addEditDocument(Gui::Document* pcDocument);
+    bool removeEditDocument(Gui::Document* pcDocument);
+    bool removeEditDocumentsIf(const std::function<bool(Gui::Document*)>& eval);
+
     /** Retrieves a pointer to the Gui::Document whose App::Document has the name \a name.
      * If no such document exists 0 is returned.
      */

@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
+from flow_studio.ui.bc_inlet_presenter import InletBoundaryPresenter, InletBoundarySettings
 
 
 class TaskBCInlet(FloEFDTaskPanel):
@@ -16,28 +17,14 @@ class TaskBCInlet(FloEFDTaskPanel):
         "Define how fluid enters {label}, including flow specification, turbulence, and temperature."
     )
 
+    def __init__(self, obj):
+        self._presenter = InletBoundaryPresenter()
+        super().__init__(obj)
+
     def _build_task_validation(self):
-        if not self._refs():
-            return (
-                "incomplete",
-                "Assign inlet faces",
-                "Select one or more boundary faces so this inlet can be applied to geometry.",
-            )
-
-        inlet_type = str(getattr(self.obj, "InletType", "Velocity"))
-        if inlet_type == "Mass Flow Rate" and float(getattr(self.obj, "MassFlowRate", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Mass flow rate required",
-                "Enter a positive mass flow rate before solving with this inlet.",
-            )
-        if inlet_type == "Volumetric Flow Rate" and float(getattr(self.obj, "VolFlowRate", 0.0)) <= 0.0:
-            return (
-                "incomplete",
-                "Volumetric flow rate required",
-                "Enter a positive volumetric flow rate before solving with this inlet.",
-            )
-
+        level, title, detail = self._presenter.build_validation(self._current_settings())
+        if level:
+            return level, title, detail
         return super()._build_task_validation()
 
     def _build_form(self):
@@ -86,14 +73,22 @@ class TaskBCInlet(FloEFDTaskPanel):
         layout.addStretch()
         return widget
 
+    def _current_settings(self):
+        if not hasattr(self, "cb_type"):
+            return self._presenter.read_settings(self.obj)
+        return InletBoundarySettings(
+            references=tuple(self._refs()),
+            inlet_type=self.cb_type.currentText(),
+            velocity_x=self.sp_ux.value(),
+            velocity_y=self.sp_uy.value(),
+            velocity_z=self.sp_uz.value(),
+            normal_to_face=self.chk_normal.isChecked(),
+            mass_flow_rate=self.sp_mfr.value(),
+            volumetric_flow_rate=self.sp_vfr.value(),
+            turbulence_spec=self.cb_turb.currentText(),
+            turbulence_intensity=self.sp_ti.value(),
+            inlet_temperature=self.sp_T.value(),
+        )
+
     def _store(self):
-        self.obj.InletType = self.cb_type.currentText()
-        self.obj.Ux = self.sp_ux.value()
-        self.obj.Uy = self.sp_uy.value()
-        self.obj.Uz = self.sp_uz.value()
-        self.obj.NormalToFace = self.chk_normal.isChecked()
-        self.obj.MassFlowRate = self.sp_mfr.value()
-        self.obj.VolFlowRate = self.sp_vfr.value()
-        self.obj.TurbulenceSpec = self.cb_turb.currentText()
-        self.obj.TurbulenceIntensity = self.sp_ti.value()
-        self.obj.InletTemperature = self.sp_T.value()
+        self._presenter.persist_settings(self.obj, self._current_settings())
