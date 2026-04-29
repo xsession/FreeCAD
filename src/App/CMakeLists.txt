@@ -382,12 +382,22 @@ if(FREECAD_USE_PCH)
     target_precompile_headers(FreeCADApp PRIVATE
         $<$<COMPILE_LANGUAGE:CXX>:"${CMAKE_CURRENT_LIST_DIR}/PreCompiled.h">
     )
+
+        if (MSVC)
+            set_source_files_properties(
+                Application.cpp
+                PROPERTIES SKIP_PRECOMPILE_HEADERS TRUE)
+        endif()
 endif(FREECAD_USE_PCH)
 
 target_sources(FreeCADApp PRIVATE ${FreeCADApp_SRCS})
 target_link_libraries(FreeCADApp ${FreeCADApp_LIBS})
 
 if (MSVC)
+        set_source_files_properties(
+            Application.cpp
+            PROPERTIES COMPILE_FLAGS "/Od /Ob0")
+
     target_compile_definitions(FreeCADApp PRIVATE WIN32_LEAN_AND_MEAN)
     target_compile_options(FreeCADApp PRIVATE /wd4251 /wd4273 /wd4275)
 endif()

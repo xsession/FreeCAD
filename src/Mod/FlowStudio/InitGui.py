@@ -11,6 +11,7 @@ Inspired by FloEFD's user-friendly workflow:
   4. Generate Mesh    →  5. Run Solver            →  6. Post-process
 """
 
+import json
 import os
 import FreeCAD
 import FreeCADGui
@@ -218,6 +219,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         "FlowStudio_EnterpriseJobs",
     ]
 
+    TOOLBAR_LAYOUT_PREF_KEY = "ClassicToolbarLayoutV1"
+
     def __init__(self):
         import os as _os
         import FreeCAD as _fc
@@ -249,6 +252,101 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
             f"FlowStudio: enterprise hook '{name}' unavailable at runtime. Falling back.\n"
         )
         return fallback
+
+    def _ribbon_enabled(self):
+        main_window_prefs = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/MainWindow")
+        return bool(main_window_prefs.GetBool("UseRibbonBar", False))
+
+    def _toolbar_layout_prefs(self):
+        return FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/FlowStudio")
+
+    def _classic_toolbar_names(self):
+        names = ["FlowStudio Analysis"]
+        names.extend(f"FlowStudio {group_key} Examples" for group_key, _group_label, _commands in self.EXAMPLE_COMMAND_GROUPS)
+        names.extend([
+            "FlowStudio CFD Setup",
+            "FlowStudio Geometry Tools",
+            "FlowStudio Solve",
+            "FlowStudio Physics",
+        ])
+
+        enterprise_enabled_fn = self._resolve_enterprise_callable(
+            "is_enterprise_enabled", self._enterprise_disabled
+        )
+        if enterprise_enabled_fn():
+            names.append("FlowStudio Enterprise")
+        return tuple(names)
+
+    def _find_toolbar(self, main_window, name):
+        from PySide import QtGui
+
+        for toolbar in main_window.findChildren(QtGui.QToolBar):
+            if toolbar.windowTitle() == name or toolbar.objectName() == name:
+                return toolbar
+        return None
+
+    def _save_classic_toolbar_layout(self):
+        if self._ribbon_enabled():
+            return
+
+        main_window = FreeCADGui.getMainWindow()
+        if main_window is None:
+            return
+
+        layout = {}
+        for name in self._classic_toolbar_names():
+            toolbar = self._find_toolbar(main_window, name)
+            if toolbar is None:
+                continue
+
+            layout[name] = {
+                "area": int(main_window.toolBarArea(toolbar)),
+                "orientation": int(toolbar.orientation()),
+                "visible": bool(toolbar.isVisible()),
+                "floating": bool(toolbar.isFloating()),
+            }
+
+        self._toolbar_layout_prefs().SetString(
+            self.TOOLBAR_LAYOUT_PREF_KEY,
+            json.dumps(layout, separators=(",", ":")),
+        )
+
+    def _restore_classic_toolbar_layout(self):
+        if self._ribbon_enabled():
+            return
+
+        raw_layout = self._toolbar_layout_prefs().GetString(self.TOOLBAR_LAYOUT_PREF_KEY)
+        if not raw_layout:
+            return
+
+        try:
+            layout = json.loads(raw_layout)
+        except ValueError:
+            return
+
+        main_window = FreeCADGui.getMainWindow()
+        if main_window is None:
+            return
+
+        from PySide import QtCore
+
+        for name in self._classic_toolbar_names():
+            toolbar = self._find_toolbar(main_window, name)
+            config = layout.get(name)
+            if toolbar is None or not isinstance(config, dict):
+                continue
+
+            toolbar.setOrientation(QtCore.Qt.Orientation(int(config.get("orientation", int(toolbar.orientation())))))
+
+            if bool(config.get("floating", False)):
+                toolbar.setFloating(True)
+            else:
+                area = QtCore.Qt.ToolBarArea(int(config.get("area", int(main_window.toolBarArea(toolbar)))))
+                if toolbar.isFloating():
+                    toolbar.setFloating(False)
+                main_window.addToolBar(area, toolbar)
+
+            toolbar.setVisible(bool(config.get("visible", True)))
 
     # ------------------------------------------------------------------
     # Workbench lifecycle
@@ -503,6 +601,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
 
     def Activated(self):
         """Called every time the workbench becomes active."""
+        from PySide import QtCore
+
         enterprise_enabled_fn = self._resolve_enterprise_callable(
             "is_enterprise_enabled", self._enterprise_disabled
         )
@@ -512,9 +612,11 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         if enterprise_enabled_fn():
             on_workbench_activated_fn()
 
+        QtCore.QTimer.singleShot(0, self._restore_classic_toolbar_layout)
+
     def Deactivated(self):
         """Called when switching away from this workbench."""
-        pass
+        self._save_classic_toolbar_layout()
 
     def GetClassName(self):
         return "Gui::PythonWorkbench"

@@ -18,9 +18,98 @@ except Exception:  # pragma: no cover - allows non-FreeCAD tests/imports
 	FreeCAD = None
 
 
+DEFAULT_UNIT_MATRIX = {
+	"Density": {"SI (m-kg-s)": "kg/m^3", "SI (mm-kg-s)": "kg/mm^3"},
+	"DynamicViscosity": {"SI (m-kg-s)": "Pa*s", "SI (mm-kg-s)": "Pa*s"},
+	"KinematicViscosity": {"SI (m-kg-s)": "m^2/s", "SI (mm-kg-s)": "mm^2/s"},
+	"SpecificHeat": {"SI (m-kg-s)": "J/(kg*K)", "SI (mm-kg-s)": "J/(kg*K)"},
+	"ThermalConductivity": {"SI (m-kg-s)": "W/(m*K)", "SI (mm-kg-s)": "W/(mm*K)"},
+	"PrandtlNumber": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"YoungsModulus": {"SI (m-kg-s)": "Pa", "SI (mm-kg-s)": "Pa"},
+	"PoissonRatio": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"ThermalExpansionCoeff": {"SI (m-kg-s)": "1/K", "SI (mm-kg-s)": "1/K"},
+	"YieldStrength": {"SI (m-kg-s)": "Pa", "SI (mm-kg-s)": "Pa"},
+	"Emissivity": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"RelativePermittivity": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"RelativePermeability": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"ElectricConductivity": {"SI (m-kg-s)": "S/m", "SI (mm-kg-s)": "S/mm"},
+	"RefractiveIndex": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"AbbeNumber": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"ExtinctionCoefficient": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"Transmission": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"Reflectivity": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"ReferenceWavelength": {"SI (m-kg-s)": "nm", "SI (mm-kg-s)": "nm"},
+	"WavelengthMin": {"SI (m-kg-s)": "nm", "SI (mm-kg-s)": "nm"},
+	"WavelengthMax": {"SI (m-kg-s)": "nm", "SI (mm-kg-s)": "nm"},
+	"AbsorptionLength": {"SI (m-kg-s)": "mm", "SI (mm-kg-s)": "mm"},
+	"SurfaceRoughness": {"SI (m-kg-s)": "um", "SI (mm-kg-s)": "um"},
+	"SellmeierB1": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"SellmeierB2": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"SellmeierB3": {"SI (m-kg-s)": "-", "SI (mm-kg-s)": "-"},
+	"SellmeierC1": {"SI (m-kg-s)": "um^2", "SI (mm-kg-s)": "um^2"},
+	"SellmeierC2": {"SI (m-kg-s)": "um^2", "SI (mm-kg-s)": "um^2"},
+	"SellmeierC3": {"SI (m-kg-s)": "um^2", "SI (mm-kg-s)": "um^2"},
+}
+
+MATERIAL_CATEGORY_FIELDS = {
+	"Gases": ["MaterialName", "Density", "DynamicViscosity", "KinematicViscosity", "SpecificHeat", "ThermalConductivity", "PrandtlNumber", "Comment"],
+	"Liquids": ["MaterialName", "Density", "DynamicViscosity", "KinematicViscosity", "SpecificHeat", "ThermalConductivity", "PrandtlNumber", "Comment"],
+	"Solids": ["MaterialName", "Density", "YoungsModulus", "PoissonRatio", "ThermalExpansionCoeff", "YieldStrength", "ThermalConductivity", "SpecificHeat", "Emissivity", "RelativePermittivity", "RelativePermeability", "ElectricConductivity", "Comment"],
+	"Dielectrics": ["MaterialName", "RelativePermittivity", "RelativePermeability", "ElectricConductivity", "Density", "Comment"],
+	"Magnetic": ["MaterialName", "RelativePermeability", "RelativePermittivity", "ElectricConductivity", "Density", "Comment"],
+	"Optical Glasses": ["MaterialName", "RefractiveIndex", "AbbeNumber", "ExtinctionCoefficient", "Transmission", "Reflectivity", "ReferenceWavelength", "WavelengthMin", "WavelengthMax", "AbsorptionLength", "SurfaceRoughness", "SellmeierB1", "SellmeierB2", "SellmeierB3", "SellmeierC1", "SellmeierC2", "SellmeierC3", "Comment"],
+	"Optical Coatings": ["MaterialName", "RefractiveIndex", "ExtinctionCoefficient", "Transmission", "Reflectivity", "ReferenceWavelength", "Comment"],
+}
+
+MATERIAL_FIELD_DEFAULTS = {
+	"MaterialName": "New Material",
+	"Density": 1.0,
+	"DynamicViscosity": 1.0e-3,
+	"KinematicViscosity": 1.0e-6,
+	"SpecificHeat": 1000.0,
+	"ThermalConductivity": 1.0,
+	"PrandtlNumber": 1.0,
+	"YoungsModulus": 1.0e9,
+	"PoissonRatio": 0.3,
+	"ThermalExpansionCoeff": 1.0e-5,
+	"YieldStrength": 1.0e7,
+	"Emissivity": 0.5,
+	"RelativePermittivity": 1.0,
+	"RelativePermeability": 1.0,
+	"ElectricConductivity": 0.0,
+	"RefractiveIndex": 1.0,
+	"AbbeNumber": 0.0,
+	"ExtinctionCoefficient": 0.0,
+	"Transmission": 1.0,
+	"Reflectivity": 0.0,
+	"ReferenceWavelength": 550.0,
+	"WavelengthMin": 350.0,
+	"WavelengthMax": 2000.0,
+	"AbsorptionLength": 1000.0,
+	"SurfaceRoughness": 0.01,
+	"SellmeierB1": 0.0,
+	"SellmeierB2": 0.0,
+	"SellmeierB3": 0.0,
+	"SellmeierC1": 0.0,
+	"SellmeierC2": 0.0,
+	"SellmeierC3": 0.0,
+	"Comment": "User-defined database item",
+}
+
+FLOW_TYPE_TO_DATABASE_CATEGORIES = {
+	"FlowStudio::FluidMaterial": ("Gases", "Liquids"),
+	"FlowStudio::SolidMaterial": ("Solids",),
+	"FlowStudio::ThermalMaterial": ("Solids", "Liquids", "Gases"),
+	"FlowStudio::ElectrostaticMaterial": ("Dielectrics", "Solids", "Liquids", "Gases"),
+	"FlowStudio::ElectromagneticMaterial": ("Magnetic", "Dielectrics", "Solids"),
+	"FlowStudio::OpticalMaterial": ("Optical Glasses", "Optical Coatings", "Dielectrics"),
+}
+
+
 DEFAULT_DATABASE = {
 	"schema_version": 1,
 	"units": "SI (m-kg-s)",
+	"unit_matrix": copy.deepcopy(DEFAULT_UNIT_MATRIX),
 	"materials": {
 		"Gases": {
 			"Air (20C, 1atm)": {
@@ -435,6 +524,26 @@ def material_presets(*categories: str) -> dict[str, dict]:
 	merged: dict[str, dict] = {}
 	for category in categories:
 		merged.update(flatten_named_items(materials.get(category, {}), category))
+	return merged
+
+
+def material_categories_for_flow_type(flow_type: str) -> tuple[str, ...]:
+	return tuple(FLOW_TYPE_TO_DATABASE_CATEGORIES.get(flow_type, ()))
+
+
+def default_material_entry(category: str, name: str = "New Material") -> dict:
+	fields = MATERIAL_CATEGORY_FIELDS.get(category, ("MaterialName", "Comment"))
+	entry = {}
+	for field in fields:
+		value = MATERIAL_FIELD_DEFAULTS.get(field, "")
+		entry[field] = name if field == "MaterialName" else copy.deepcopy(value)
+	return entry
+
+
+def unit_matrix() -> dict[str, dict[str, str]]:
+	stored = load_database().get("unit_matrix", {})
+	merged = copy.deepcopy(DEFAULT_UNIT_MATRIX)
+	merge_database(merged, stored)
 	return merged
 
 

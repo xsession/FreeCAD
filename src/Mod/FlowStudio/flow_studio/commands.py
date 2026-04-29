@@ -98,6 +98,188 @@ def _add_to_analysis(obj):
         analysis.addObject(obj)
 
 
+def _document_has_seed_geometry(doc):
+    for obj in getattr(doc, "Objects", []):
+        flow_type = str(getattr(obj, "FlowType", "") or "")
+        if flow_type.startswith("FlowStudio::"):
+            continue
+
+        shape = getattr(obj, "Shape", None)
+        if shape is None:
+            continue
+
+        try:
+            if shape.isNull():
+                continue
+        except Exception:
+            pass
+
+        if getattr(shape, "Solids", ()) or getattr(shape, "Faces", ()):
+            return True
+
+    return False
+
+
+def _add_seed_feature(doc, name, shape):
+    object_name = name
+    suffix = 1
+    while doc.getObject(object_name) is not None:
+        suffix += 1
+        object_name = f"{name}{suffix}"
+
+    obj = doc.addObject("Part::Feature", object_name)
+    obj.Label = name
+    obj.Shape = shape
+    return obj
+
+
+def _make_naca0012_shape(chord=100.0, span=8.0, points=41):
+    import math
+    import Part
+
+    thickness = 0.12
+    upper = []
+    lower = []
+    for index in range(points):
+        x = 0.5 * (1.0 - math.cos(math.pi * index / (points - 1)))
+        y_t = 5.0 * thickness * (
+            0.2969 * math.sqrt(max(x, 1e-9))
+            - 0.1260 * x
+            - 0.3516 * x * x
+            + 0.2843 * x * x * x
+            - 0.1015 * x * x * x * x
+        )
+        upper.append(FreeCAD.Vector(chord * x, chord * y_t, 0.0))
+        lower.append(FreeCAD.Vector(chord * x, -chord * y_t, 0.0))
+
+    profile = upper + list(reversed(lower[1:-1])) + [upper[0]]
+    face = Part.Face(Part.makePolygon(profile))
+    return face.extrude(FreeCAD.Vector(0.0, 0.0, span))
+
+
+def _seed_example_geometry(example_key):
+    doc = FreeCAD.ActiveDocument
+    if doc is None or _document_has_seed_geometry(doc):
+        return []
+
+    import Part
+
+    created = []
+
+    if example_key == "electronics-cooling":
+        board = Part.makeBox(160, 100, 2, FreeCAD.Vector(0, 0, 0))
+        cpu = Part.makeBox(22, 22, 6, FreeCAD.Vector(54, 39, 2))
+        sink_base = Part.makeBox(32, 32, 3, FreeCAD.Vector(49, 34, 8))
+        fins = []
+        for index in range(4):
+            fins.append(Part.makeBox(2.5, 28, 18, FreeCAD.Vector(53 + index * 6, 36, 11)))
+        heatsink = sink_base
+        for fin in fins:
+            heatsink = heatsink.fuse(fin)
+        enclosure = Part.makeBox(190, 120, 65, FreeCAD.Vector(-15, -10, -4))
+        created.extend([
+            _add_seed_feature(doc, "CoolingBoard", board),
+            _add_seed_feature(doc, "CoolingCPU", cpu),
+            _add_seed_feature(doc, "CoolingHeatSink", heatsink),
+            _add_seed_feature(doc, "CoolingEnclosure", enclosure),
+        ])
+    elif example_key == "cooling-channel":
+        solid = Part.makeBox(160, 60, 40, FreeCAD.Vector(0, 0, 0))
+        channel = Part.makeCylinder(10, 180, FreeCAD.Vector(-10, 30, 20), FreeCAD.Vector(1, 0, 0))
+        created.append(_add_seed_feature(doc, "CoolingChannelBlock", solid.cut(channel)))
+    elif example_key == "external-aero":
+        ground = Part.makeBox(240, 100, 2, FreeCAD.Vector(-30, 0, 0))
+        body = Part.makeBox(62, 24, 16, FreeCAD.Vector(24, 28, 2))
+        cabin = Part.makeBox(24, 24, 15, FreeCAD.Vector(50, 28, 18))
+        created.extend([
+            _add_seed_feature(doc, "AeroGround", ground),
+            _add_seed_feature(doc, "AeroBody", body.fuse(cabin)),
+        ])
+    elif example_key == "buildings":
+        ground = Part.makeBox(240, 180, 2, FreeCAD.Vector(-20, -30, 0))
+        tower_a = Part.makeBox(28, 28, 90, FreeCAD.Vector(40, 30, 2))
+        tower_b = Part.makeBox(36, 36, 65, FreeCAD.Vector(95, 80, 2))
+        created.extend([
+            _add_seed_feature(doc, "UrbanGround", ground),
+            _add_seed_feature(doc, "TowerA", tower_a),
+            _add_seed_feature(doc, "TowerB", tower_b),
+        ])
+    elif example_key == "airfoil":
+        created.append(_add_seed_feature(doc, "NACA0012Wing", _make_naca0012_shape()))
+    elif example_key == "tesla-valve":
+        body = Part.makeBox(140, 70, 12, FreeCAD.Vector(0, 0, 0))
+        main_channel = Part.makeBox(118, 12, 8, FreeCAD.Vector(10, 29, 2))
+        branch_upper = Part.makeBox(42, 10, 8, FreeCAD.Vector(40, 41, 2))
+        branch_lower = Part.makeBox(42, 10, 8, FreeCAD.Vector(40, 19, 2))
+        branch_upper.rotate(FreeCAD.Vector(40, 46, 2), FreeCAD.Vector(0, 0, 1), 28)
+        branch_lower.rotate(FreeCAD.Vector(40, 24, 2), FreeCAD.Vector(0, 0, 1), -28)
+        tesla = body.cut(main_channel).cut(branch_upper).cut(branch_lower)
+        created.append(_add_seed_feature(doc, "TeslaValveBody", tesla))
+    elif example_key == "von-karman":
+        cylinder = Part.makeCylinder(10, 18, FreeCAD.Vector(70, 30, 0), FreeCAD.Vector(0, 0, 1))
+        created.append(_add_seed_feature(doc, "VonKarmanCylinder", cylinder))
+    elif example_key == "pipe-flow":
+        pipe = Part.makeCylinder(20, 220, FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(1, 0, 0))
+        created.append(_add_seed_feature(doc, "PipeChannel", pipe))
+    elif example_key == "static-mixer":
+        pipe = Part.makeCylinder(18, 220, FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(1, 0, 0))
+        blade_a = Part.makeBox(8, 28, 3, FreeCAD.Vector(55, -14, -1.5))
+        blade_b = Part.makeBox(8, 28, 3, FreeCAD.Vector(105, -14, -1.5))
+        blade_a.rotate(FreeCAD.Vector(59, 0, 0), FreeCAD.Vector(1, 0, 0), 35)
+        blade_b.rotate(FreeCAD.Vector(109, 0, 0), FreeCAD.Vector(1, 0, 0), -35)
+        created.extend([
+            _add_seed_feature(doc, "StaticMixerTube", pipe),
+            _add_seed_feature(doc, "StaticMixerBladeA", blade_a),
+            _add_seed_feature(doc, "StaticMixerBladeB", blade_b),
+        ])
+    elif example_key == "structural-bracket":
+        base = Part.makeBox(120, 30, 10, FreeCAD.Vector(0, 0, 0))
+        web = Part.makeBox(25, 30, 90, FreeCAD.Vector(0, 0, 10))
+        gusset = Part.makeBox(55, 30, 14, FreeCAD.Vector(20, 0, 28))
+        created.append(_add_seed_feature(doc, "BracketSolid", base.fuse(web).fuse(gusset)))
+    elif example_key == "electrostatic-capacitor":
+        positive = Part.makeBox(80, 80, 2, FreeCAD.Vector(0, 0, 0))
+        dielectric = Part.makeBox(80, 80, 10, FreeCAD.Vector(0, 0, 2))
+        ground = Part.makeBox(80, 80, 2, FreeCAD.Vector(0, 0, 12))
+        created.extend([
+            _add_seed_feature(doc, "CapacitorPositivePlate", positive),
+            _add_seed_feature(doc, "CapacitorDielectric", dielectric),
+            _add_seed_feature(doc, "CapacitorGroundPlate", ground),
+        ])
+    elif example_key == "electromagnetic-coil":
+        core = Part.makeCylinder(10, 80, FreeCAD.Vector(0, 0, -40), FreeCAD.Vector(0, 0, 1))
+        coil = Part.makeTorus(24, 6, FreeCAD.Vector(0, 0, 0), FreeCAD.Vector(0, 0, 1))
+        created.extend([
+            _add_seed_feature(doc, "CoilCore", core),
+            _add_seed_feature(doc, "ExcitationCoil", coil),
+        ])
+    elif example_key == "thermal-plate":
+        plate = Part.makeBox(140, 90, 6, FreeCAD.Vector(0, 0, 0))
+        heater = Part.makeBox(40, 30, 4, FreeCAD.Vector(50, 30, 6))
+        created.extend([
+            _add_seed_feature(doc, "ThermalPlate", plate),
+            _add_seed_feature(doc, "HeaterPad", heater),
+        ])
+    elif example_key == "optical-lens":
+        sphere_left = Part.makeSphere(28, FreeCAD.Vector(-10, 0, 0))
+        sphere_right = Part.makeSphere(28, FreeCAD.Vector(10, 0, 0))
+        lens = sphere_left.common(sphere_right)
+        detector = Part.makeBox(2, 40, 40, FreeCAD.Vector(55, -20, -20))
+        source = Part.makeCylinder(4, 14, FreeCAD.Vector(-55, 0, 0), FreeCAD.Vector(1, 0, 0))
+        created.extend([
+            _add_seed_feature(doc, "OpticalLens", lens),
+            _add_seed_feature(doc, "OpticalDetectorPlane", detector),
+            _add_seed_feature(doc, "OpticalEmitter", source),
+        ])
+
+    if created:
+        doc.recompute()
+        FreeCAD.Console.PrintMessage(
+            f"FlowStudio: Seeded example geometry for {example_key}.\n"
+        )
+    return created
+
+
 def _selected_geometry_references():
     """Return current GUI selection as PropertyLinkSubList-compatible refs."""
     if not FreeCAD.GuiUp:
@@ -335,6 +517,8 @@ class _CmdElectronicsCoolingStudy:
         except Exception:
             pass
 
+        _seed_example_geometry("electronics-cooling")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -423,6 +607,8 @@ class _CmdCoolingChannelStudy:
         except Exception:
             pass
 
+        _seed_example_geometry("cooling-channel")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -507,6 +693,8 @@ class _CmdExternalAeroStudy:
             symmetry.BCLabel = "symmetry"
         except Exception:
             pass
+
+        _seed_example_geometry("external-aero")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -599,6 +787,8 @@ class _CmdBuildingsStudy:
         except Exception:
             pass
 
+        _seed_example_geometry("buildings")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -690,6 +880,8 @@ class _CmdAirfoilStudy:
         except Exception:
             pass
 
+        _seed_example_geometry("airfoil")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -776,6 +968,8 @@ class _CmdTeslaValveStudy:
             walls.ThermalType = "Adiabatic"
         except Exception:
             pass
+
+        _seed_example_geometry("tesla-valve")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -868,6 +1062,8 @@ class _CmdVonKarmanStudy:
         except Exception:
             pass
 
+        _seed_example_geometry("von-karman")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -956,6 +1152,8 @@ class _CmdPipeFlowStudy:
             walls.ThermalType = "Adiabatic"
         except Exception:
             pass
+
+        _seed_example_geometry("pipe-flow")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -1050,6 +1248,8 @@ class _CmdStaticMixerStudy:
             result_plot.CutPlane = "YZ Plane"
         except Exception:
             pass
+
+        _seed_example_geometry("static-mixer")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -1260,6 +1460,8 @@ class _CmdStructuralBracketExample:
             result_plot=result_plot,
         )
 
+        _seed_example_geometry("structural-bracket")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -1316,6 +1518,8 @@ class _CmdElectrostaticCapacitorExample:
             post_pipeline=post,
             result_plot=result_plot,
         )
+
+        _seed_example_geometry("electrostatic-capacitor")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -1375,6 +1579,8 @@ class _CmdElectromagneticCoilExample:
             result_plot=result_plot,
         )
 
+        _seed_example_geometry("electromagnetic-coil")
+
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
         _show_project_cockpit()
@@ -1432,6 +1638,8 @@ class _CmdThermalPlateExample:
             post_pipeline=post,
             result_plot=result_plot,
         )
+
+        _seed_example_geometry("thermal-plate")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -1493,6 +1701,8 @@ class _CmdOpticalLensExample:
             post_pipeline=post,
             result_plot=result_plot,
         )
+
+        _seed_example_geometry("optical-lens")
 
         FreeCAD.ActiveDocument.commitTransaction()
         FreeCAD.ActiveDocument.recompute()
@@ -3293,7 +3503,7 @@ class _CmdWorkflowGuide:
 
     def GetResources(self):
         return {
-            "Pixmap": _icon("FlowStudioWorkflow.svg"),
+            "Pixmap": _icon("FlowStudioWorkbench.svg"),
             "MenuText": translate("FlowStudio", "Project Cockpit"),
             "Accel": "C, W",
             "ToolTip": translate(

@@ -5,8 +5,11 @@
 
 """Task panel for FluidMaterial – FloEFD-like fluid property editor."""
 
-from flow_studio.app.fluid_material_service import MATERIALS_DB
+from flow_studio.app.fluid_material_service import FlowStudioFluidMaterialService
+from flow_studio.catalog.editor import show_engineering_database_editor
 from flow_studio.ui.fluid_material_presenter import FluidMaterialPresenter, FluidMaterialSettings
+
+MATERIALS_DB = FlowStudioFluidMaterialService().material_db()
 
 try:
     from PySide import QtGui  # noqa: E402
@@ -22,6 +25,7 @@ class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
     SUMMARY_DETAIL = (
         "Assign a fluid preset or custom transport properties for {label}."
     )
+    selection_mode = "volumes"
 
     def __init__(self, obj):
         self._presenter = FluidMaterialPresenter()
@@ -97,8 +101,34 @@ class TaskFluidMaterial(FloEFDTaskPanel if _HAS_GUI else object):
         self.sp_pr.setValue(settings.prandtl_number)
 
     def _open_database(self):
-        from flow_studio.catalog.editor import show_engineering_database_editor
-        show_engineering_database_editor()
+        selected = show_engineering_database_editor(
+            pick_mode="material",
+            material_categories=("Gases", "Liquids"),
+            initial_preset=self.cb_preset.currentText() if hasattr(self, "cb_preset") else None,
+        )
+        self._refresh_presets(selected)
+
+    def _refresh_presets(self, selected=None):
+        if not hasattr(self, "cb_preset"):
+            return
+
+        current = self.cb_preset.currentText()
+        preset_names = self._presenter.preset_names()
+        if "Preset" in getattr(self.obj, "PropertiesList", []):
+            self.obj.Preset = preset_names
+        self.cb_preset.blockSignals(True)
+        self.cb_preset.clear()
+        self.cb_preset.addItems(preset_names)
+        target = selected[0] if selected else current
+        index = self.cb_preset.findText(target)
+        if index < 0:
+            index = self.cb_preset.findText("Custom")
+        self.cb_preset.setCurrentIndex(max(index, 0))
+        self.cb_preset.blockSignals(False)
+        if selected:
+            self._on_preset_changed(selected[0])
+        elif current in preset_names:
+            self._on_preset_changed(current)
 
     def _store(self):
         self._presenter.persist_settings(self.obj, self._current_settings())

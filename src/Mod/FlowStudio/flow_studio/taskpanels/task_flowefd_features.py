@@ -42,6 +42,7 @@ class FloEFDTaskPanel(BaseTaskPanel):
     """Base panel with a Creo/FloEFD-like selection header."""
 
     reference_property = "References"
+    selection_mode = "any"
 
     def __init__(self, obj):
         self._selection_presenter = SelectionPresenter()
@@ -85,7 +86,7 @@ class FloEFDTaskPanel(BaseTaskPanel):
             self.selection_list.addItem(label)
 
     def _use_current_selection(self):
-        refs = self._selection_adapter.get_selected_references()
+        refs = self._selection_adapter.get_selected_references(mode=self.selection_mode)
         self._set_refs(refs)
         self._refresh_selection_list()
 

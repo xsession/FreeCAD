@@ -118,6 +118,10 @@ def _get_of_type(analysis, type_set):
 	return [o for o in _group_objects(analysis) if getattr(o, "FlowType", "") in type_set]
 
 
+def _count_of_type(analysis, type_set):
+	return len(_get_of_type(analysis, type_set))
+
+
 def get_physics_model(analysis=None):
 	if analysis is None:
 		analysis = get_active_analysis()
@@ -216,6 +220,103 @@ def has_solver():
 
 def has_initial_conditions():
 	return get_initial_conditions() is not None
+
+
+def get_project_overview(analysis=None):
+	"""Return aggregate counts and validation state for the active project."""
+	if analysis is None:
+		analysis = get_active_analysis()
+
+	mesh = get_mesh(analysis)
+	mesh_cells = int(getattr(mesh, "NumCells", 0) or 0) if mesh is not None else 0
+	checker = WorkflowChecker(analysis)
+	issues = tuple(checker.check_all())
+	return {
+		"geometry_count": len(get_geometry_shapes()),
+		"physics_count": _count_of_type(analysis, _PHYSICS_TYPES),
+		"material_count": _count_of_type(analysis, _MATERIAL_TYPES),
+		"boundary_count": _count_of_type(analysis, _BC_TYPES),
+		"mesh_count": _count_of_type(analysis, _MESH_TYPES),
+		"mesh_cells": mesh_cells,
+		"solver_count": _count_of_type(analysis, _SOLVER_TYPES),
+		"study_control_count": _count_of_type(analysis, _INITIAL_COND_TYPES),
+		"result_count": _count_of_type(analysis, _POST_TYPES),
+		"issue_count": len(issues),
+		"issues": issues,
+	}
+
+
+def _analysis_has_run_output(analysis):
+	if analysis is None:
+		return False
+	case_dir = getattr(analysis, "CaseDir", "")
+	if not case_dir:
+		return False
+
+	import os
+
+	return os.path.isdir(os.path.join(case_dir, "postProcessing")) or os.path.isdir(
+		os.path.join(case_dir, "processor0")
+	)
+
+
+def _reference_count(obj):
+	refs = getattr(obj, "References", None)
+	if refs:
+		return sum(1 for ref_obj, _sub_names in refs if ref_obj is not None)
+	part = getattr(obj, "Part", None)
+	if part is not None:
+		return 1
+	return 0
+
+
+def get_tree_status(obj, analysis=None):
+	"""Classify a FlowStudio object for tree badge rendering."""
+	if obj is None:
+		return ""
+
+	flow_type = getattr(obj, "FlowType", "") or ""
+	if analysis is None:
+		if flow_type in _ANALYSIS_TYPES:
+			analysis = obj
+		else:
+			analysis = getattr(obj, "Analysis", None) or get_active_analysis()
+
+	if flow_type in _ANALYSIS_TYPES:
+		overview = get_project_overview(obj)
+		configured = (
+			overview["physics_count"]
+			+ overview["material_count"]
+			+ overview["boundary_count"]
+			+ overview["mesh_count"]
+			+ overview["solver_count"]
+		)
+		if overview["issue_count"]:
+			return "warning"
+		return "done" if configured else "active"
+
+	if flow_type in _PHYSICS_TYPES:
+		return "done"
+
+	if flow_type in _MATERIAL_TYPES or flow_type in _BC_TYPES:
+		return "done" if _reference_count(obj) else "warning"
+
+	if flow_type in _MESH_TYPES:
+		return "done" if int(getattr(obj, "NumCells", 0) or 0) > 0 else "warning"
+
+	if flow_type in _SOLVER_TYPES:
+		return "done" if _analysis_has_run_output(analysis) else "active"
+
+	if flow_type in _INITIAL_COND_TYPES:
+		return "done"
+
+	if flow_type in _POST_TYPES:
+		return "done"
+
+	if hasattr(obj, "References"):
+		return "done" if _reference_count(obj) else "warning"
+
+	return ""
 
 
 class WorkflowStep:

@@ -79,6 +79,7 @@ class Solver(BaseFlowObject):
             "rhoPimpleFoam",
             "buoyantSimpleFoam",
             "buoyantPimpleFoam",
+            "chtMultiRegionSimpleFoam",
             "interFoam",
             "potentialFoam",
         ]

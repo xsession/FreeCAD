@@ -95,6 +95,7 @@ class TaskSolver(BaseTaskPanel):
         self.cb_of_solver = self._combo(
             ["simpleFoam", "pimpleFoam", "pisoFoam", "icoFoam",
              "rhoSimpleFoam", "rhoPimpleFoam", "buoyantSimpleFoam",
+             "chtMultiRegionSimpleFoam",
              "buoyantPimpleFoam", "interFoam", "potentialFoam"],
             self.obj.OpenFOAMSolver,
         )

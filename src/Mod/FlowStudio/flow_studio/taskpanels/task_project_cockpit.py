@@ -17,6 +17,18 @@ from flow_studio.taskpanels.taskpanel_desktop_lifecycle import FreeCADTaskPanelD
 from flow_studio.ui.project_cockpit_presenter import ProjectCockpitPresenter
 
 
+def _domain_accent(domain_key):
+    palette = {
+        "CFD": ("#0b5cad", "#dff1ff"),
+        "Thermal": ("#c65d00", "#fff0db"),
+        "Structural": ("#6a1b9a", "#f2e6ff"),
+        "Electrostatic": ("#00838f", "#e0f7fa"),
+        "Electromagnetic": ("#2e7d32", "#e8f5e9"),
+        "Optical": ("#ad1457", "#fde4f0"),
+    }
+    return palette.get(domain_key, ("#455a64", "#eceff1"))
+
+
 def _phase_color(level):
     palette = {
         "done": ("#e8f5e9", "#1b5e20"),
@@ -33,6 +45,12 @@ def _style_banner(widget, level):
     bg, fg = _phase_color(level)
     widget.setStyleSheet(
         f"background:{bg}; color:{fg}; padding:8px; border-radius:6px; border:1px solid {fg};"
+    )
+
+
+def _style_card(widget, *, bg, fg, border=None):
+    widget.setStyleSheet(
+        f"background:{bg}; color:{fg}; border:1px solid {border or fg}; border-radius:8px; padding:8px;"
     )
 
 
@@ -114,6 +132,49 @@ class ProjectCockpitPanel:
         self.summary = QtGui.QLabel("")
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
+
+        self.metrics_group = QtGui.QGroupBox("Project Health")
+        self.metrics_layout = QtGui.QGridLayout(self.metrics_group)
+        self.metric_frames = []
+        for index in range(6):
+            frame = QtGui.QFrame()
+            frame.setFrameShape(QtGui.QFrame.StyledPanel)
+            frame_layout = QtGui.QVBoxLayout(frame)
+            title = QtGui.QLabel("")
+            value = QtGui.QLabel("")
+            detail = QtGui.QLabel("")
+            title.setWordWrap(True)
+            value.setWordWrap(True)
+            detail.setWordWrap(True)
+            frame_layout.addWidget(title)
+            frame_layout.addWidget(value)
+            frame_layout.addWidget(detail)
+            row, col = divmod(index, 3)
+            self.metrics_layout.addWidget(frame, row, col)
+            self.metric_frames.append((frame, title, value, detail))
+        layout.addWidget(self.metrics_group)
+
+        self.layout_group = QtGui.QGroupBox("Workspace Overview")
+        layout_box = QtGui.QVBoxLayout(self.layout_group)
+        self.layout_banner = QtGui.QLabel("")
+        self.layout_banner.setWordWrap(True)
+        layout_box.addWidget(self.layout_banner)
+        self.layout_columns = QtGui.QGridLayout()
+        self.left_panes = QtGui.QLabel("")
+        self.center_focus = QtGui.QLabel("")
+        self.right_panes = QtGui.QLabel("")
+        self.bottom_panes = QtGui.QLabel("")
+        self.workflows = QtGui.QLabel("")
+        for label in (self.left_panes, self.center_focus, self.right_panes, self.bottom_panes, self.workflows):
+            label.setWordWrap(True)
+            label.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        self.layout_columns.addWidget(self.left_panes, 0, 0)
+        self.layout_columns.addWidget(self.center_focus, 0, 1)
+        self.layout_columns.addWidget(self.right_panes, 1, 0)
+        self.layout_columns.addWidget(self.bottom_panes, 1, 1)
+        self.layout_columns.addWidget(self.workflows, 2, 0, 1, 2)
+        layout_box.addLayout(self.layout_columns)
+        layout.addWidget(self.layout_group)
 
         self.recipe_group = QtGui.QGroupBox("Study Recipe")
         recipe_layout = QtGui.QVBoxLayout(self.recipe_group)
@@ -211,11 +272,42 @@ class ProjectCockpitPanel:
             f"<b>{state.profile_label} Project Cockpit</b><br>{state.banner.title}<br>{state.banner.detail}"
         )
         self.summary.setText(state.summary_text)
+        self._refresh_metrics(state)
+        self._refresh_layout_overview(state)
 
         self._refresh_study_recipe(state.recipe)
         self._refresh_step_tree(state.steps)
         self._refresh_action_buttons(state.actions)
         self._refresh_runtime(state.runtime)
+
+    def _refresh_metrics(self, state):
+        accent, accent_bg = _domain_accent(state.domain_key)
+        for index, metric in enumerate(state.metrics):
+            frame, title, value, detail = self.metric_frames[index]
+            bg, fg = _phase_color(metric.level)
+            title.setText(f"<b>{metric.title}</b>")
+            value.setText(f"<span style='font-size:18px; color:{accent}'><b>{metric.value}</b></span>")
+            detail.setText(metric.detail)
+            _style_card(frame, bg=bg if metric.level != "active" else accent_bg, fg=fg, border=accent)
+
+    def _refresh_layout_overview(self, state):
+        accent, accent_bg = _domain_accent(state.domain_key)
+        _style_card(self.layout_group, bg=accent_bg, fg="#263238", border=accent)
+        self.layout_banner.setText(
+            f"<b>{state.layout.title}</b><br>{state.layout.description}"
+        )
+        self.left_panes.setText(self._html_list("Left", state.layout.left_panes))
+        self.center_focus.setText(self._html_list("Center", state.layout.center_focus))
+        self.right_panes.setText(self._html_list("Right", state.layout.right_panes))
+        self.bottom_panes.setText(self._html_list("Bottom", state.layout.bottom_panes))
+        self.workflows.setText(self._html_list("Primary workflows", state.layout.workflows))
+
+    @staticmethod
+    def _html_list(title, values):
+        if not values:
+            return f"<b>{title}</b><br>n/a"
+        lines = "<br>".join(f"- {value}" for value in values)
+        return f"<b>{title}</b><br>{lines}"
 
     def _refresh_study_recipe(self, recipe):
         if not recipe.visible:

@@ -7,7 +7,12 @@
 
 from __future__ import annotations
 
-from flow_studio.core.workflow import get_active_analysis, get_workflow_context, get_workflow_status
+from flow_studio.core.workflow import (
+    get_active_analysis,
+    get_project_overview,
+    get_workflow_context,
+    get_workflow_status,
+)
 from flow_studio.runtime.monitor import get_run_snapshot, sync_post_pipeline, terminate_run
 
 
@@ -22,6 +27,9 @@ class FlowStudioProjectCockpitService:
 
     def get_workflow_status(self):
         return tuple(get_workflow_status())
+
+    def get_project_overview(self, analysis=None):
+        return get_project_overview(analysis)
 
     def get_run_snapshot(self, analysis=None):
         return get_run_snapshot(analysis)

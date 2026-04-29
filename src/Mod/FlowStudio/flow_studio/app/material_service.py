@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from flow_studio.catalog.database import material_presets
-from flow_studio.catalog.optics import OPTICAL_MATERIAL_PRESETS
+from flow_studio.catalog.optics import optical_material_presets
 
 
 SOLID_PRESETS = {
@@ -109,6 +109,6 @@ class FlowStudioMaterialService:
             return deepcopy(presets)
         if flow_type == "FlowStudio::OpticalMaterial":
             presets = material_presets("Optical Glasses", "Optical Coatings", "Dielectrics")
-            presets.update(OPTICAL_MATERIAL_PRESETS)
+            presets.update(optical_material_presets())
             return deepcopy(presets)
         return {}

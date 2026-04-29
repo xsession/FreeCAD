@@ -26,6 +26,7 @@ setlocal enabledelayedexpansion
 
 set "SCRIPT_DIR=%~dp0"
 set "BUILD_DIR=%SCRIPT_DIR%build"
+set "BUILD_DEBUG_DIR=%SCRIPT_DIR%build\debug"
 
 REM Detect number of CPU cores for parallel compilation
 set "NPROC=%NUMBER_OF_PROCESSORS%"
@@ -134,9 +135,22 @@ echo [ERROR] Unknown command: %CMD%
 echo Usage: build.bat [configure^|build^|flowstudio^|solver-openfoam^|solver-elmer^|solver-fluidx3d^|solvers^|test^|run^|clean^|release^|debug^|all]
 exit /b 1
 
+:check_debug_build_conflict
+set "BUILD_CONFLICT=0"
+for /f %%i in ('powershell -NoProfile -Command "$buildDir = [System.IO.Path]::GetFullPath('%BUILD_DEBUG_DIR%'); $proc = Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'cmake.exe' -and $_.CommandLine -match '--build' -and $_.CommandLine -like ('*' + $buildDir + '*') } | Select-Object -First 1 -ExpandProperty ProcessId; if ($proc) { Write-Output $proc }"') do set "BUILD_CONFLICT=%%i"
+if not "%BUILD_CONFLICT%"=="0" (
+    echo [ERROR] Another FreeCAD build is already running for %BUILD_DEBUG_DIR%.
+    echo         Active cmake.exe PID: %BUILD_CONFLICT%
+    echo         Wait for that build to finish or stop it before rerunning build.bat.
+    exit /b 1
+)
+goto :eof
+
 REM ---- Commands ----
 
 :configure
+call :check_debug_build_conflict
+if %errorlevel% neq 0 exit /b 1
 echo [BUILD] Configuring with CMake...
 cd "%SCRIPT_DIR%"
 set "CFLAGS="
@@ -155,6 +169,8 @@ echo [BUILD] Configuration complete.
 goto :eof
 
 :build
+call :check_debug_build_conflict
+if %errorlevel% neq 0 exit /b 1
 echo [BUILD] Building with %NPROC% parallel jobs...
 cd "%SCRIPT_DIR%"
 set "BUILD_LOG=%TEMP%\freecad_build_%RANDOM%.log"
@@ -394,6 +410,8 @@ if exist "%BUILD_DIR%" (
 goto :eof
 
 :release
+call :check_debug_build_conflict
+if %errorlevel% neq 0 exit /b 1
 echo [BUILD] Full release build...
 cd "%SCRIPT_DIR%"
 set "CFLAGS="
@@ -413,6 +431,8 @@ echo [BUILD] Release build complete.
 goto :eof
 
 :debug_build
+call :check_debug_build_conflict
+if %errorlevel% neq 0 exit /b 1
 echo [BUILD] Full debug build...
 cd "%SCRIPT_DIR%"
 cmake -B "%BUILD_DIR%" -S "%SCRIPT_DIR%" -DCMAKE_BUILD_TYPE=Debug

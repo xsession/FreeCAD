@@ -55,6 +55,25 @@ class CockpitRecipeState:
 
 
 @dataclass(frozen=True)
+class CockpitMetricState:
+    title: str
+    value: str
+    detail: str
+    level: str
+
+
+@dataclass(frozen=True)
+class CockpitLayoutState:
+    title: str
+    description: str
+    left_panes: tuple[str, ...]
+    center_focus: tuple[str, ...]
+    right_panes: tuple[str, ...]
+    bottom_panes: tuple[str, ...]
+    workflows: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class CockpitStepState:
     state_label: str
     title: str
@@ -89,11 +108,14 @@ class CockpitRuntimeState:
 class ProjectCockpitViewState:
     profile_label: str
     analysis_label: str
+    domain_key: str
     progress_percent: int
     completed_steps: int
     total_steps: int
     banner: CockpitBannerState
     summary_text: str
+    metrics: tuple[CockpitMetricState, ...]
+    layout: CockpitLayoutState
     recipe: CockpitRecipeState
     steps: tuple[CockpitStepState, ...]
     actions: tuple[CockpitActionState, ...]
@@ -119,21 +141,26 @@ class ProjectCockpitPresenter:
         steps = tuple(self._service.get_workflow_status())
         analysis = context["analysis"]
         profile = context["profile"]
+        layout = context.get("layout")
+        overview = self._service.get_project_overview(analysis)
 
         completed = sum(1 for step in steps if step.complete)
         total = max(1, len(steps))
         progress_percent = int((completed / float(total)) * 100.0)
         banner = self._build_banner_state(profile.label, steps, completed, total)
-        summary_text = self._build_summary_text(analysis, completed, total)
+        summary_text = self._build_summary_text(analysis, profile, completed, total, overview)
 
         return ProjectCockpitViewState(
             profile_label=profile.label,
             analysis_label=getattr(analysis, "Label", getattr(analysis, "Name", "No Analysis")),
+            domain_key=context.get("domain_key", "CFD"),
             progress_percent=progress_percent,
             completed_steps=completed,
             total_steps=total,
             banner=banner,
             summary_text=summary_text,
+            metrics=self._build_metric_states(overview),
+            layout=self._build_layout_state(layout, profile),
             recipe=self._build_recipe_state(context.get("study_recipe")),
             steps=self._build_step_states(steps),
             actions=self._build_action_states(steps),
@@ -184,11 +211,85 @@ class ProjectCockpitPresenter:
             detail="Resolve the blocked prerequisites shown below to continue.",
         )
 
-    def _build_summary_text(self, analysis, completed, total):
+    def _build_summary_text(self, analysis, profile, completed, total, overview):
+        issue_count = int(overview.get("issue_count", 0) or 0)
+        issue_text = "no blocking issues" if issue_count == 0 else f"{issue_count} blocking issue{'s' if issue_count != 1 else ''}"
         return (
             f"Completed {completed}/{total} steps for "
             f"{getattr(analysis, 'Label', getattr(analysis, 'Name', 'No Analysis'))}. "
-            "Color coding is enforced: green = done, blue = ready now, grey = blocked."
+            f"{profile.description} Current health: {issue_text}. "
+            "Color coding is enforced: green = done, blue = ready now, grey = blocked, amber = needs review, red = failed or invalid."
+        )
+
+    def _build_metric_states(self, overview):
+        issues = tuple(overview.get("issues", ()) or ())
+        mesh_cells = int(overview.get("mesh_cells", 0) or 0)
+        issue_count = int(overview.get("issue_count", 0) or 0)
+
+        def count_text(value, singular, plural=None):
+            plural = plural or f"{singular}s"
+            return f"{value} {singular if value == 1 else plural}"
+
+        metrics = [
+            CockpitMetricState(
+                title="Geometry",
+                value=str(int(overview.get("geometry_count", 0) or 0)),
+                detail=count_text(int(overview.get("geometry_count", 0) or 0), "body", "bodies"),
+                level="done" if int(overview.get("geometry_count", 0) or 0) > 0 else "blocked",
+            ),
+            CockpitMetricState(
+                title="Materials",
+                value=str(int(overview.get("material_count", 0) or 0)),
+                detail=count_text(int(overview.get("material_count", 0) or 0), "assignment"),
+                level="done" if int(overview.get("material_count", 0) or 0) > 0 else "warning",
+            ),
+            CockpitMetricState(
+                title="Boundaries",
+                value=str(int(overview.get("boundary_count", 0) or 0)),
+                detail=count_text(int(overview.get("boundary_count", 0) or 0), "condition"),
+                level="done" if int(overview.get("boundary_count", 0) or 0) > 0 else "warning",
+            ),
+            CockpitMetricState(
+                title="Mesh",
+                value=f"{mesh_cells:,}" if mesh_cells > 0 else "Pending",
+                detail="cells ready" if mesh_cells > 0 else "Generate the discretization",
+                level="done" if mesh_cells > 0 else ("active" if int(overview.get("mesh_count", 0) or 0) > 0 else "blocked"),
+            ),
+            CockpitMetricState(
+                title="Results",
+                value=str(int(overview.get("result_count", 0) or 0)),
+                detail=count_text(int(overview.get("result_count", 0) or 0), "post object"),
+                level="done" if int(overview.get("result_count", 0) or 0) > 0 else "blocked",
+            ),
+            CockpitMetricState(
+                title="Validation",
+                value="Clean" if issue_count == 0 else str(issue_count),
+                detail=issues[0] if issues else "Workflow prerequisites look consistent.",
+                level="done" if issue_count == 0 else "warning",
+            ),
+        ]
+        return tuple(metrics)
+
+    def _build_layout_state(self, layout, profile):
+        if layout is None:
+            return CockpitLayoutState(
+                title=f"{profile.label} Workspace",
+                description=profile.description,
+                left_panes=(),
+                center_focus=(),
+                right_panes=(),
+                bottom_panes=(),
+                workflows=tuple(getattr(profile, "workflows", ()) or ()),
+            )
+
+        return CockpitLayoutState(
+            title=layout.name,
+            description=layout.description,
+            left_panes=tuple(layout.left_panes),
+            center_focus=tuple(layout.center_focus),
+            right_panes=tuple(layout.right_panes),
+            bottom_panes=tuple(layout.bottom_panes),
+            workflows=tuple(layout.primary_workflows),
         )
 
     def _build_recipe_state(self, recipe):

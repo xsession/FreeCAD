@@ -14,7 +14,7 @@ import os
 import math
 import tempfile
 
-from flow_studio.taskpanels.task_fluid_material import MATERIALS_DB
+from flow_studio.app.fluid_material_service import FlowStudioFluidMaterialService
 
 try:
     import gmsh
@@ -32,7 +32,7 @@ FLUID_MATERIAL_PRESETS = {
         "thermal_conductivity": properties["ThermalConductivity"],
         "prandtl_number": properties["PrandtlNumber"],
     }
-    for name, properties in MATERIALS_DB.items()
+    for name, properties in FlowStudioFluidMaterialService().material_db().items()
     if all(
         key in properties
         for key in (

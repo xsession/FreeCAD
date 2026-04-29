@@ -10,7 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 
-MATERIALS_DB = {
+CURATED_MATERIALS_DB = {
     "Air (20°C, 1atm)": {
         "Density": 1.225,
         "DynamicViscosity": 1.81e-5,
@@ -53,28 +53,14 @@ MATERIALS_DB = {
     },
 }
 
-try:
-    from flow_studio.catalog.database import material_presets as _material_presets
-
-    MATERIALS_DB.update(
-        {
-            name: props
-            for name, props in _material_presets("Gases", "Liquids").items()
-            if all(
-                key in props
-                for key in (
-                    "Density",
-                    "DynamicViscosity",
-                    "KinematicViscosity",
-                    "SpecificHeat",
-                    "ThermalConductivity",
-                    "PrandtlNumber",
-                )
-            )
-        }
-    )
-except Exception:
-    pass
+MATERIAL_FIELDS = (
+    "Density",
+    "DynamicViscosity",
+    "KinematicViscosity",
+    "SpecificHeat",
+    "ThermalConductivity",
+    "PrandtlNumber",
+)
 
 
 class FlowStudioFluidMaterialService:
@@ -101,4 +87,17 @@ class FlowStudioFluidMaterialService:
             setattr(obj, name, settings[name])
 
     def material_db(self):
-        return deepcopy(MATERIALS_DB)
+        presets = deepcopy(CURATED_MATERIALS_DB)
+        try:
+            from flow_studio.catalog.database import material_presets
+
+            presets.update(
+                {
+                    name: props
+                    for name, props in material_presets("Gases", "Liquids").items()
+                    if all(key in props for key in MATERIAL_FIELDS)
+                }
+            )
+        except Exception:
+            pass
+        return presets

@@ -707,7 +707,13 @@ def apply_cooling_channel_defaults(
 
     if solver is not None:
         if hasattr(solver, "OpenFOAMSolver"):
-            solver.OpenFOAMSolver = "chtMultiRegionSimpleFoam"
+            try:
+                solver.OpenFOAMSolver = "chtMultiRegionSimpleFoam"
+            except ValueError:
+                solver.OpenFOAMSolver = "simpleFoam"
+                FreeCAD.Console.PrintWarning(
+                    "FlowStudio: chtMultiRegionSimpleFoam is unavailable on this solver object; falling back to simpleFoam.\n"
+                )
         if hasattr(solver, "MaxIterations"):
             solver.MaxIterations = 900
 

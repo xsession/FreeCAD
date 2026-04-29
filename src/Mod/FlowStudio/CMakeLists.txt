@@ -25,6 +25,29 @@ SET(FlowStudioApi_SRCS
     flow_studio/api/factories.py
 )
 
+SET(FlowStudioApp_SRCS
+    flow_studio/app/__init__.py
+    flow_studio/app/bc_inlet_service.py
+    flow_studio/app/bc_open_service.py
+    flow_studio/app/bc_outlet_service.py
+    flow_studio/app/bc_wall_service.py
+    flow_studio/app/flowefd_features_service.py
+    flow_studio/app/fluid_material_service.py
+    flow_studio/app/geant4_result_service.py
+    flow_studio/app/generic_bc_service.py
+    flow_studio/app/geometry_tools_service.py
+    flow_studio/app/initial_conditions_service.py
+    flow_studio/app/material_service.py
+    flow_studio/app/measurement_point_service.py
+    flow_studio/app/measurement_surface_service.py
+    flow_studio/app/measurement_volume_service.py
+    flow_studio/app/mesh_gmsh_service.py
+    flow_studio/app/physics_model_service.py
+    flow_studio/app/post_pipeline_service.py
+    flow_studio/app/project_cockpit_service.py
+    flow_studio/app/solver_service.py
+)
+
 SET(FlowStudioCatalog_SRCS
     flow_studio/catalog/__init__.py
     flow_studio/catalog/database.py
@@ -40,8 +63,10 @@ SET(FlowStudioCore_SRCS
 
 SET(FlowStudioRuntime_SRCS
     flow_studio/runtime/__init__.py
+    flow_studio/runtime/artifacts.py
     flow_studio/runtime/dependencies.py
     flow_studio/runtime/installer.py
+    flow_studio/runtime/monitor.py
 )
 
 SET(FlowStudioTools_SRCS
@@ -51,12 +76,34 @@ SET(FlowStudioTools_SRCS
 
 SET(FlowStudioUi_SRCS
     flow_studio/ui/__init__.py
+    flow_studio/ui/bc_inlet_presenter.py
+    flow_studio/ui/bc_open_presenter.py
+    flow_studio/ui/bc_outlet_presenter.py
+    flow_studio/ui/bc_wall_presenter.py
+    flow_studio/ui/flowefd_features_presenter.py
+    flow_studio/ui/fluid_material_presenter.py
+    flow_studio/ui/geant4_result_presenter.py
+    flow_studio/ui/generic_bc_presenter.py
+    flow_studio/ui/geometry_tools_presenter.py
+    flow_studio/ui/initial_conditions_presenter.py
     flow_studio/ui/layouts.py
+    flow_studio/ui/material_presenter.py
+    flow_studio/ui/measurement_point_presenter.py
+    flow_studio/ui/measurement_surface_presenter.py
+    flow_studio/ui/measurement_volume_presenter.py
+    flow_studio/ui/mesh_gmsh_presenter.py
+    flow_studio/ui/physics_model_presenter.py
+    flow_studio/ui/post_pipeline_presenter.py
+    flow_studio/ui/project_cockpit_presenter.py
+    flow_studio/ui/selection_presenter.py
+    flow_studio/ui/solver_presenter.py
 )
 
 SET(FlowStudioWorkflows_SRCS
     flow_studio/workflows/__init__.py
     flow_studio/workflows/profiles.py
+    flow_studio/workflows/studies.py
+    flow_studio/workflows/tutorial_coverage.py
 )
 
 SET(FlowStudioEnterprise_SRCS
@@ -187,6 +234,9 @@ SET(FlowStudioSolvers_SRCS
 SET(FlowStudioTaskpanels_SRCS
     flow_studio/taskpanels/__init__.py
     flow_studio/taskpanels/base_taskpanel.py
+    flow_studio/taskpanels/geometry_tools_desktop_adapter.py
+    flow_studio/taskpanels/project_cockpit_desktop_actions.py
+    flow_studio/taskpanels/selection_desktop_adapter.py
     flow_studio/taskpanels/task_bc_inlet.py
     flow_studio/taskpanels/task_bc_open.py
     flow_studio/taskpanels/task_bc_outlet.py
@@ -205,7 +255,9 @@ SET(FlowStudioTaskpanels_SRCS
     flow_studio/taskpanels/task_mesh_gmsh.py
     flow_studio/taskpanels/task_physics_model.py
     flow_studio/taskpanels/task_post_pipeline.py
+    flow_studio/taskpanels/task_project_cockpit.py
     flow_studio/taskpanels/task_solver.py
+    flow_studio/taskpanels/taskpanel_desktop_lifecycle.py
 )
 
 SET(FlowStudioUtils_SRCS
@@ -327,6 +379,7 @@ SET(all_files
     ${FlowStudioBase_SRCS}
     ${FlowStudioPackage_SRCS}
     ${FlowStudioApi_SRCS}
+    ${FlowStudioApp_SRCS}
     ${FlowStudioCatalog_SRCS}
     ${FlowStudioCore_SRCS}
     ${FlowStudioEnterprise_SRCS}
@@ -362,6 +415,7 @@ fc_copy_sources(FlowStudio "${CMAKE_BINARY_DIR}/Mod/FlowStudio" ${all_files})
 INSTALL(FILES ${FlowStudioBase_SRCS} DESTINATION Mod/FlowStudio)
 INSTALL(FILES ${FlowStudioPackage_SRCS} DESTINATION Mod/FlowStudio/flow_studio)
 INSTALL(FILES ${FlowStudioApi_SRCS} DESTINATION Mod/FlowStudio/flow_studio/api)
+INSTALL(FILES ${FlowStudioApp_SRCS} DESTINATION Mod/FlowStudio/flow_studio/app)
 INSTALL(FILES ${FlowStudioCatalog_SRCS} DESTINATION Mod/FlowStudio/flow_studio/catalog)
 INSTALL(FILES ${FlowStudioCore_SRCS} DESTINATION Mod/FlowStudio/flow_studio/core)
 INSTALL(FILES ${FlowStudioEnterprise_SRCS} DESTINATION Mod/FlowStudio/flow_studio/enterprise)

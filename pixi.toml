@@ -156,6 +156,9 @@ pthreads-win32 = "*"
 [pypi-dependencies]
 freecad-stubs = "*"
 
+[target.win-64.pypi-dependencies]
+gmsh = "*"
+
 ## Qt 6 Configuration Presets
 [target.linux-64.tasks]
 configure-debug = { cmd = [ "cmake", "--preset", "conda-linux-debug", "{{ extra_args }}" ], args = [{ "arg" ="extra_args", "default" = "" }], depends-on = ["initialize"], env={ CFLAGS="", CXXFLAGS="", DEBUG_CFLAGS="", DEBUG_CXXFLAGS="" }}

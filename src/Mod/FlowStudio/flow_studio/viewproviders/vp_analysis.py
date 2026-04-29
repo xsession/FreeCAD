@@ -12,6 +12,10 @@ from flow_studio.viewproviders.base_vp import BaseFlowVP
 class VPCFDAnalysis(BaseFlowVP):
     icon_name = "FlowStudioAnalysis.svg"
 
+    def setEdit(self, vobj, mode=0):
+        from flow_studio.taskpanels.task_project_cockpit import ProjectCockpitPanel
+        return self.show_task_panel(ProjectCockpitPanel)
+
     def claimChildren(self):
         if hasattr(self, "Object") and self.Object:
             return self.Object.Group

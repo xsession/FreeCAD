@@ -24,12 +24,37 @@ class TestProjectCockpitPresenter(unittest.TestCase):
             def get_workflow_context(self):
                 return {
                     "analysis": analysis,
+                    "domain_key": "CFD",
                     "profile": types.SimpleNamespace(label=profile_label),
                     "study_recipe": study_recipe,
+                    "layout": types.SimpleNamespace(
+                        name="CFD Project Cockpit",
+                        description="CFD workspace",
+                        left_panes=("Project Tree",),
+                        center_focus=("3D Viewport",),
+                        right_panes=("Physics",),
+                        bottom_panes=("Results",),
+                        primary_workflows=("Internal flow",),
+                    ),
                 }
 
             def get_workflow_status(self):
                 return steps
+
+            def get_project_overview(self, _analysis=None):
+                return {
+                    "geometry_count": 2,
+                    "physics_count": 1,
+                    "material_count": 1,
+                    "boundary_count": 3,
+                    "mesh_count": 1,
+                    "mesh_cells": 24000,
+                    "solver_count": 1,
+                    "study_control_count": 1,
+                    "result_count": 1,
+                    "issue_count": 0,
+                    "issues": (),
+                }
 
             def get_run_snapshot(self, _analysis=None):
                 return snapshot or {
@@ -140,9 +165,13 @@ class TestProjectCockpitPresenter(unittest.TestCase):
 
         self.assertEqual(state.profile_label, "CFD")
         self.assertEqual(state.analysis_label, "Cooling Study")
+        self.assertEqual(state.domain_key, "CFD")
         self.assertEqual(state.progress_percent, 33)
         self.assertEqual(state.banner.level, "active")
         self.assertIn("2. Import Geometry", state.banner.title)
+        self.assertEqual(state.metrics[0].title, "Geometry")
+        self.assertEqual(state.metrics[3].value, "24,000")
+        self.assertEqual(state.layout.title, "CFD Project Cockpit")
         self.assertTrue(state.recipe.visible)
         self.assertEqual(state.steps[2].level, "blocked")
         self.assertEqual(state.actions[0].level, "done")

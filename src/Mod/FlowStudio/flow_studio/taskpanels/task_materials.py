@@ -7,6 +7,7 @@
 
 from PySide import QtGui
 
+from flow_studio.catalog.database import material_categories_for_flow_type
 from flow_studio.catalog.editor import show_engineering_database_editor
 from flow_studio.taskpanels.task_flowefd_features import FloEFDTaskPanel
 from flow_studio.ui.material_presenter import MaterialPresenter, MaterialSettings
@@ -18,6 +19,7 @@ class TaskMaterial(FloEFDTaskPanel):
     SUMMARY_DETAIL = (
         "Assign a preset and edit the domain-specific material properties applied to {label}."
     )
+    selection_mode = "volumes"
 
     def __init__(self, obj):
         self._presenter = MaterialPresenter()
@@ -46,7 +48,7 @@ class TaskMaterial(FloEFDTaskPanel):
         self._add_row(material, "Preset:", self.cb_preset)
         self.cb_preset.currentTextChanged.connect(self._on_preset_changed)
         btn_db = QtGui.QPushButton("Engineering Database...")
-        btn_db.clicked.connect(show_engineering_database_editor)
+        btn_db.clicked.connect(self._open_database)
         material.addWidget(btn_db)
         self.le_name = QtGui.QLineEdit(getattr(self.obj, "MaterialName", "Material"))
         self._add_row(material, "Name:", self.le_name)
@@ -109,6 +111,37 @@ class TaskMaterial(FloEFDTaskPanel):
         for prop, widget in self._widgets.items():
             if prop in settings.values:
                 widget.setValue(float(settings.values[prop]))
+
+    def _open_database(self):
+        categories = material_categories_for_flow_type(getattr(self.obj, "FlowType", ""))
+        selected = show_engineering_database_editor(
+            pick_mode="material",
+            material_categories=categories,
+            initial_preset=self.cb_preset.currentText() if hasattr(self, "cb_preset") else None,
+        )
+        self._refresh_presets(selected)
+
+    def _refresh_presets(self, selected=None):
+        if not hasattr(self, "cb_preset"):
+            return
+
+        current = self.cb_preset.currentText()
+        preset_names = self._presenter.preset_names(getattr(self.obj, "FlowType", ""))
+        if "MaterialPreset" in getattr(self.obj, "PropertiesList", []):
+            self.obj.MaterialPreset = preset_names
+        self.cb_preset.blockSignals(True)
+        self.cb_preset.clear()
+        self.cb_preset.addItems(preset_names)
+        target = selected[0] if selected else current
+        index = self.cb_preset.findText(target)
+        if index < 0:
+            index = self.cb_preset.findText("Custom")
+        self.cb_preset.setCurrentIndex(max(index, 0))
+        self.cb_preset.blockSignals(False)
+        if selected:
+            self._on_preset_changed(selected[0])
+        elif current in preset_names:
+            self._on_preset_changed(current)
 
     def _store(self):
         self._presenter.persist_settings(self.obj, self._current_settings())
