@@ -355,6 +355,13 @@ fn proto_workspace_session_from_http(response: WorkspaceSessionEntry) -> ProtoWo
         workbench: response.workbench,
         dirty: response.dirty,
         selected_object_id: response.selected_object_id,
+        selection_mode: response.selection_mode,
+        combo_view_tab: response.combo_view_tab,
+        bottom_dock_tab: response.bottom_dock_tab,
+        combo_view_visible: response.combo_view_visible,
+        report_dock_visible: response.report_dock_visible,
+        combo_view_size_hint: response.combo_view_size_hint,
+        report_dock_size_hint: response.report_dock_size_hint,
     }
 }
 
@@ -367,6 +374,13 @@ fn http_workspace_session_from_proto(response: ProtoWorkspaceSessionEntry) -> Wo
         workbench: response.workbench,
         dirty: response.dirty,
         selected_object_id: response.selected_object_id,
+        selection_mode: response.selection_mode,
+        combo_view_tab: response.combo_view_tab,
+        bottom_dock_tab: response.bottom_dock_tab,
+        combo_view_visible: response.combo_view_visible,
+        report_dock_visible: response.report_dock_visible,
+        combo_view_size_hint: response.combo_view_size_hint,
+        report_dock_size_hint: response.report_dock_size_hint,
     }
 }
 

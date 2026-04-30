@@ -52,7 +52,7 @@ Status: tracking checklist
 
 ## 4. Static Shell Parity
 
-- [ ] recreate menu bar visually
+- [x] recreate menu bar visually
 - [ ] recreate toolbar bands visually
 - [ ] recreate combo view shell visually
 - [ ] recreate tree panel shell visually
@@ -65,15 +65,35 @@ Status: tracking checklist
 
 ## 5. Behavioral Shell Parity
 
-- [x] recreate menu bar visually
-- [ ] replace property editor rendering
-- [ ] replace task panel rendering
-- [ ] replace report and diagnostics rendering
+- [ ] backend owns command registry
+- [ ] backend owns command enabled and checked state
+- [ ] TypeScript shell executes commands without `QAction`
+- [x] backend owns active workbench state
+- [x] TypeScript shell switches workbenches without Qt shell mediation
+- [x] backend owns recent files, document tabs, and session management state
 - [x] backend owns dock visibility, active tabs, and size hints
+- [x] replace task panel rendering
+
+## 6. Editing Surface Parity
+
+- [ ] replace document tree rendering
+- [ ] replace property editor rendering
+- [x] replace task panel rendering
+- [ ] replace report and diagnostics rendering
+- [ ] synchronize selection across tree, properties, tasks, and viewport
+
+## 7. Viewport Parity
+
+- [ ] define scene extraction service from native FreeCAD
+- [ ] implement TypeScript viewport renderer
 - [ ] implement camera controls with FreeCAD-compatible feel
 - [ ] implement object selection and preselection parity
 - [ ] implement hide/show and isolate parity
-- [x] replace task panel rendering
+- [ ] implement fit-all parity
+- [ ] validate on real assemblies and large STEP imports
+
+## 8. Workbench Migration
+
 - [ ] Start workbench shell parity
 - [ ] Part workbench parity
 - [ ] PartDesign workbench parity
@@ -109,7 +129,7 @@ Status: tracking checklist
 ## 10. Preferences and Persistence
 
 - [ ] move preferences schema out of Qt pages
-- [ ] move layout persistence out of Qt state save and restore
+- [x] move layout persistence out of Qt state save and restore
 - [ ] move shortcut customization out of Qt-owned runtime state
 - [ ] move theme management to TS design tokens plus backend preferences
 

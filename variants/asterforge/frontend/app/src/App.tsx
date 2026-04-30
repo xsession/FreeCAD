@@ -20,6 +20,7 @@ import {
   setSelection,
   setSelectionMode,
   updateShellPanelState,
+  updateShellSessionState,
   type ActivityEvent,
   type BootPayload,
   type CommandArgumentDefinition,
@@ -58,6 +59,13 @@ type WorkspaceSession = {
   workbench: string;
   dirty: boolean;
   selected_object_id: string | null;
+  selection_mode: string | null;
+  combo_view_tab: string | null;
+  bottom_dock_tab: BottomDockTab | null;
+  combo_view_visible: boolean | null;
+  report_dock_visible: boolean | null;
+  combo_view_size_hint: number | null;
+  report_dock_size_hint: number | null;
 };
 
 type BottomDockTab = "report" | "python" | "jobs" | "diagnostics" | "history" | "commands";
@@ -398,11 +406,17 @@ function ShellToolbarBands({
 function SessionTabs({
   sessions,
   activeDocumentId,
-  onActivate
+  activeFilePath,
+  onActivate,
+  onClearInactive,
+  onDismiss
 }: {
   sessions: WorkspaceSession[];
   activeDocumentId: string | null;
+  activeFilePath: string | null | undefined;
   onActivate: (session: WorkspaceSession) => void;
+  onClearInactive: () => void;
+  onDismiss: (session: WorkspaceSession) => void;
 }) {
   if (sessions.length === 0) {
     return null;
@@ -410,26 +424,50 @@ function SessionTabs({
 
   return (
     <section className="session-tabs-shell">
+      <div className="session-tabs-header">
+        <span className="dock-strip-label">Workspace Sessions</span>
+        {sessions.length > 1 ? (
+          <button className="action-button action-button-subtle" onClick={onClearInactive} type="button">
+            Clear Other Sessions
+          </button>
+        ) : null}
+      </div>
       <div className="session-tabs">
         {sessions.map((session) => {
-          const active = session.document_id === activeDocumentId;
+          const active =
+            session.document_id === activeDocumentId ||
+            (activeFilePath !== null && activeFilePath !== undefined && session.file_path === activeFilePath);
 
           return (
-            <button
-              className={`session-tab ${active ? "session-tab-active" : ""}`}
-              key={session.session_id}
-              onClick={() => onActivate(session)}
-              type="button"
-            >
-              <div className="session-tab-main">
-                <strong>{session.display_name}</strong>
-                <span>{session.file_path.split("/").at(-1) ?? session.file_path}</span>
-              </div>
-              <div className="session-tab-meta">
-                <span>{session.workbench}</span>
-                <span>{session.dirty ? "Unsaved" : "Saved"}</span>
-              </div>
-            </button>
+            <div className={`session-tab-card ${active ? "session-tab-card-active" : ""}`} key={session.session_id}>
+              <button
+                className={`session-tab ${active ? "session-tab-active" : ""}`}
+                onClick={() => onActivate(session)}
+                type="button"
+              >
+                <div className="session-tab-main">
+                  <strong>{session.display_name}</strong>
+                  <span>{session.file_path.split("/").at(-1) ?? session.file_path}</span>
+                </div>
+                <div className="session-tab-meta">
+                  <span>{session.workbench}</span>
+                  <span>{session.selection_mode ?? "object"}</span>
+                  <span>{`${session.combo_view_tab ?? "model"} / ${session.bottom_dock_tab ?? "report"}`}</span>
+                  <span>{session.dirty ? "Unsaved" : "Saved"}</span>
+                  <span>{session.selected_object_id ?? "No saved selection"}</span>
+                </div>
+              </button>
+              {!active ? (
+                <button
+                  className="session-tab-close"
+                  onClick={() => onDismiss(session)}
+                  title="Dismiss session"
+                  type="button"
+                >
+                  x
+                </button>
+              ) : null}
+            </div>
           );
         })}
       </div>
@@ -1884,9 +1922,9 @@ export default function App() {
     }
   }
 
-  async function openDocumentPath(filePath: string) {
+  async function openDocumentPath(filePath: string): Promise<DocumentRef | null> {
     if (!boot && !document) {
-      return;
+      return null;
     }
 
     try {
@@ -1958,8 +1996,156 @@ export default function App() {
         );
       setOpenPath(filePath);
       setError(null);
+      return nextDocument;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to open document");
+      return null;
+    }
+  }
+
+  async function handleRecentDocumentOpen(filePath: string) {
+    const activeFilePath = document?.file_path ?? null;
+    if (activeFilePath === filePath) {
+      setOpenPath(filePath);
+      return;
+    }
+
+    await openDocumentPath(filePath);
+  }
+
+  async function handleSessionActivate(session: WorkspaceSession) {
+    const activeFilePath = document?.file_path ?? null;
+    let activeDocument = document;
+
+    if (activeFilePath !== session.file_path) {
+      const nextDocument = await openDocumentPath(session.file_path);
+      if (!nextDocument) {
+        return;
+      }
+      activeDocument = nextDocument;
+    } else {
+      setOpenPath(session.file_path);
+    }
+
+    if (!activeDocument) {
+      return;
+    }
+
+    try {
+      let nextDocument = activeDocument;
+      const targetWorkbenchId = session.workbench.toLowerCase();
+      if (targetWorkbenchId !== activeDocument.workbench.toLowerCase()) {
+        nextDocument = await activateWorkbench(activeDocument.document_id, targetWorkbenchId);
+      }
+
+      const targetSelectionMode = session.selection_mode;
+      if (
+        targetSelectionMode &&
+        targetSelectionMode !== (selectionState?.current_mode ?? "object")
+      ) {
+        await setSelectionMode(nextDocument.document_id, targetSelectionMode);
+      }
+
+      if (session.combo_view_tab || session.combo_view_visible !== null) {
+        await updateShellPanelState(nextDocument.document_id, "combo_view", {
+          active_tab: session.combo_view_tab ?? undefined,
+          visible: session.combo_view_visible ?? undefined,
+          size_hint: session.combo_view_size_hint ?? undefined
+        });
+      }
+
+      if (session.bottom_dock_tab || session.report_dock_visible !== null) {
+        await updateShellPanelState(nextDocument.document_id, "report_dock", {
+          active_tab: session.bottom_dock_tab ?? undefined,
+          visible: session.report_dock_visible ?? undefined,
+          size_hint: session.report_dock_size_hint ?? undefined
+        });
+      }
+
+      const restoredSelectionId = session.selected_object_id ?? selectionState?.selected_object_id ?? null;
+      if (restoredSelectionId) {
+        const restoredSelection = await setSelection(nextDocument.document_id, restoredSelectionId);
+        await refreshDocumentSlices(nextDocument.document_id, restoredSelection.selected_object_id, nextDocument);
+      } else {
+        await refreshDocumentSlices(nextDocument.document_id, undefined, nextDocument);
+      }
+
+      setOpenPath(session.file_path);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to restore workspace session");
+    }
+  }
+
+  async function handleClearRecentDocuments() {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellSessionState(document.document_id, {
+        clear_recent_documents: true
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to clear recent documents");
+    }
+  }
+
+  async function handleDismissSession(session: WorkspaceSession) {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellSessionState(document.document_id, {
+        remove_workspace_session_id: session.session_id
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to dismiss workspace session");
+    }
+  }
+
+  async function handleClearInactiveSessions() {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellSessionState(document.document_id, {
+        clear_inactive_workspace_sessions: true
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to clear inactive sessions");
     }
   }
 
@@ -2120,7 +2306,14 @@ export default function App() {
   const workspaceSessions: WorkspaceSession[] =
     (shellSnapshot?.workspace_sessions ?? []).map((session: WorkspaceSessionEntry) => ({
       ...session,
-      selected_object_id: session.selected_object_id ?? null
+      selected_object_id: session.selected_object_id ?? null,
+      selection_mode: session.selection_mode ?? null,
+      combo_view_tab: session.combo_view_tab ?? null,
+      bottom_dock_tab: (session.bottom_dock_tab as BottomDockTab | undefined) ?? null,
+      combo_view_visible: session.combo_view_visible ?? null,
+      report_dock_visible: session.report_dock_visible ?? null,
+      combo_view_size_hint: session.combo_view_size_hint ?? null,
+      report_dock_size_hint: session.report_dock_size_hint ?? null
     }));
   const comboViewTab =
     shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "combo_view")?.active_tab ??
@@ -2278,14 +2471,20 @@ export default function App() {
             <div className="recent-docs-list">
               {recentDocuments.map((entry) => (
                 <button
-                  className={`recent-doc-chip ${openPath === entry.file_path ? "recent-doc-chip-active" : ""}`}
+                  className={`recent-doc-chip ${(document.file_path ?? openPath) === entry.file_path ? "recent-doc-chip-active" : ""}`}
                   key={entry.file_path}
-                  onClick={() => setOpenPath(entry.file_path)}
+                  onClick={() => void handleRecentDocumentOpen(entry.file_path)}
+                  title={`${entry.display_name} • ${entry.workbench} • ${entry.dirty ? "Unsaved" : "Saved"}`}
                   type="button"
                 >
                   {entry.display_name}
                 </button>
               ))}
+            </div>
+            <div className="recent-doc-actions">
+              <button className="action-button action-button-subtle" onClick={() => void handleClearRecentDocuments()} type="button">
+                Clear History
+              </button>
             </div>
           </div>
         ) : null}
@@ -2293,12 +2492,15 @@ export default function App() {
 
       <SessionTabs
         activeDocumentId={document.document_id}
+        activeFilePath={document.file_path}
+        onClearInactive={() => {
+          void handleClearInactiveSessions();
+        }}
+        onDismiss={(session) => {
+          void handleDismissSession(session);
+        }}
         onActivate={(session) => {
-          if (session.document_id === document.document_id) {
-            setOpenPath(session.file_path);
-            return;
-          }
-          void openDocumentPath(session.file_path);
+          void handleSessionActivate(session);
         }}
         sessions={workspaceSessions}
       />

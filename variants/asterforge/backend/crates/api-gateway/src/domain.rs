@@ -322,6 +322,13 @@ pub struct WorkspaceSessionEntry {
     pub workbench: String,
     pub dirty: bool,
     pub selected_object_id: Option<String>,
+    pub selection_mode: Option<String>,
+    pub combo_view_tab: Option<String>,
+    pub bottom_dock_tab: Option<String>,
+    pub combo_view_visible: Option<bool>,
+    pub report_dock_visible: Option<bool>,
+    pub combo_view_size_hint: Option<f32>,
+    pub report_dock_size_hint: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

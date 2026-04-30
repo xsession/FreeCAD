@@ -183,6 +183,13 @@ message WorkspaceSessionEntry {
   string workbench = 5;
   bool dirty = 6;
   optional string selected_object_id = 7;
+  optional string selection_mode = 8;
+  optional string combo_view_tab = 9;
+  optional string bottom_dock_tab = 10;
+  optional bool combo_view_visible = 11;
+  optional bool report_dock_visible = 12;
+  optional float combo_view_size_hint = 13;
+  optional float report_dock_size_hint = 14;
 }
 
 message ShellSnapshot {
@@ -354,6 +361,13 @@ message ShellPanelMutationRequest {
   optional float size_hint = 5;
 }
 
+message ShellSessionMutationRequest {
+  string document_id = 1;
+  optional string remove_workspace_session_id = 2;
+  bool clear_recent_documents = 3;
+  bool clear_inactive_workspace_sessions = 4;
+}
+
 message PreselectionState {
   string document_id = 1;
   string current_mode = 2;
@@ -506,4 +520,5 @@ service WorkbenchService {
 
 service ShellService {
   rpc UpdatePanelState(ShellPanelMutationRequest) returns (ShellSnapshot);
+  rpc UpdateSessionState(ShellSessionMutationRequest) returns (ShellSnapshot);
 }

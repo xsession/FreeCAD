@@ -1,4 +1,9 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 pub use asterforge_command_core::CommandExecutionRequest;
 use asterforge_document_core::{DocumentState, DocumentSummary};
@@ -13,6 +18,7 @@ use asterforge_protocol_types::asterforge::protocol::v1::{
     PreselectionRequest as ProtoPreselectionRequest,
     PreselectionState as ProtoPreselectionState,
     ShellPanelMutationRequest as ProtoShellPanelMutationRequest,
+    ShellSessionMutationRequest as ProtoShellSessionMutationRequest,
     SelectionModeRequest as ProtoSelectionModeRequest, SelectionRef, SelectionReply,
     ShellSnapshot as ProtoShellSnapshot,
     WorkbenchActivationRequest as ProtoWorkbenchActivationRequest,
@@ -51,6 +57,24 @@ use crate::domain::{
 #[derive(Clone)]
 pub struct AppState {
     inner: Arc<RwLock<AppModel>>,
+    persistence_path: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(default)]
+struct PersistedWorkspaceState {
+    active_document_path: Option<String>,
+    active_workbench_id: Option<String>,
+    selected_object_id: Option<String>,
+    selection_mode: Option<String>,
+    recent_documents: Vec<RecentDocumentEntry>,
+    workspace_sessions: Vec<WorkspaceSessionEntry>,
+    combo_view_tab: String,
+    bottom_dock_tab: String,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    combo_view_size_hint: f32,
+    report_dock_size_hint: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -148,6 +172,14 @@ pub struct ShellPanelMutationRequest {
     pub size_hint: Option<f32>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ShellSessionMutationRequest {
+    pub document_id: String,
+    pub remove_workspace_session_id: Option<String>,
+    pub clear_recent_documents: bool,
+    pub clear_inactive_workspace_sessions: bool,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct HttpCommandExecutionResponse {
     pub command_id: String,
@@ -160,58 +192,62 @@ pub struct HttpCommandExecutionResponse {
 
 impl AppState {
     pub fn new() -> Self {
-        let snapshot = open_document_snapshot(None);
+        Self::with_persistence_path(default_persistence_path())
+    }
+
+    fn with_persistence_path(persistence_path: Option<PathBuf>) -> Self {
+        let persisted_workspace = persistence_path
+            .as_deref()
+            .and_then(load_persisted_workspace_state);
+        let snapshot = open_document_snapshot(
+            persisted_workspace
+                .as_ref()
+                .and_then(|state| state.active_document_path.as_deref()),
+        );
         let bridge_status = sample_bridge_status();
         let document = document_state_from_bridge(&snapshot, &bridge_status);
         let object_tree = object_tree_from_bridge(&snapshot);
         let selected_object_id = snapshot.selected_object_id.clone();
         let properties_by_object = build_property_map(&snapshot, &object_tree);
-        let recent_documents = vec![RecentDocumentEntry {
-            file_path: snapshot
-                .file_path
-                .clone()
-                .unwrap_or_else(|| "C:/models/actuator-mount.FCStd".into()),
-            display_name: snapshot.display_name.clone(),
-            workbench: snapshot.workbench.clone(),
-            dirty: snapshot.dirty,
-        }];
-        let workspace_sessions = vec![WorkspaceSessionEntry {
-            session_id: format!("{}:{}", snapshot.document_id, snapshot.file_path.clone().unwrap_or_default()),
-            document_id: snapshot.document_id.clone(),
-            display_name: snapshot.display_name.clone(),
-            file_path: snapshot
-                .file_path
-                .clone()
-                .unwrap_or_else(|| "C:/models/actuator-mount.FCStd".into()),
-            workbench: snapshot.workbench.clone(),
-            dirty: snapshot.dirty,
-            selected_object_id: Some(selected_object_id.clone()),
-        }];
+
+        let mut model = AppModel {
+            boot_report: sample_boot_report(),
+            bridge_status,
+            bridge_snapshot: snapshot,
+            document,
+            object_tree,
+            selection_mode: "object".into(),
+            preselected_object_id: None,
+            selected_object_id,
+            jobs: vec![],
+            properties_by_object,
+            events: sample_event_stream(),
+            undo_stack: UndoStack::new(50),
+            recent_documents: vec![],
+            workspace_sessions: vec![],
+            combo_view_tab: "model".into(),
+            bottom_dock_tab: "report".into(),
+            combo_view_visible: true,
+            report_dock_visible: true,
+            combo_view_size_hint: 0.28,
+            report_dock_size_hint: 0.24,
+        };
+
+        if let Some(persisted_workspace) = persisted_workspace.as_ref() {
+            model.apply_persisted_workspace_state(persisted_workspace);
+        } else {
+            model.remember_current_document();
+        }
 
         Self {
-            inner: Arc::new(RwLock::new(AppModel {
-                boot_report: sample_boot_report(),
-                bridge_status,
-                bridge_snapshot: snapshot,
-                document,
-                object_tree,
-                selection_mode: "object".into(),
-                preselected_object_id: None,
-                selected_object_id,
-                jobs: vec![],
-                properties_by_object,
-                events: sample_event_stream(),
-                undo_stack: UndoStack::new(50),
-                recent_documents,
-                workspace_sessions,
-                combo_view_tab: "model".into(),
-                bottom_dock_tab: "report".into(),
-                combo_view_visible: true,
-                report_dock_visible: true,
-                combo_view_size_hint: 0.28,
-                report_dock_size_hint: 0.24,
-            })),
+            inner: Arc::new(RwLock::new(model)),
+            persistence_path,
         }
+    }
+
+    #[cfg(test)]
+    fn new_with_persistence_path(persistence_path: PathBuf) -> Self {
+        Self::with_persistence_path(Some(persistence_path))
     }
 
     pub async fn snapshot(&self) -> AppSnapshot {
@@ -266,7 +302,6 @@ impl AppState {
         model.bridge_snapshot = snapshot;
         model.preselected_object_id = None;
         model.sync_from_snapshot();
-        model.remember_current_document();
         let document_id = model.document.document_id.clone();
         let next_job_id = format!("job-{}-document.open", model.jobs.len() + 1);
         let open_stages = vec![
@@ -336,6 +371,8 @@ impl AppState {
             },
         );
 
+        self.persist_model(&model);
+
         model.document.summary().clone()
     }
 
@@ -384,6 +421,8 @@ impl AppState {
                 object_id: Some(next_selection.clone()),
             },
         );
+
+        self.persist_model(&model);
 
         Some(SelectionResponse {
             selected_object_id: next_selection,
@@ -437,6 +476,8 @@ impl AppState {
             },
         );
 
+        self.persist_model(&model);
+
         Some(model.selection_state())
     }
 
@@ -483,6 +524,8 @@ impl AppState {
                 object_id: Some(selected_object_id),
             },
         );
+
+        self.persist_model(&model);
 
         Some(model.document.summary().clone())
     }
@@ -618,6 +661,8 @@ impl AppState {
             _ => return None,
         }
 
+        model.remember_current_document();
+
         let document_id = model.document.document_id.clone();
         let selected_object_id = model.selected_object_id.clone();
         let detail = request
@@ -638,6 +683,8 @@ impl AppState {
             },
         );
 
+        self.persist_model(&model);
+
         Some(model.shell_snapshot())
     }
 
@@ -652,6 +699,88 @@ impl AppState {
             active_tab: request.active_tab,
             visible: request.visible,
             size_hint: request.size_hint,
+        })
+        .await
+        .map(proto_shell_snapshot_from_http)
+    }
+
+    pub async fn update_shell_sessions(
+        &self,
+        request: ShellSessionMutationRequest,
+    ) -> Option<ShellSnapshot> {
+        let mut model = self.inner.write().await;
+        if model.document.document_id != request.document_id {
+            return None;
+        }
+
+        let active_session_id = model.active_session_id();
+        let mut changed = false;
+
+        if request.clear_recent_documents {
+            model.recent_documents.clear();
+            changed = true;
+        }
+
+        if request.clear_inactive_workspace_sessions {
+            model.workspace_sessions
+                .retain(|entry| entry.session_id == active_session_id);
+            changed = true;
+        }
+
+        if let Some(session_id) = request.remove_workspace_session_id.as_deref() {
+            if session_id == active_session_id {
+                return None;
+            }
+            let previous_len = model.workspace_sessions.len();
+            model
+                .workspace_sessions
+                .retain(|entry| entry.session_id != session_id);
+            changed |= model.workspace_sessions.len() != previous_len;
+        }
+
+        if !changed {
+            return Some(model.shell_snapshot());
+        }
+
+        let document_id = model.document.document_id.clone();
+        let selected_object_id = model.selected_object_id.clone();
+        let detail = if request.clear_recent_documents && request.clear_inactive_workspace_sessions {
+            "cleared recent documents and inactive sessions".to_string()
+        } else if request.clear_recent_documents {
+            "cleared recent documents".to_string()
+        } else if request.clear_inactive_workspace_sessions {
+            "cleared inactive workspace sessions".to_string()
+        } else if let Some(session_id) = request.remove_workspace_session_id {
+            format!("dismissed workspace session {session_id}")
+        } else {
+            "updated shell session state".to_string()
+        };
+
+        model.events.insert(
+            0,
+            BackendEvent {
+                topic: "shell_session_changed".into(),
+                level: "info".into(),
+                message: detail,
+                document_id,
+                object_id: Some(selected_object_id),
+            },
+        );
+
+        self.persist_model(&model);
+        Some(model.shell_snapshot())
+    }
+
+    #[allow(dead_code)]
+    pub async fn update_shell_sessions_proto(
+        &self,
+        request: ProtoShellSessionMutationRequest,
+    ) -> Option<ProtoShellSnapshot> {
+        self.update_shell_sessions(ShellSessionMutationRequest {
+            document_id: request.document_id,
+            remove_workspace_session_id: request.remove_workspace_session_id,
+            clear_recent_documents: request.clear_recent_documents,
+            clear_inactive_workspace_sessions: request.clear_inactive_workspace_sessions,
         })
         .await
         .map(proto_shell_snapshot_from_http)
@@ -801,6 +930,10 @@ impl AppState {
         }
 
         Some(command_runtime::run_command(&mut model, request))
+            .map(|response| {
+                self.persist_model(&model);
+                response
+            })
     }
 
     pub async fn run_command_proto(&self, request: CommandInvocation) -> Option<CommandReply> {
@@ -814,6 +947,14 @@ impl AppState {
         self.run_command(http_request)
             .await
             .map(command_reply_from_http)
+    }
+}
+
+impl AppState {
+    fn persist_model(&self, model: &AppModel) {
+        if let Some(path) = self.persistence_path.as_deref() {
+            save_persisted_workspace_state(path, &model.persisted_workspace_state());
+        }
     }
 }
 
@@ -924,6 +1065,67 @@ impl AppModel {
         self.remember_current_document();
     }
 
+    fn apply_persisted_workspace_state(&mut self, persisted: &PersistedWorkspaceState) {
+        if let Some(selection_mode) = persisted.selection_mode.as_deref() {
+            if ["object", "body", "sketch", "feature"].contains(&selection_mode) {
+                self.selection_mode = selection_mode.to_string();
+            }
+        }
+
+        if let Some(workbench_id) = persisted.active_workbench_id.as_deref() {
+            let normalized = normalize_workbench_id(workbench_id);
+            if ["partdesign", "part", "sketcher", "mesh"].contains(&normalized.as_str()) {
+                self.bridge_snapshot.workbench = workbench_display_name(&normalized);
+            }
+        }
+
+        self.recent_documents = persisted.recent_documents.clone();
+        self.recent_documents.truncate(8);
+        self.workspace_sessions = persisted.workspace_sessions.clone();
+        self.workspace_sessions.truncate(8);
+
+        if !persisted.combo_view_tab.is_empty() && ["model", "tasks"].contains(&persisted.combo_view_tab.as_str()) {
+            self.combo_view_tab = persisted.combo_view_tab.clone();
+        }
+        if !persisted.bottom_dock_tab.is_empty()
+            && ["report", "python", "jobs", "diagnostics", "history", "commands"]
+                .contains(&persisted.bottom_dock_tab.as_str())
+        {
+            self.bottom_dock_tab = persisted.bottom_dock_tab.clone();
+        }
+        self.combo_view_visible = persisted.combo_view_visible;
+        self.report_dock_visible = persisted.report_dock_visible;
+        self.combo_view_size_hint = persisted.combo_view_size_hint.clamp(0.22, 0.42);
+        self.report_dock_size_hint = persisted.report_dock_size_hint.clamp(0.18, 0.4);
+
+        if let Some(selected_object_id) = persisted.selected_object_id.as_deref() {
+            if let Some(normalized) =
+                self.normalize_selection_for_mode(selected_object_id, &self.selection_mode)
+            {
+                self.bridge_snapshot.selected_object_id = normalized;
+            }
+        }
+
+        self.sync_from_snapshot();
+    }
+
+    fn persisted_workspace_state(&self) -> PersistedWorkspaceState {
+        PersistedWorkspaceState {
+            active_document_path: self.document.file_path.clone(),
+            active_workbench_id: Some(normalize_workbench_id(&self.document.workbench)),
+            selected_object_id: Some(self.selected_object_id.clone()),
+            selection_mode: Some(self.selection_mode.clone()),
+            recent_documents: self.recent_documents.clone(),
+            workspace_sessions: self.workspace_sessions.clone(),
+            combo_view_tab: self.combo_view_tab.clone(),
+            bottom_dock_tab: self.bottom_dock_tab.clone(),
+            combo_view_visible: self.combo_view_visible,
+            report_dock_visible: self.report_dock_visible,
+            combo_view_size_hint: self.combo_view_size_hint,
+            report_dock_size_hint: self.report_dock_size_hint,
+        }
+    }
+
     fn remember_current_document(&mut self) {
         let file_path = self
             .document
@@ -949,11 +1151,27 @@ impl AppModel {
             workbench: self.document.workbench.clone(),
             dirty: self.document.dirty,
             selected_object_id: Some(self.selected_object_id.clone()),
+            selection_mode: Some(self.selection_mode.clone()),
+            combo_view_tab: Some(self.combo_view_tab.clone()),
+            bottom_dock_tab: Some(self.bottom_dock_tab.clone()),
+            combo_view_visible: Some(self.combo_view_visible),
+            report_dock_visible: Some(self.report_dock_visible),
+            combo_view_size_hint: Some(self.combo_view_size_hint),
+            report_dock_size_hint: Some(self.report_dock_size_hint),
         };
         self.workspace_sessions
             .retain(|entry| entry.file_path != file_path);
         self.workspace_sessions.insert(0, session_entry);
         self.workspace_sessions.truncate(8);
+    }
+
+    fn active_session_id(&self) -> String {
+        let file_path = self
+            .document
+            .file_path
+            .clone()
+            .unwrap_or_else(|| format!("C:/models/{}.FCStd", self.document.display_name));
+        format!("{}:{}", self.document.document_id, file_path)
     }
 
     fn normalize_selection_for_mode(
@@ -978,6 +1196,71 @@ impl AppModel {
         } else {
             selectable_ids.into_iter().next()
         }
+    }
+}
+
+fn default_persistence_path() -> Option<PathBuf> {
+    #[cfg(test)]
+    {
+        return None;
+    }
+
+    #[cfg(not(test))]
+    {
+        if let Some(explicit) = std::env::var_os("ASTERFORGE_SHELL_STATE_FILE") {
+            return Some(PathBuf::from(explicit));
+        }
+
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return Some(PathBuf::from(appdata).join("AsterForge").join("shell-state.json"));
+        }
+
+        if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
+            return Some(PathBuf::from(state_home).join("asterforge").join("shell-state.json"));
+        }
+
+        return std::env::var_os("HOME")
+            .map(|home| PathBuf::from(home).join(".asterforge").join("shell-state.json"));
+    }
+}
+
+fn load_persisted_workspace_state(path: &Path) -> Option<PersistedWorkspaceState> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(error) => {
+            tracing::warn!(path = %path.display(), ?error, "failed to read persisted shell state");
+            return None;
+        }
+    };
+
+    match serde_json::from_str::<PersistedWorkspaceState>(&contents) {
+        Ok(state) => Some(state),
+        Err(error) => {
+            tracing::warn!(path = %path.display(), ?error, "failed to parse persisted shell state");
+            None
+        }
+    }
+}
+
+fn save_persisted_workspace_state(path: &Path, state: &PersistedWorkspaceState) {
+    if let Some(parent) = path.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            tracing::warn!(path = %path.display(), ?error, "failed to create shell state directory");
+            return;
+        }
+    }
+
+    let contents = match serde_json::to_vec_pretty(state) {
+        Ok(contents) => contents,
+        Err(error) => {
+            tracing::warn!(path = %path.display(), ?error, "failed to serialize persisted shell state");
+            return;
+        }
+    };
+
+    if let Err(error) = fs::write(path, contents) {
+        tracing::warn!(path = %path.display(), ?error, "failed to write persisted shell state");
     }
 }
 
@@ -1165,11 +1448,17 @@ fn dependency_properties(
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::{
+        collections::HashMap,
+        env, fs,
+        path::PathBuf,
+        time::{SystemTime, UNIX_EPOCH},
+    };
 
     use super::{
         ActivateWorkbenchRequest, AppState, CommandExecutionRequest, PreselectionRequest,
         SelectionModeRequest, SelectionRequest, ShellPanelMutationRequest,
+        ShellSessionMutationRequest,
     };
 
     fn command_request(command_id: &str, target_object_id: Option<&str>) -> CommandExecutionRequest {
@@ -1179,6 +1468,14 @@ mod tests {
             target_object_id: target_object_id.map(str::to_string),
             arguments: HashMap::new(),
         }
+    }
+
+    fn temp_persistence_path(test_name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock should be after epoch")
+            .as_nanos();
+        env::temp_dir().join(format!("asterforge-{test_name}-{nonce}.json"))
     }
 
     #[tokio::test]
@@ -1845,6 +2142,22 @@ mod tests {
         assert_eq!(shell_snapshot.recent_documents[0].file_path, "C:/models/fixture-one.FCStd");
         assert_eq!(shell_snapshot.workspace_sessions[0].file_path, "C:/models/fixture-one.FCStd");
         assert_eq!(
+            shell_snapshot.workspace_sessions[0].selection_mode.as_deref(),
+            Some("object")
+        );
+        assert_eq!(
+            shell_snapshot.workspace_sessions[0].combo_view_tab.as_deref(),
+            Some("tasks")
+        );
+        assert_eq!(
+            shell_snapshot.workspace_sessions[0].bottom_dock_tab.as_deref(),
+            Some("report")
+        );
+        assert_eq!(shell_snapshot.workspace_sessions[0].combo_view_visible, Some(true));
+        assert_eq!(shell_snapshot.workspace_sessions[0].report_dock_visible, Some(true));
+        assert_eq!(shell_snapshot.workspace_sessions[0].combo_view_size_hint, Some(0.28));
+        assert_eq!(shell_snapshot.workspace_sessions[0].report_dock_size_hint, Some(0.24));
+        assert_eq!(
             shell_snapshot
                 .layout
                 .panels
@@ -1878,5 +2191,215 @@ mod tests {
             .expect("report dock panel should exist");
         assert!(!report_dock.visible);
         assert_eq!(report_dock.size_hint, Some(0.31));
+    }
+
+    #[tokio::test]
+    async fn persisted_workspace_state_survives_restart() {
+        let persistence_path = temp_persistence_path("workspace-state");
+        let state = AppState::new_with_persistence_path(persistence_path.clone());
+
+        let document = state
+            .open_document("C:/models/persisted-workspace.FCStd".to_string())
+            .await;
+
+        state
+            .activate_workbench(ActivateWorkbenchRequest {
+                document_id: document.document_id.clone(),
+                workbench_id: "sketcher".to_string(),
+            })
+            .await
+            .expect("workbench activation should succeed");
+
+        state
+            .set_selection_mode(SelectionModeRequest {
+                document_id: document.document_id.clone(),
+                mode_id: "sketch".to_string(),
+            })
+            .await
+            .expect("selection mode should persist");
+
+        state
+            .set_selection(SelectionRequest {
+                document_id: document.document_id.clone(),
+                object_id: "sketch-001".to_string(),
+            })
+            .await
+            .expect("selection should persist");
+
+        state
+            .update_shell_panel(ShellPanelMutationRequest {
+                document_id: document.document_id.clone(),
+                panel_id: "combo_view".to_string(),
+                active_tab: Some("tasks".to_string()),
+                visible: Some(false),
+                size_hint: Some(0.34),
+            })
+            .await
+            .expect("combo view mutation should persist");
+
+        state
+            .update_shell_panel(ShellPanelMutationRequest {
+                document_id: document.document_id.clone(),
+                panel_id: "report_dock".to_string(),
+                active_tab: Some("python".to_string()),
+                visible: Some(true),
+                size_hint: Some(0.31),
+            })
+            .await
+            .expect("report dock mutation should persist");
+
+        drop(state);
+
+        let rehydrated_state = AppState::new_with_persistence_path(persistence_path.clone());
+        let boot = rehydrated_state.boot_payload().await;
+
+        assert_eq!(
+            boot.document.file_path.as_deref(),
+            Some("C:/models/persisted-workspace.FCStd")
+        );
+        assert_eq!(boot.document.workbench, "Sketcher");
+        assert_eq!(boot.selected_object_id, "sketch-001");
+        assert_eq!(boot.selection_state.current_mode, "sketch");
+
+        let combo_panel = boot
+            .shell_snapshot
+            .layout
+            .panels
+            .iter()
+            .find(|panel| panel.panel_id == "combo_view")
+            .expect("combo view panel should exist after restart");
+        assert!(!combo_panel.visible);
+        assert_eq!(combo_panel.active_tab.as_deref(), Some("tasks"));
+        assert_eq!(combo_panel.size_hint, Some(0.34));
+
+        let report_panel = boot
+            .shell_snapshot
+            .layout
+            .panels
+            .iter()
+            .find(|panel| panel.panel_id == "report_dock")
+            .expect("report dock panel should exist after restart");
+        assert!(report_panel.visible);
+        assert_eq!(report_panel.active_tab.as_deref(), Some("python"));
+        assert_eq!(report_panel.size_hint, Some(0.31));
+
+        assert_eq!(
+            boot.shell_snapshot
+                .recent_documents
+                .first()
+                .map(|entry| entry.file_path.as_str()),
+            Some("C:/models/persisted-workspace.FCStd")
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.selected_object_id.as_deref()),
+            Some("sketch-001")
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.selection_mode.as_deref()),
+            Some("sketch")
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.combo_view_tab.as_deref()),
+            Some("tasks")
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.bottom_dock_tab.as_deref()),
+            Some("python")
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.combo_view_visible),
+            Some(false)
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.report_dock_visible),
+            Some(true)
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.combo_view_size_hint),
+            Some(0.34)
+        );
+        assert_eq!(
+            boot.shell_snapshot
+                .workspace_sessions
+                .first()
+                .and_then(|entry| entry.report_dock_size_hint),
+            Some(0.31)
+        );
+
+        fs::remove_file(&persistence_path).ok();
+    }
+
+    #[tokio::test]
+    async fn shell_session_mutation_clears_recents_and_dismisses_inactive_sessions() {
+        let state = AppState::new();
+
+        let first_document = state
+            .open_document("C:/models/session-a.FCStd".to_string())
+            .await;
+        state
+            .open_document("C:/models/session-b.FCStd".to_string())
+            .await;
+
+        let before_snapshot = state
+            .shell_snapshot("doc-demo-001")
+            .await
+            .expect("shell snapshot should be available");
+        assert!(before_snapshot.recent_documents.len() >= 2);
+        assert!(before_snapshot.workspace_sessions.len() >= 2);
+
+        let removed_session_id = before_snapshot
+            .workspace_sessions
+            .iter()
+            .find(|entry| entry.file_path == first_document.file_path.clone().unwrap_or_default())
+            .map(|entry| entry.session_id.clone())
+            .expect("inactive session should exist");
+
+        let after_remove = state
+            .update_shell_sessions(ShellSessionMutationRequest {
+                document_id: "doc-demo-001".to_string(),
+                remove_workspace_session_id: Some(removed_session_id.clone()),
+                clear_recent_documents: false,
+                clear_inactive_workspace_sessions: false,
+            })
+            .await
+            .expect("session dismissal should succeed");
+        assert!(after_remove
+            .workspace_sessions
+            .iter()
+            .all(|entry| entry.session_id != removed_session_id));
+
+        let after_clear = state
+            .update_shell_sessions(ShellSessionMutationRequest {
+                document_id: "doc-demo-001".to_string(),
+                remove_workspace_session_id: None,
+                clear_recent_documents: true,
+                clear_inactive_workspace_sessions: true,
+            })
+            .await
+            .expect("session clear should succeed");
+        assert!(after_clear.recent_documents.is_empty());
+        assert_eq!(after_clear.workspace_sessions.len(), 1);
+        assert_eq!(after_clear.workspace_sessions[0].document_id, "doc-demo-001");
     }
 }

@@ -7,6 +7,7 @@ use axum::{
 use asterforge_command_core::CommandExecutionRequest;
 use asterforge_protocol_types::asterforge::protocol::v1::{
     CommandInvocation, PreselectionRequest as ProtoPreselectionRequest,
+    ShellSessionMutationRequest as ProtoShellSessionMutationRequest,
     SelectionModeRequest as ProtoSelectionModeRequest, SelectionRef,
 };
 use tracing::info;
@@ -29,7 +30,7 @@ use super::protocol::{
 use super::state::{
     ActivateWorkbenchRequest, AppState, BootPayload, HttpCommandExecutionResponse,
     PreselectionRequest, SelectionModeRequest, SelectionRequest, SelectionResponse,
-    ShellPanelMutationRequest,
+    ShellPanelMutationRequest, ShellSessionMutationRequest,
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -39,6 +40,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/documents/open", post(open_document))
         .route("/api/workbench/activate", post(activate_workbench))
         .route("/api/shell/panel", post(update_shell_panel))
+        .route("/api/shell/session", post(update_shell_session_state))
         .route("/api/selection", post(set_selection))
         .route("/api/selection/mode", post(set_selection_mode))
         .route("/api/preselection", post(set_preselection))
@@ -97,6 +99,24 @@ async fn update_shell_panel(
     state
         .update_shell_panel(request)
         .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_shell_session_state(
+    State(state): State<AppState>,
+    Json(request): Json<ShellSessionMutationRequest>,
+) -> Result<Json<ShellSnapshot>, StatusCode> {
+    let proto_request = ProtoShellSessionMutationRequest {
+        document_id: request.document_id,
+        remove_workspace_session_id: request.remove_workspace_session_id,
+        clear_recent_documents: request.clear_recent_documents,
+        clear_inactive_workspace_sessions: request.clear_inactive_workspace_sessions,
+    };
+    state
+        .update_shell_sessions_proto(proto_request)
+        .await
+        .map(http_shell_snapshot_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }

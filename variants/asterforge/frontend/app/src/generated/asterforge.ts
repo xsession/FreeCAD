@@ -181,6 +181,13 @@ export interface WorkspaceSessionEntry {
   workbench: string;
   dirty: boolean;
   selected_object_id: string | undefined;
+  selection_mode: string | undefined;
+  combo_view_tab: string | undefined;
+  bottom_dock_tab: string | undefined;
+  combo_view_visible: boolean | undefined;
+  report_dock_visible: boolean | undefined;
+  combo_view_size_hint: number | undefined;
+  report_dock_size_hint: number | undefined;
 }
 
 export interface ShellSnapshot {
@@ -343,6 +350,13 @@ export interface ShellPanelMutationRequest {
   active_tab: string | undefined;
   visible: boolean | undefined;
   size_hint: number | undefined;
+}
+
+export interface ShellSessionMutationRequest {
+  document_id: string;
+  remove_workspace_session_id: string | undefined;
+  clear_recent_documents: boolean;
+  clear_inactive_workspace_sessions: boolean;
 }
 
 export interface PreselectionState {

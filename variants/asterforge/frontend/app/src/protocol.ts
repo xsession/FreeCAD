@@ -143,6 +143,26 @@ export async function updateShellPanelState(
   });
 }
 
+export async function updateShellSessionState(
+  documentId: string,
+  mutation: {
+    remove_workspace_session_id?: string;
+    clear_recent_documents?: boolean;
+    clear_inactive_workspace_sessions?: boolean;
+  }
+): Promise<ShellSnapshot> {
+  return fetchJson<ShellSnapshot>("/api/shell/session", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      document_id: documentId,
+      ...mutation
+    })
+  });
+}
+
 export async function fetchProperties(
   documentId: string,
   objectId: string

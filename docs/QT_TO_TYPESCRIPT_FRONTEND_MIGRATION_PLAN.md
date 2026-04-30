@@ -1,6 +1,6 @@
 # FreeCAD Qt Removal and TypeScript Frontend Migration Plan
 
-Status: proposed implementation plan
+Status: active implementation plan
 
 ## Related Documents
 
@@ -14,6 +14,20 @@ Status: proposed implementation plan
 - `docs/architecture/ADR-0010-typescript-shell-and-qt-retirement.md`
 - `docs/architecture/qt-to-typescript-migration-checklist.md`
 - `docs/architecture/qt-to-typescript-milestone-issues.md`
+
+## Current Implementation State
+
+The repository is no longer at planning-only status for shell migration. The AsterForge variant already implements a backend-owned TypeScript shell slice with these verified capabilities:
+
+- protocol-owned shell snapshot hydration through Rust and TypeScript generated types
+- backend-owned active workbench state and shell-driven workbench switching
+- backend-owned recent documents, workspace sessions, and shell session management actions
+- backend-owned combo view and bottom dock tabs, visibility, and size hints
+- persisted shell workspace state restored on gateway startup
+- session restore that reapplies workbench, selection mode, selection, dock tabs, dock visibility, and dock size hints
+- React-rendered task panel with differentiated PartDesign, Sketcher, and Part workspace behavior
+
+The main remaining gap is not shell-state ownership but deeper workflow parity: command extraction, editing surfaces, viewport behavior, plugin compatibility, and dual-shell validation still remain unfinished.
 
 ## 1. Goal
 

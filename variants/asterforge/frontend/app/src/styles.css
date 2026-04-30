@@ -246,6 +246,14 @@ select {
   margin-top: 0;
 }
 
+.session-tabs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
 .session-tabs {
   display: flex;
   gap: 6px;
@@ -253,8 +261,13 @@ select {
   padding-bottom: 2px;
 }
 
-.session-tab {
+.session-tab-card {
+  position: relative;
   min-width: 210px;
+}
+
+.session-tab {
+  width: 100%;
   display: grid;
   gap: 8px;
   padding: 8px 10px;
@@ -289,6 +302,24 @@ select {
 
 .session-tab-meta {
   text-transform: uppercase;
+}
+
+.session-tab-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.session-tab-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
 }
 
 .eyebrow,
@@ -395,6 +426,12 @@ select {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+.recent-doc-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .recent-doc-chip {
