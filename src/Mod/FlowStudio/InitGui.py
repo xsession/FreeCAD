@@ -285,6 +285,55 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 return toolbar
         return None
 
+    @staticmethod
+    def _qt_enum_value(value, default=0):
+        enum_value = getattr(value, "value", None)
+        if isinstance(enum_value, (int, float)):
+            return int(enum_value)
+
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return int(default)
+
+    def _ensure_active_3d_view(self):
+        doc = getattr(FreeCAD, "ActiveDocument", None)
+        if doc is None:
+            return
+
+        gui_doc = FreeCADGui.getDocument(doc.Name)
+        if gui_doc is None:
+            return
+
+        try:
+            active_view = gui_doc.activeView()
+        except Exception:
+            active_view = None
+
+        if active_view is not None:
+            return
+
+        try:
+            view = gui_doc.createView("Gui::View3DInventor")
+        except Exception as exc:
+            FreeCAD.Console.PrintError(
+                f"FlowStudio: failed to create 3D view ({exc}).\n"
+            )
+            return
+
+        if view is None:
+            return
+
+        try:
+            view.viewIsometric()
+            view.fitAll()
+        except Exception:
+            pass
+
+    def _restore_workbench_ui_state(self):
+        self._ensure_active_3d_view()
+        self._restore_classic_toolbar_layout()
+
     def _save_classic_toolbar_layout(self):
         if self._ribbon_enabled():
             return
@@ -300,8 +349,8 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
                 continue
 
             layout[name] = {
-                "area": int(main_window.toolBarArea(toolbar)),
-                "orientation": int(toolbar.orientation()),
+                "area": self._qt_enum_value(main_window.toolBarArea(toolbar)),
+                "orientation": self._qt_enum_value(toolbar.orientation()),
                 "visible": bool(toolbar.isVisible()),
                 "floating": bool(toolbar.isFloating()),
             }
@@ -336,12 +385,18 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
             if toolbar is None or not isinstance(config, dict):
                 continue
 
-            toolbar.setOrientation(QtCore.Qt.Orientation(int(config.get("orientation", int(toolbar.orientation())))))
+            toolbar.setOrientation(
+                QtCore.Qt.Orientation(
+                    int(config.get("orientation", self._qt_enum_value(toolbar.orientation())))
+                )
+            )
 
             if bool(config.get("floating", False)):
                 toolbar.setFloating(True)
             else:
-                area = QtCore.Qt.ToolBarArea(int(config.get("area", int(main_window.toolBarArea(toolbar)))))
+                area = QtCore.Qt.ToolBarArea(
+                    int(config.get("area", self._qt_enum_value(main_window.toolBarArea(toolbar))))
+                )
                 if toolbar.isFloating():
                     toolbar.setFloating(False)
                 main_window.addToolBar(area, toolbar)
@@ -612,7 +667,7 @@ class FlowStudioWorkbench(FreeCADGui.Workbench):
         if enterprise_enabled_fn():
             on_workbench_activated_fn()
 
-        QtCore.QTimer.singleShot(0, self._restore_classic_toolbar_layout)
+        QtCore.QTimer.singleShot(0, self._restore_workbench_ui_state)
 
     def Deactivated(self):
         """Called when switching away from this workbench."""

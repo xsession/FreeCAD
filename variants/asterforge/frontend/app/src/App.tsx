@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
+  activateWorkbench,
   fetchBootstrap,
   fetchCommandCatalog,
   fetchDiagnostics,
@@ -8,6 +9,7 @@ import {
   fetchJobs,
   fetchObjectTree,
   fetchPreselectionState,
+  fetchShellSnapshot,
   fetchProperties,
   fetchSelectionState,
   fetchTaskPanel,
@@ -17,6 +19,7 @@ import {
   setPreselection,
   setSelection,
   setSelectionMode,
+  updateShellPanelState,
   type ActivityEvent,
   type BootPayload,
   type CommandArgumentDefinition,
@@ -30,11 +33,14 @@ import {
   type ObjectNode,
   type PreselectionStateResponse,
   type PropertyResponse,
+  type RecentDocumentEntry,
   type SelectionStateResponse,
+  type ShellSnapshot,
   type TaskPanelResponse,
   type ViewportDiffResponse,
   type ViewportDrawable,
-  type ViewportResponse
+  type ViewportResponse,
+  type WorkspaceSessionEntry
 } from "./protocol";
 
 type ShellNotice = {
@@ -53,6 +59,8 @@ type WorkspaceSession = {
   dirty: boolean;
   selected_object_id: string | null;
 };
+
+type BottomDockTab = "report" | "python" | "jobs" | "diagnostics" | "history" | "commands";
 
 function TreeNode({
   node,
@@ -323,6 +331,65 @@ function QuickActionRail({
           <span>{command.action_label ?? command.label}</span>
           {command.shortcut ? <strong>{command.shortcut}</strong> : null}
         </button>
+      ))}
+    </div>
+  );
+}
+
+function ShellToolbarBands({
+  catalog,
+  onRunCommand,
+  shellSnapshot
+}: {
+  catalog: CommandCatalogResponse | null;
+  onRunCommand: (commandId: string) => void;
+  shellSnapshot: ShellSnapshot | null;
+}) {
+  if (!catalog || !shellSnapshot) {
+    return <QuickActionRail catalog={catalog} onRunCommand={onRunCommand} />;
+  }
+
+  const commandById = new Map(catalog.commands.map((command) => [command.command_id, command]));
+
+  return (
+    <div className="shell-toolbar-bands">
+      {shellSnapshot.toolbar_bands.bands.map((band) => (
+        <div className="shell-toolbar-band" key={band.band_id}>
+          <span className="dock-strip-label">{band.label}</span>
+          <div className="shell-toolbar-band-actions">
+            {band.toolbars.filter((toolbar) => toolbar.visible).map((toolbar) => (
+              <div className="shell-toolbar-group" key={toolbar.toolbar_id}>
+                {toolbar.items.map((item, index) => {
+                  if (item.kind === "separator") {
+                    return <span className="shell-toolbar-separator" key={`${toolbar.toolbar_id}-${index}`} />;
+                  }
+
+                  const command = item.command_id ? commandById.get(item.command_id) : undefined;
+                  const label = item.label ?? command?.action_label ?? command?.label ?? item.command_id;
+                  const enabled = item.enabled ?? command?.enabled ?? false;
+                  const isPrimary = item.command_id === "document.recompute";
+
+                  return (
+                    <button
+                      className={`action-button ${isPrimary ? "action-button-primary" : ""}`}
+                      disabled={!enabled || !item.command_id}
+                      key={item.command_id ?? `${toolbar.toolbar_id}-${index}`}
+                      onClick={() => {
+                        if (item.command_id) {
+                          onRunCommand(item.command_id);
+                        }
+                      }}
+                      title={toolbar.label}
+                      type="button"
+                    >
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -1483,6 +1550,7 @@ function objectMatchesSelectionMode(objectType: string, selectionMode: string) {
 export default function App() {
   const [boot, setBoot] = useState<BootPayload | null>(null);
   const [document, setDocument] = useState<DocumentRef | null>(null);
+  const [shellSnapshot, setShellSnapshot] = useState<ShellSnapshot | null>(null);
   const [objectTree, setObjectTree] = useState<ObjectNode[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
   const [properties, setProperties] = useState<PropertyResponse | null>(null);
@@ -1497,14 +1565,9 @@ export default function App() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [commandStatus, setCommandStatus] = useState<CommandExecutionResponse | null>(null);
   const [openPath, setOpenPath] = useState(initialPath);
-  const [recentDocuments, setRecentDocuments] = useState<string[]>([initialPath]);
-  const [workspaceSessions, setWorkspaceSessions] = useState<WorkspaceSession[]>([]);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [comboViewTab, setComboViewTab] = useState<"model" | "tasks">("model");
-  const [bottomDockTab, setBottomDockTab] = useState<
-    "report" | "python" | "jobs" | "diagnostics" | "history" | "commands"
-  >("report");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -1521,6 +1584,7 @@ export default function App() {
 
         setBoot(payload);
         setDocument(payload.document);
+        setShellSnapshot(payload.shell_snapshot);
         setObjectTree(payload.object_tree);
         setSelectedObjectId(payload.selected_object_id);
         setProperties(payload.properties);
@@ -1533,22 +1597,6 @@ export default function App() {
         setSelectionState(payload.selection_state);
         setJobs(payload.jobs);
         setEvents(payload.events);
-        if (payload.document.file_path) {
-          upsertWorkspaceSession({
-            document_id: payload.document.document_id,
-            display_name: payload.document.display_name,
-            dirty: payload.document.dirty,
-            file_path: payload.document.file_path,
-            selected_object_id: payload.selected_object_id,
-            workbench: payload.document.workbench
-          });
-        }
-        if (payload.document.file_path) {
-          setRecentDocuments((current) => [
-            payload.document.file_path ?? initialPath,
-            ...current.filter((path) => path !== payload.document.file_path)
-          ].slice(0, 5));
-        }
         setError(null);
       } catch (reason) {
         if (!active) {
@@ -1568,31 +1616,6 @@ export default function App() {
     };
   }, []);
 
-  function upsertWorkspaceSession(session: Omit<WorkspaceSession, "session_id">) {
-    setWorkspaceSessions((current) => {
-      const existing = current.find((item) => item.file_path === session.file_path);
-      if (existing) {
-        return current.map((item) =>
-          item.file_path === session.file_path
-            ? {
-                ...item,
-                ...session,
-                session_id: item.session_id
-              }
-            : item
-        );
-      }
-
-      return [
-        {
-          ...session,
-          session_id: `${session.document_id}:${session.file_path}`
-        },
-        ...current
-      ].slice(0, 8);
-    });
-  }
-
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -1610,7 +1633,13 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  async function refreshDocumentSlices(documentId: string, objectId: string) {
+  async function refreshDocumentSlices(
+    documentId: string,
+    objectId?: string,
+    documentOverride?: DocumentRef
+  ) {
+    const nextSelectionState = await fetchSelectionState(documentId);
+    const resolvedObjectId = objectId ?? nextSelectionState.selected_object_id;
     const [
       nextProperties,
       nextObjectTree,
@@ -1621,10 +1650,10 @@ export default function App() {
       nextTaskPanel,
       nextDiagnostics,
       nextPreselectionState,
-      nextSelectionState,
-      nextJobs
+      nextJobs,
+      nextShellSnapshot
     ] = await Promise.all([
-      fetchProperties(documentId, objectId),
+      fetchProperties(documentId, resolvedObjectId),
       fetchObjectTree(documentId),
       fetchViewport(documentId),
       fetchFeatureHistory(documentId),
@@ -1633,9 +1662,10 @@ export default function App() {
       fetchTaskPanel(documentId),
       fetchDiagnostics(documentId),
       fetchPreselectionState(documentId),
-      fetchSelectionState(documentId),
-      fetchJobs(documentId)
+      fetchJobs(documentId),
+      fetchShellSnapshot(documentId)
     ]);
+    const activeDocument = documentOverride ?? document ?? nextShellSnapshot.document;
     setProperties(nextProperties);
     setObjectTree(nextObjectTree);
     setViewport(nextViewport);
@@ -1646,15 +1676,33 @@ export default function App() {
     setDiagnostics(nextDiagnostics);
     setPreselectionState(nextPreselectionState);
     setSelectionState(nextSelectionState);
+    setSelectedObjectId(nextSelectionState.selected_object_id);
     setJobs(nextJobs);
-    upsertWorkspaceSession({
-      document_id: documentId,
-      display_name: document?.display_name ?? documentId,
-      dirty: document?.dirty ?? false,
-      file_path: document?.file_path ?? openPath,
-      selected_object_id: objectId,
-      workbench: document?.workbench ?? "unknown"
-    });
+    setShellSnapshot(nextShellSnapshot);
+    if (activeDocument) {
+      setDocument(activeDocument);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              document: activeDocument,
+              object_tree: nextObjectTree,
+              selected_object_id: nextSelectionState.selected_object_id,
+              properties: nextProperties,
+              viewport: nextViewport,
+              feature_history: nextHistory,
+              command_catalog: nextCommandCatalog,
+              task_panel: nextTaskPanel,
+              diagnostics: nextDiagnostics,
+              selection_state: nextSelectionState,
+              preselection_state: nextPreselectionState,
+              jobs: nextJobs,
+              shell_snapshot: nextShellSnapshot,
+              events: nextEvents
+            }
+          : current
+      );
+    }
   }
 
   async function handleSelect(objectId: string) {
@@ -1782,25 +1830,17 @@ export default function App() {
         dirty: response.document_dirty
       };
       setDocument(nextDocument);
-      upsertWorkspaceSession({
-        document_id: nextDocument.document_id,
-        display_name: nextDocument.display_name,
-        dirty: nextDocument.dirty,
-        file_path: nextDocument.file_path ?? openPath,
-        selected_object_id: selectedObjectId,
-        workbench: nextDocument.workbench
-      });
 
       // Apply incremental diff when available, fall back to full fetch
       if (response.viewport_diff && viewport) {
         const patched = applyViewportDiff(viewport, response.viewport_diff);
         setViewport(patched);
         setSelectedObjectId(patched.selected_object_id);
-        await refreshDocumentSlices(document.document_id, patched.selected_object_id);
+        await refreshDocumentSlices(document.document_id, patched.selected_object_id, nextDocument);
       } else if (selectedObjectId) {
         const nextViewport = await fetchViewport(document.document_id);
         setSelectedObjectId(nextViewport.selected_object_id);
-        await refreshDocumentSlices(document.document_id, nextViewport.selected_object_id);
+        await refreshDocumentSlices(document.document_id, nextViewport.selected_object_id, nextDocument);
       } else {
         setEvents(await fetchEvents(document.document_id));
       }
@@ -1821,6 +1861,29 @@ export default function App() {
     await openDocumentPath(openPath);
   }
 
+  async function handleWorkbenchChange(workbenchId: string) {
+    if (!document) {
+      return;
+    }
+
+    const activeWorkbenchId = shellSnapshot?.workbench_catalog.active_workbench_id ?? document.workbench.toLowerCase();
+    if (workbenchId === activeWorkbenchId) {
+      return;
+    }
+
+    try {
+      const nextDocument = await activateWorkbench(document.document_id, workbenchId);
+      await refreshDocumentSlices(
+        nextDocument.document_id,
+        selectedObjectId ?? selectionState?.selected_object_id,
+        nextDocument
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to activate workbench");
+    }
+  }
+
   async function openDocumentPath(filePath: string) {
     if (!boot && !document) {
       return;
@@ -1836,7 +1899,8 @@ export default function App() {
         nextDiagnostics,
         nextPreselectionState,
         nextSelectionState,
-        nextJobs
+        nextJobs,
+        nextShellSnapshot
       ] = await Promise.all([
         fetchViewport(nextDocument.document_id),
         fetchCommandCatalog(nextDocument.document_id),
@@ -1845,7 +1909,8 @@ export default function App() {
         fetchDiagnostics(nextDocument.document_id),
         fetchPreselectionState(nextDocument.document_id),
         fetchSelectionState(nextDocument.document_id),
-        fetchJobs(nextDocument.document_id)
+        fetchJobs(nextDocument.document_id),
+        fetchShellSnapshot(nextDocument.document_id)
       ]);
       const nextHistory = await fetchFeatureHistory(nextDocument.document_id);
       const nextObjectTree = await fetchObjectTree(nextDocument.document_id);
@@ -1867,20 +1932,9 @@ export default function App() {
       setPreselectionState(nextPreselectionState);
       setSelectionState(nextSelectionState);
       setJobs(nextJobs);
+      setShellSnapshot(nextShellSnapshot);
       setEvents(nextEvents);
       setCommandStatus(null);
-      upsertWorkspaceSession({
-        document_id: nextDocument.document_id,
-        display_name: nextDocument.display_name,
-        dirty: nextDocument.dirty,
-        file_path: nextDocument.file_path ?? filePath,
-        selected_object_id: nextSelectedObjectId,
-        workbench: nextDocument.workbench
-      });
-      setRecentDocuments((current) => [
-        filePath,
-        ...current.filter((path) => path !== filePath)
-      ].slice(0, 5));
       setBoot((current) =>
         current
           ? {
@@ -1897,6 +1951,7 @@ export default function App() {
               selection_state: nextSelectionState,
               preselection_state: nextPreselectionState,
               jobs: nextJobs,
+              shell_snapshot: nextShellSnapshot,
               events: nextEvents
             }
           : current
@@ -1905,6 +1960,112 @@ export default function App() {
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to open document");
+    }
+  }
+
+  async function handlePanelTabChange(panelId: string, activeTab: string) {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellPanelState(document.document_id, panelId, {
+        active_tab: activeTab,
+        visible: true
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to update shell layout");
+    }
+  }
+
+  async function handlePanelVisibilityChange(panelId: "combo_view" | "report_dock", visible: boolean) {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellPanelState(document.document_id, panelId, {
+        visible
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to update panel visibility");
+    }
+  }
+
+  async function handlePanelSizeChange(
+    panelId: "combo_view" | "report_dock",
+    nextSizeHint: number
+  ) {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellPanelState(document.document_id, panelId, {
+        size_hint: nextSizeHint
+      });
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to resize panel");
+    }
+  }
+
+  async function handleMenuAction(commandId: string | null | undefined) {
+    setOpenMenuId(null);
+    if (!commandId) {
+      return;
+    }
+
+    switch (commandId) {
+      case "shell.toggle_combo_view":
+        await handlePanelVisibilityChange("combo_view", !comboViewVisible);
+        return;
+      case "shell.show_model_stack":
+        await handlePanelTabChange("combo_view", "model");
+        return;
+      case "shell.show_task_stack":
+        await handlePanelTabChange("combo_view", "tasks");
+        return;
+      case "shell.toggle_bottom_dock":
+        await handlePanelVisibilityChange("report_dock", !reportDockVisible);
+        return;
+      case "shell.show_report_view":
+        await handlePanelTabChange("report_dock", "report");
+        return;
+      case "shell.show_python_console":
+        await handlePanelTabChange("report_dock", "python");
+        return;
+      default:
+        await handleCommand(commandId);
     }
   }
 
@@ -1952,13 +2113,87 @@ export default function App() {
     );
   }
 
+  const visibleMenus = shellSnapshot?.menu_bar.menus.filter((menu) => menu.visible) ?? [];
+  const workbenchOptions = shellSnapshot?.workbench_catalog.workbenches ?? [];
+  const visiblePanels = shellSnapshot?.layout.panels.filter((panel) => panel.visible).length ?? 0;
+  const recentDocuments: RecentDocumentEntry[] = shellSnapshot?.recent_documents ?? [];
+  const workspaceSessions: WorkspaceSession[] =
+    (shellSnapshot?.workspace_sessions ?? []).map((session: WorkspaceSessionEntry) => ({
+      ...session,
+      selected_object_id: session.selected_object_id ?? null
+    }));
+  const comboViewTab =
+    shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "combo_view")?.active_tab ??
+    "model";
+  const bottomDockTab =
+    shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "report_dock")?.active_tab ??
+    "report";
+  const comboViewPanel = shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "combo_view");
+  const reportDockPanel = shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "report_dock");
+  const comboViewVisible = comboViewPanel?.visible ?? true;
+  const reportDockVisible = reportDockPanel?.visible ?? true;
+  const comboViewSizeHint = comboViewPanel?.size_hint ?? 0.28;
+  const reportDockSizeHint = reportDockPanel?.size_hint ?? 0.24;
+  const comboColumnPercent = Math.round(comboViewSizeHint * 100);
+  const workspaceStyle = comboViewVisible
+    ? {
+        gridTemplateColumns: `minmax(260px, ${comboColumnPercent}%) minmax(0, ${100 - comboColumnPercent}%)`
+      }
+    : {
+        gridTemplateColumns: "minmax(0, 1fr)"
+      };
+  const mainColumnStyle = reportDockVisible
+    ? {
+        gridTemplateRows: `minmax(0, ${Math.max(0.45, 1 - reportDockSizeHint)}fr) minmax(200px, ${reportDockSizeHint}fr)`
+      }
+    : {
+        gridTemplateRows: "minmax(0, 1fr)"
+      };
+  const reopenTabs: Array<{ panelId: "combo_view" | "report_dock"; label: string }> = [
+    ...(comboViewVisible ? [] : [{ panelId: "combo_view" as const, label: "Show Combo View" }]),
+    ...(reportDockVisible ? [] : [{ panelId: "report_dock" as const, label: "Show Bottom Dock" }])
+  ];
+
   return (
     <div className="app-shell freecad-shell">
       <div className="freecad-menubar">
-        {["File", "Edit", "View", "Tools", "Macro", "Window", "Help"].map((menu) => (
-          <button className="freecad-menu-button" key={menu} type="button">
-            {menu}
-          </button>
+        {visibleMenus.map((menu) => (
+          <div
+            className={`freecad-menu ${openMenuId === menu.menu_id ? "freecad-menu-open" : ""}`}
+            key={menu.menu_id}
+            onMouseLeave={() => setOpenMenuId((current) => (current === menu.menu_id ? null : current))}
+          >
+            <button
+              aria-expanded={openMenuId === menu.menu_id}
+              className="freecad-menu-button"
+              onClick={() =>
+                setOpenMenuId((current) => (current === menu.menu_id ? null : menu.menu_id))
+              }
+              type="button"
+            >
+              {menu.label}
+            </button>
+            {openMenuId === menu.menu_id ? (
+              <div className="freecad-menu-dropdown">
+                {menu.items.map((item, index) =>
+                  item.kind === "separator" ? (
+                    <div className="freecad-menu-separator" key={`${menu.menu_id}-separator-${index}`} />
+                  ) : (
+                    <button
+                      className={`freecad-menu-item ${item.checked ? "freecad-menu-item-checked" : ""}`}
+                      disabled={item.enabled === false}
+                      key={`${menu.menu_id}-${item.label ?? item.command_id ?? index}`}
+                      onClick={() => void handleMenuAction(item.command_id)}
+                      type="button"
+                    >
+                      <span className="freecad-menu-item-check">{item.checked ? "x" : ""}</span>
+                      <span className="freecad-menu-item-label">{item.label ?? item.command_id ?? "Unavailable"}</span>
+                    </button>
+                  )
+                )}
+              </div>
+            ) : null}
+          </div>
         ))}
       </div>
 
@@ -1970,8 +2205,25 @@ export default function App() {
           </div>
           <label className="workbench-picker">
             <span>Workbench</span>
-            <select value={document.workbench} onChange={() => undefined}>
-              <option value={document.workbench}>{document.workbench}</option>
+            <select
+              value={shellSnapshot?.workbench_catalog.active_workbench_id ?? document.workbench.toLowerCase()}
+              onChange={(event) => void handleWorkbenchChange(event.target.value)}
+            >
+              {(workbenchOptions.length > 0
+                ? workbenchOptions
+                : [
+                    {
+                      workbench_id: document.workbench.toLowerCase(),
+                      display_name: document.workbench,
+                      enabled: true,
+                      icon: undefined,
+                      description: undefined
+                    }
+                  ]).map((workbench) => (
+                <option key={workbench.workbench_id} value={workbench.workbench_id}>
+                  {workbench.display_name}
+                </option>
+              ))}
             </select>
           </label>
           <form className="open-form freecad-open-form" onSubmit={handleOpenDocument}>
@@ -1992,30 +2244,46 @@ export default function App() {
         </div>
 
         <div className="freecad-toolbar-row freecad-toolbar-row-compact">
-          <QuickActionRail
+          <ShellToolbarBands
             catalog={commandCatalog}
             onRunCommand={(commandId) => void handleCommand(commandId)}
+            shellSnapshot={shellSnapshot}
           />
           <div className="status-cluster">
             <span className="badge badge-hot">{document.workbench}</span>
             <span className="badge">{document.dirty ? "Unsaved changes" : "Saved"}</span>
             <span className="badge">{boot.boot_report.services.length} backend services</span>
             <span className="badge">{boot.bridge_status.worker_mode}</span>
+            <span className="badge">{visiblePanels} visible panels</span>
           </div>
+          {reopenTabs.length > 0 ? (
+            <div className="shell-layout-actions">
+              {reopenTabs.map((entry) => (
+                <button
+                  className="action-button"
+                  key={entry.panelId}
+                  onClick={() => void handlePanelVisibilityChange(entry.panelId, true)}
+                  type="button"
+                >
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         {recentDocuments.length > 0 ? (
           <div className="freecad-toolbar-row freecad-toolbar-row-compact">
             <span className="dock-strip-label">Recent</span>
             <div className="recent-docs-list">
-              {recentDocuments.map((path) => (
+              {recentDocuments.map((entry) => (
                 <button
-                  className={`recent-doc-chip ${openPath === path ? "recent-doc-chip-active" : ""}`}
-                  key={path}
-                  onClick={() => setOpenPath(path)}
+                  className={`recent-doc-chip ${openPath === entry.file_path ? "recent-doc-chip-active" : ""}`}
+                  key={entry.file_path}
+                  onClick={() => setOpenPath(entry.file_path)}
                   type="button"
                 >
-                  {path.split("/").at(-1) ?? path}
+                  {entry.display_name}
                 </button>
               ))}
             </div>
@@ -2048,22 +2316,44 @@ export default function App() {
 
       {error ? <div className="inline-alert">{error}</div> : null}
 
-      <main className="freecad-workspace">
+      <main className="freecad-workspace" style={workspaceStyle}>
+        {comboViewVisible ? (
         <aside className="panel freecad-combo-view">
           <div className="dock-tab-strip">
             <button
               className={`dock-tab-button ${comboViewTab === "model" ? "dock-tab-button-active" : ""}`}
-              onClick={() => setComboViewTab("model")}
+              onClick={() => void handlePanelTabChange("combo_view", "model")}
               type="button"
             >
               Model
             </button>
             <button
               className={`dock-tab-button ${comboViewTab === "tasks" ? "dock-tab-button-active" : ""}`}
-              onClick={() => setComboViewTab("tasks")}
+              onClick={() => void handlePanelTabChange("combo_view", "tasks")}
               type="button"
             >
               Tasks
+            </button>
+            <button
+              className="dock-tab-button dock-tab-button-utility"
+              onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint - 0.03)}
+              type="button"
+            >
+              Narrower
+            </button>
+            <button
+              className="dock-tab-button dock-tab-button-utility"
+              onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint + 0.03)}
+              type="button"
+            >
+              Wider
+            </button>
+            <button
+              className="dock-tab-button dock-tab-button-utility"
+              onClick={() => void handlePanelVisibilityChange("combo_view", false)}
+              type="button"
+            >
+              Hide
             </button>
           </div>
 
@@ -2146,8 +2436,9 @@ export default function App() {
             </div>
           )}
         </aside>
+        ) : null}
 
-        <section className="freecad-main-column">
+        <section className="freecad-main-column" style={mainColumnStyle}>
           <section className="panel viewport-panel freecad-viewport-panel">
             <div className="panel-header">
               <h2>3D View</h2>
@@ -2204,49 +2495,71 @@ export default function App() {
             ) : null}
           </section>
 
+          {reportDockVisible ? (
           <section className="panel freecad-bottom-dock">
             <div className="dock-tab-strip dock-tab-strip-bottom">
               <button
                 className={`dock-tab-button ${bottomDockTab === "report" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("report")}
+                onClick={() => void handlePanelTabChange("report_dock", "report")}
                 type="button"
               >
                 Report view
               </button>
               <button
                 className={`dock-tab-button ${bottomDockTab === "python" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("python")}
+                onClick={() => void handlePanelTabChange("report_dock", "python")}
                 type="button"
               >
                 Python console
               </button>
               <button
                 className={`dock-tab-button ${bottomDockTab === "jobs" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("jobs")}
+                onClick={() => void handlePanelTabChange("report_dock", "jobs")}
                 type="button"
               >
                 Jobs
               </button>
               <button
                 className={`dock-tab-button ${bottomDockTab === "diagnostics" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("diagnostics")}
+                onClick={() => void handlePanelTabChange("report_dock", "diagnostics")}
                 type="button"
               >
                 Diagnostics
               </button>
               <button
                 className={`dock-tab-button ${bottomDockTab === "history" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("history")}
+                onClick={() => void handlePanelTabChange("report_dock", "history")}
                 type="button"
               >
                 History
               </button>
               <button
                 className={`dock-tab-button ${bottomDockTab === "commands" ? "dock-tab-button-active" : ""}`}
-                onClick={() => setBottomDockTab("commands")}
+                onClick={() => void handlePanelTabChange("report_dock", "commands")}
                 type="button"
               >
                 Commands
+              </button>
+              <button
+                className="dock-tab-button dock-tab-button-utility"
+                onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint - 0.03)}
+                type="button"
+              >
+                Shorter
+              </button>
+              <button
+                className="dock-tab-button dock-tab-button-utility"
+                onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint + 0.03)}
+                type="button"
+              >
+                Taller
+              </button>
+              <button
+                className="dock-tab-button dock-tab-button-utility"
+                onClick={() => void handlePanelVisibilityChange("report_dock", false)}
+                type="button"
+              >
+                Hide
               </button>
             </div>
 
@@ -2333,6 +2646,7 @@ export default function App() {
               ) : null}
             </div>
           </section>
+          ) : null}
         </section>
       </main>
 
@@ -2343,6 +2657,7 @@ export default function App() {
         <span>Selection: {selectedObjectId ?? "none"}</span>
         <span>Worker: {boot.bridge_status.worker_mode}</span>
         <span>Jobs: {jobs?.jobs.length ?? 0}</span>
+        <span>Layout: {shellSnapshot?.layout.layout_id ?? "shell-pending"}</span>
       </footer>
     </div>
   );

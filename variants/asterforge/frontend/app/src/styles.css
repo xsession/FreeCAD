@@ -84,6 +84,10 @@ select {
   border-radius: 6px;
 }
 
+.freecad-menu {
+  position: relative;
+}
+
 .freecad-menu-button,
 .dock-tab-button,
 .dock-subtab-button {
@@ -99,6 +103,70 @@ select {
 .dock-tab-button:hover,
 .dock-subtab-button:hover {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.freecad-menu-open .freecad-menu-button {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.freecad-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 220px;
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--panel), var(--panel-strong));
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+
+.freecad-menu-item {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.freecad-menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.freecad-menu-item:disabled {
+  cursor: not-allowed;
+  color: var(--muted);
+}
+
+.freecad-menu-item-checked .freecad-menu-item-label {
+  color: var(--accent-soft);
+}
+
+.freecad-menu-item-check {
+  color: var(--accent-soft);
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.freecad-menu-item-label {
+  min-width: 0;
+}
+
+.freecad-menu-separator {
+  height: 1px;
+  margin: 3px 0;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .freecad-toolbar-stack {
@@ -246,6 +314,12 @@ select {
 .status-cluster {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shell-layout-actions {
+  display: flex;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -426,6 +500,11 @@ select {
 .dock-subtab-button-active {
   background: rgba(255, 143, 61, 0.12);
   color: var(--accent-soft);
+}
+
+.dock-tab-button-utility {
+  color: var(--muted);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
 }
 
 .dock-panel {
@@ -1131,6 +1210,37 @@ select {
   gap: 10px;
   margin-top: 14px;
   flex-wrap: wrap;
+}
+
+.shell-toolbar-bands {
+  display: grid;
+  gap: 8px;
+  flex: 1 1 auto;
+}
+
+.shell-toolbar-band {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shell-toolbar-band-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.shell-toolbar-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.shell-toolbar-separator {
+  width: 1px;
+  min-height: 28px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .quick-action-rail .action-button {

@@ -12,21 +12,35 @@ import type {
   FeatureHistoryEntry,
   FeatureHistoryResponse,
   JobStatusResponse,
+  Menu,
+  MenuBarState,
+  MenuItem,
   ObjectNode,
   PreselectionState,
   PropertyGroup,
   PropertyMetadata,
   PropertyResponse,
+  RecentDocumentEntry,
+  ShellLayoutState,
+  ShellPanelState,
+  ShellSnapshot,
   SelectionModeOption,
   SelectionReply,
   SelectionState,
   TaskPanelResponse,
   TaskPanelRow,
   TaskPanelSection,
+  Toolbar,
+  ToolbarBand,
+  ToolbarBandState,
+  ToolbarItem,
   ViewportDiffResponse as GeneratedViewportDiffResponse,
   ViewportDrawable,
   ViewportResponse,
-  WorkbenchState
+  WorkbenchCatalog,
+  WorkbenchCatalogEntry,
+  WorkbenchState,
+  WorkspaceSessionEntry
 } from "./generated/asterforge";
 
 export type {
@@ -39,17 +53,31 @@ export type {
   FeatureHistoryEntry,
   FeatureHistoryResponse,
   JobStatusResponse,
+  Menu,
+  MenuBarState,
+  MenuItem,
   ObjectNode,
   PropertyGroup,
   PropertyMetadata,
   PropertyResponse,
+  RecentDocumentEntry,
+  ShellLayoutState,
+  ShellPanelState,
+  ShellSnapshot,
   SelectionModeOption,
   TaskPanelResponse,
   TaskPanelRow,
   TaskPanelSection,
+  Toolbar,
+  ToolbarBand,
+  ToolbarBandState,
+  ToolbarItem,
   ViewportDrawable,
   ViewportResponse,
-  WorkbenchState
+  WorkbenchCatalog,
+  WorkbenchCatalogEntry,
+  WorkbenchState,
+  WorkspaceSessionEntry
 };
 
 export type ActivityEvent = Omit<EventEnvelope, "level" | "object_id"> & {
@@ -75,6 +103,44 @@ export type SelectionStateResponse = SelectionState;
 
 export async function fetchBootstrap(): Promise<BootPayload> {
   return fetchJson<BootPayload>("/api/bootstrap");
+}
+
+export async function activateWorkbench(
+  documentId: string,
+  workbenchId: string
+): Promise<DocumentRef> {
+  return fetchJson<DocumentRef>("/api/workbench/activate", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      document_id: documentId,
+      workbench_id: workbenchId
+    })
+  });
+}
+
+export async function updateShellPanelState(
+  documentId: string,
+  panelId: string,
+  mutation: {
+    active_tab?: string;
+    visible?: boolean;
+    size_hint?: number;
+  }
+): Promise<ShellSnapshot> {
+  return fetchJson<ShellSnapshot>("/api/shell/panel", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      document_id: documentId,
+      panel_id: panelId,
+      ...mutation
+    })
+  });
 }
 
 export async function fetchProperties(
@@ -120,6 +186,10 @@ export async function fetchPreselectionState(
   documentId: string
 ): Promise<PreselectionStateResponse> {
   return fetchJson<PreselectionStateResponse>(`/api/documents/${documentId}/preselection-state`);
+}
+
+export async function fetchShellSnapshot(documentId: string): Promise<ShellSnapshot> {
+  return fetchJson<ShellSnapshot>(`/api/documents/${documentId}/shell-snapshot`);
 }
 
 export async function fetchJobs(documentId: string): Promise<JobStatusResponse> {

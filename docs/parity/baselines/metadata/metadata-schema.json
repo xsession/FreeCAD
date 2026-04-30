@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://freecad.dev/schemas/frontend-parity-baseline-metadata.json",
+  "title": "FrontendParityBaselineMetadata",
+  "type": "object",
+  "required": [
+    "baseline_id",
+    "theme",
+    "workbench",
+    "fixture_document",
+    "visible_toolbars",
+    "visible_panels",
+    "active_task",
+    "artifacts",
+    "notes"
+  ],
+  "properties": {
+    "baseline_id": {
+      "type": "string"
+    },
+    "theme": {
+      "type": "string",
+      "enum": [
+        "light",
+        "dark"
+      ]
+    },
+    "workbench": {
+      "type": "string"
+    },
+    "fixture_document": {
+      "type": "string"
+    },
+    "visible_toolbars": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "visible_panels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "active_task": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "artifacts": {
+      "type": "object",
+      "required": [
+        "full_window",
+        "viewport_crop",
+        "tree_property_crop",
+        "recording"
+      ],
+      "properties": {
+        "full_window": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "viewport_crop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tree_property_crop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "recording": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "../metadata-schema.json",
+  "baseline_id": "shell-empty-light",
+  "theme": "light",
+  "workbench": "Start",
+  "fixture_document": "empty-document",
+  "visible_toolbars": [
+    "File",
+    "Workbench",
+    "View"
+  ],
+  "visible_panels": [
+    "TreeView",
+    "PropertyView",
+    "ReportView"
+  ],
+  "active_task": null,
+  "artifacts": {
+    "full_window": "../screenshots/shell-empty-light.png",
+    "viewport_crop": null,
+    "tree_property_crop": "../screenshots/shell-empty-light-tree-property.png",
+    "recording": null
+  },
+  "notes": "Replace example values before capture approval."
+}

@@ -13,8 +13,8 @@ use tracing::info;
 
 use crate::domain::{
     BackendEvent, CommandCatalogResponse, DiagnosticsResponse, DocumentSummary,
-    FeatureHistoryResponse, JobStatusResponse, ObjectNode, PreselectionStateResponse, PropertyResponse,
-    SelectionStateResponse, TaskPanelResponse, ViewportResponse,
+    FeatureHistoryResponse, JobStatusResponse, ObjectNode, PreselectionStateResponse,
+    PropertyResponse, SelectionStateResponse, ShellSnapshot, TaskPanelResponse, ViewportResponse,
 };
 
 use super::protocol::{
@@ -22,12 +22,14 @@ use super::protocol::{
     http_command_response_from_proto, http_diagnostics_from_proto, http_events_from_proto,
     http_feature_history_from_proto, http_jobs_from_proto, http_object_tree_from_proto,
     http_preselection_state_from_proto, http_properties_from_proto,
+    http_shell_snapshot_from_proto,
     http_selection_response_from_proto, http_selection_state_from_proto,
     http_task_panel_from_proto, http_viewport_from_proto,
 };
 use super::state::{
-    AppState, BootPayload, HttpCommandExecutionResponse, PreselectionRequest,
-    SelectionModeRequest, SelectionRequest, SelectionResponse,
+    ActivateWorkbenchRequest, AppState, BootPayload, HttpCommandExecutionResponse,
+    PreselectionRequest, SelectionModeRequest, SelectionRequest, SelectionResponse,
+    ShellPanelMutationRequest,
 };
 
 pub fn build_router(state: AppState) -> Router {
@@ -35,6 +37,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/health", get(health))
         .route("/api/bootstrap", get(bootstrap))
         .route("/api/documents/open", post(open_document))
+        .route("/api/workbench/activate", post(activate_workbench))
+        .route("/api/shell/panel", post(update_shell_panel))
         .route("/api/selection", post(set_selection))
         .route("/api/selection/mode", post(set_selection_mode))
         .route("/api/preselection", post(set_preselection))
@@ -49,6 +53,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/documents/{document_id}/diagnostics", get(fetch_diagnostics))
         .route("/api/documents/{document_id}/selection-state", get(fetch_selection_state))
         .route("/api/documents/{document_id}/preselection-state", get(fetch_preselection_state))
+        .route("/api/documents/{document_id}/shell-snapshot", get(fetch_shell_snapshot))
         .route("/api/documents/{document_id}/jobs", get(fetch_jobs))
         .route("/api/documents/{document_id}/viewport", get(fetch_viewport))
         .route("/api/documents/{document_id}/events", get(fetch_events))
@@ -72,6 +77,28 @@ async fn open_document(
     Json(request): Json<super::state::OpenDocumentHttpRequest>,
 ) -> Json<DocumentSummary> {
     Json(state.open_document(request.file_path).await)
+}
+
+async fn activate_workbench(
+    State(state): State<AppState>,
+    Json(request): Json<ActivateWorkbenchRequest>,
+) -> Result<Json<DocumentSummary>, StatusCode> {
+    state
+        .activate_workbench(request)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn update_shell_panel(
+    State(state): State<AppState>,
+    Json(request): Json<ShellPanelMutationRequest>,
+) -> Result<Json<ShellSnapshot>, StatusCode> {
+    state
+        .update_shell_panel(request)
+        .await
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
 }
 
 async fn set_selection(
@@ -228,6 +255,18 @@ async fn fetch_preselection_state(
         .preselection_state_proto(&document_id)
         .await
         .map(http_preselection_state_from_proto)
+        .map(Json)
+        .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn fetch_shell_snapshot(
+    Path(document_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<ShellSnapshot>, StatusCode> {
+    state
+        .shell_snapshot_proto(&document_id)
+        .await
+        .map(http_shell_snapshot_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
 }

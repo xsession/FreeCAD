@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/toolbar-band.schema.json",
+  "title": "ToolbarBandState",
+  "type": "object",
+  "required": [
+    "workbench_id",
+    "bands"
+  ],
+  "properties": {
+    "workbench_id": {
+      "type": "string"
+    },
+    "bands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "band_id",
+          "label",
+          "toolbars"
+        ],
+        "properties": {
+          "band_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "toolbars": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/toolbar"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "toolbar": {
+      "type": "object",
+      "required": [
+        "toolbar_id",
+        "label",
+        "visible",
+        "items"
+      ],
+      "properties": {
+        "toolbar_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/toolbarItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "toolbarItem": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "command",
+            "separator"
+          ]
+        },
+        "command_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "icon": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "checked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

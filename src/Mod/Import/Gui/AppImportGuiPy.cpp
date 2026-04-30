@@ -37,10 +37,18 @@
 #endif
 
 #include <OSD_Exception.hxx>
+#include <BRep_Builder.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
+#include <IMeshTools_Parameters.hxx>
+#include <Precision.hxx>
 #include <Standard_Version.hxx>
 #include <TColStd_IndexedDataMapOfStringString.hxx>
 #include <TDataXtd_Shape.hxx>
 #include <TDocStd_Document.hxx>
+#include <TopExp.hxx>
+#include <TopTools_IndexedMapOfShape.hxx>
+#include <TopoDS_Compound.hxx>
+#include <gp.hxx>
 #include <XCAFApp_Application.hxx>
 
 #if defined(__clang__)
@@ -48,7 +56,10 @@
 #endif
 
 #include <chrono>
+#include <algorithm>
+#include <cmath>
 #include <set>
+#include <vector>
 #include "ExportOCAFGui.h"
 #include "ImportOCAFGui.h"
 #include "OCAFBrowser.h"
@@ -74,6 +85,8 @@
 #include <Mod/Part/App/ImportStep.h>
 #include <Mod/Part/App/Interface.h>
 #include <Mod/Part/App/OCAF/ImportExportSettings.h>
+#include <Mod/Part/App/PartFeature.h>
+#include <Mod/Part/App/Tools.h>
 #include <Mod/Part/App/encodeFilename.h>
 #include <Mod/Part/Gui/DlgExportStep.h>
 #include <Mod/Part/Gui/DlgImportStep.h>
@@ -84,6 +97,170 @@ FC_LOG_LEVEL_INIT("Import", true, true)
 
 namespace ImportGui
 {
+
+namespace
+{
+
+struct StepImportPerfProfile
+{
+    bool speedMode = false;
+    bool reduceObjects = false;
+    double minMeshDeviation = 0.0;
+    double minAngularDeflection = 0.0;
+};
+
+StepImportPerfProfile getStepImportPerfProfile(const Base::FileInfo& file)
+{
+    StepImportPerfProfile profile;
+    if (!file.hasExtension({"stp", "step"})) {
+        return profile;
+    }
+
+    const int64_t fileSize = file.size();
+    const bool isMedium = fileSize > 25LL * 1024 * 1024;
+    const bool isLarge = fileSize > 100LL * 1024 * 1024;
+    const bool isVeryLarge = fileSize > 500LL * 1024 * 1024;
+
+    profile.speedMode = isMedium;
+    profile.reduceObjects = isLarge;
+
+    if (isVeryLarge) {
+        profile.minMeshDeviation = 5.0;
+        profile.minAngularDeflection = 40.0;
+    }
+    else if (isLarge) {
+        profile.minMeshDeviation = 2.5;
+        profile.minAngularDeflection = 33.0;
+    }
+    else if (isMedium) {
+        profile.minMeshDeviation = 1.0;
+        profile.minAngularDeflection = 30.0;
+    }
+
+    return profile;
+}
+
+void batchTessellateImportedShapes(
+    const Base::FileInfo& file,
+    const StepImportPerfProfile& perfProfile,
+    const std::vector<App::DocumentObject*>& importedObjs)
+{
+    std::vector<TopoDS_Shape> shapes;
+    shapes.reserve(importedObjs.size());
+
+    for (auto* obj : importedObjs) {
+        auto* partFeature = dynamic_cast<Part::Feature*>(obj);
+        if (!partFeature) {
+            continue;
+        }
+        const TopoDS_Shape& shape = partFeature->Shape.getValue();
+        if (shape.IsNull()) {
+            continue;
+        }
+        shapes.push_back(shape);
+    }
+
+    if (shapes.empty()) {
+        return;
+    }
+
+    ParameterGrp::handle hPart = App::GetApplication().GetParameterGroupByPath(
+        "User parameter:BaseApp/Preferences/Mod/Part"
+    );
+    double deviation = hPart->GetFloat("MeshDeviation", 0.2);
+    double angularDeflection = hPart->GetFloat("MeshAngularDeflection", 28.65);
+    bool useAdaptive = hPart->GetBool("AdaptiveDeviation", true);
+    int faceThreshold = hPart->GetInt("AdaptiveDeviationFaceThreshold", 2000);
+    double maxScale = hPart->GetFloat("AdaptiveDeviationMaxScale", 10.0);
+
+    if (perfProfile.speedMode) {
+        deviation = std::max(deviation, perfProfile.minMeshDeviation);
+        angularDeflection = std::max(angularDeflection, perfProfile.minAngularDeflection);
+        Base::Console().Message(
+            "ImportGui: Speed mode enabled for %.1f MB STEP file "
+            "(deviation %.2f, angular %.1f deg)\n",
+            file.size() / (1024.0 * 1024.0),
+            deviation,
+            angularDeflection);
+    }
+
+    BRep_Builder builder;
+    TopoDS_Compound compound;
+    builder.MakeCompound(compound);
+    for (auto& shape : shapes) {
+        builder.Add(compound, shape);
+    }
+
+    double dev = deviation;
+    if (useAdaptive && faceThreshold > 0) {
+        TopTools_IndexedMapOfShape faceMap;
+        TopExp::MapShapes(compound, TopAbs_FACE, faceMap);
+        int totalFaces = faceMap.Extent();
+        if (totalFaces > faceThreshold) {
+            double scale = std::sqrt(static_cast<double>(totalFaces) / faceThreshold);
+            scale = std::min(scale, maxScale);
+            dev *= scale;
+            if (totalFaces > faceThreshold * 5) {
+                angularDeflection = std::max(angularDeflection, 33.0);
+            }
+            Base::Console().Message(
+                "ImportGui: Adaptive tessellation for %d faces (deviation x%.2f)\n",
+                totalFaces,
+                scale);
+        }
+    }
+
+    Standard_Real deflection = Part::Tools::getDeflection(compound, dev);
+    if (deflection < gp::Resolution()) {
+        deflection = Precision::Confusion();
+    }
+    Standard_Real angRads = angularDeflection * M_PI / 180.0;
+
+    Base::Console().Message(
+        "ImportGui: Pre-tessellating %zu shapes before GUI refresh...\n",
+        shapes.size());
+    auto tStart = std::chrono::steady_clock::now();
+
+    for (auto& shape : shapes) {
+        IMeshTools_Parameters meshParams;
+        meshParams.Deflection = deflection;
+        meshParams.Relative = Standard_False;
+        meshParams.Angle = angRads;
+        meshParams.InParallel = Standard_False;
+        meshParams.AllowQualityDecrease = Standard_True;
+        BRepMesh_IncrementalMesh(shape, meshParams);
+    }
+
+    auto tEnd = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(tEnd - tStart).count();
+    Base::Console().Message(
+        "ImportGui: Pre-tessellation complete: %.2fs for %zu shapes\n",
+        elapsed,
+        shapes.size());
+}
+
+bool switchFlatLinesToShaded(Gui::ViewProviderDocumentObject* viewProvider)
+{
+    if (!viewProvider || !viewProvider->Visibility.getValue() || !viewProvider->DisplayMode.isValid()) {
+        return false;
+    }
+
+    const char* mode = viewProvider->DisplayMode.getValueAsString();
+    if (!mode || strcmp(mode, "Flat Lines") != 0) {
+        return false;
+    }
+
+    const auto modes = viewProvider->getDisplayModes();
+    if (std::find(modes.begin(), modes.end(), std::string("Shaded")) == modes.end()) {
+        return false;
+    }
+
+    viewProvider->DisplayMode.setValue("Shaded");
+    viewProvider->setActiveMode();
+    return true;
+}
+
+}  // namespace
 
 class Module: public Py::ExtensionModule<Module>
 {
@@ -240,7 +417,14 @@ private:
             Handle(TDocStd_Document) hDoc;
             hApp->NewDocument(TCollection_ExtendedString("MDTV-CAF"), hDoc);
             ImportOCAFGui ocaf(hDoc, pcDoc, file.fileNamePure());
-            ocaf.setImportOptions(ImportOCAFGui::customImportOptions());
+            auto ocafOptions = ImportOCAFGui::customImportOptions();
+            const auto perfProfile = getStepImportPerfProfile(file);
+            if (perfProfile.speedMode) {
+                ocafOptions.merge = false;
+                ocafOptions.useLinkGroup = true;
+                ocafOptions.reduceObjects = perfProfile.reduceObjects;
+            }
+            ocaf.setImportOptions(ocafOptions);
 
             Base::TimeTracker tracker("Import Step");
 
@@ -372,10 +556,30 @@ private:
                 }
             }
 
+            if (perfProfile.speedMode) {
+                batchTessellateImportedShapes(file, perfProfile, importedObjs);
+                tracker.checkpoint("Batch tessellation");
+            }
+
             if (!importedObjs.empty()) {
                 App::GetApplication().setActiveDocument(pcDoc);
                 if (auto* gdoc = Gui::Application::Instance->getDocument(pcDoc)) {
                     gdoc->setActiveView();
+                    size_t shadedSwitchCount = 0;
+                    if (perfProfile.speedMode) {
+                        for (auto* obj : importedObjs) {
+                            auto* viewProvider = dynamic_cast<Gui::ViewProviderDocumentObject*>(
+                                gdoc->getViewProvider(obj));
+                            if (switchFlatLinesToShaded(viewProvider)) {
+                                ++shadedSwitchCount;
+                            }
+                        }
+                        if (shadedSwitchCount > 0) {
+                            Base::Console().Message(
+                                "ImportGui: Switched %zu imported objects from Flat Lines to Shaded for large assembly navigation.\n",
+                                shadedSwitchCount);
+                        }
+                    }
                     for (auto* obj : importedObjs) {
                         auto* viewProvider = dynamic_cast<Gui::ViewProviderDocumentObject*>(
                             gdoc->getViewProvider(obj));
@@ -385,6 +589,7 @@ private:
                     }
                 }
             }
+            tracker.checkpoint("View provider refresh");
 
             if (ret) {
                 App::GetApplication().setActiveDocument(pcDoc);

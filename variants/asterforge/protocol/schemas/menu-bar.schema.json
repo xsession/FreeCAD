@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/menu-bar.schema.json",
+  "title": "MenuBarState",
+  "type": "object",
+  "required": [
+    "workbench_id",
+    "menus"
+  ],
+  "properties": {
+    "workbench_id": {
+      "type": "string"
+    },
+    "menus": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/menu"
+      }
+    }
+  },
+  "$defs": {
+    "menu": {
+      "type": "object",
+      "required": [
+        "menu_id",
+        "label",
+        "visible",
+        "items"
+      ],
+      "properties": {
+        "menu_id": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        },
+        "visible": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/menuItem"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "menuItem": {
+      "type": "object",
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "command",
+            "submenu",
+            "separator"
+          ]
+        },
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "command_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "enabled": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "checked": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "submenu": {
+          "$ref": "#/$defs/menu"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

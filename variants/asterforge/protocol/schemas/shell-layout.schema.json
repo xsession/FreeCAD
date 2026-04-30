@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/shell-layout.schema.json",
+  "title": "ShellLayoutState",
+  "type": "object",
+  "required": [
+    "layout_id",
+    "panels"
+  ],
+  "properties": {
+    "layout_id": {
+      "type": "string"
+    },
+    "panels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "panel_id",
+          "region",
+          "visible",
+          "order"
+        ],
+        "properties": {
+          "panel_id": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string",
+            "enum": [
+              "top",
+              "left",
+              "right",
+              "bottom",
+              "center"
+            ]
+          },
+          "visible": {
+            "type": "boolean"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "active_tab": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "size_hint": {
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

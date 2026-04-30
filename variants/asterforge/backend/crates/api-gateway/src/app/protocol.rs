@@ -11,22 +11,33 @@ use asterforge_protocol_types::asterforge::protocol::v1::{
     EventEnvelope as ProtoEventEnvelope, FeatureHistoryEntry as ProtoFeatureHistoryEntry,
     FeatureHistoryResponse as ProtoFeatureHistoryResponse, JobStageEntry as ProtoJobStageEntry,
     JobStatusEntry as ProtoJobStatusEntry, JobStatusResponse as ProtoJobStatusResponse,
+    Menu as ProtoMenu, MenuBarState as ProtoMenuBarState, MenuItem as ProtoMenuItem,
     ObjectNode as ProtoObjectNode, ObjectTreeResponse as ProtoObjectTreeResponse,
     PreselectionState as ProtoPreselectionState, PropertyGroup as ProtoPropertyGroup,
     PropertyMetadata as ProtoPropertyMetadata, PropertyResponse as ProtoPropertyResponse,
+    RecentDocumentEntry as ProtoRecentDocumentEntry,
+    ShellLayoutState as ProtoShellLayoutState, ShellPanelState as ProtoShellPanelState,
+    ShellSnapshot as ProtoShellSnapshot,
     SelectionModeOption as ProtoSelectionModeOption, SelectionReply,
     SelectionState as ProtoSelectionState, TaskPanelResponse as ProtoTaskPanelResponse,
     TaskPanelRow as ProtoTaskPanelRow, TaskPanelSection as ProtoTaskPanelSection,
+    Toolbar as ProtoToolbar, ToolbarBand as ProtoToolbarBand,
+    ToolbarBandState as ProtoToolbarBandState, ToolbarItem as ProtoToolbarItem,
     ViewportBounds as ProtoViewportBounds, ViewportDiffResponse as ProtoViewportDiffResponse,
     ViewportDrawable as ProtoViewportDrawable, ViewportResponse as ProtoViewportResponse,
-    ViewportScene as ProtoViewportScene, WorkbenchState as ProtoWorkbenchState,
+    ViewportScene as ProtoViewportScene, WorkbenchCatalog as ProtoWorkbenchCatalog,
+    WorkbenchCatalogEntry as ProtoWorkbenchCatalogEntry, WorkbenchState as ProtoWorkbenchState,
+    WorkspaceSessionEntry as ProtoWorkspaceSessionEntry,
 };
 
 use crate::domain::{
     sample_bridge_status, BackendEvent, BootReport, CommandCatalogResponse, DiagnosticsResponse,
-    FeatureHistoryResponse, JobStageEntry, JobStatusEntry, JobStatusResponse, ObjectNode,
-    PreselectionStateResponse, PropertyGroup, PropertyResponse, SelectionModeOption,
-    SelectionStateResponse, TaskPanelResponse, ViewportDiffResponse, ViewportResponse,
+    FeatureHistoryResponse, JobStageEntry, JobStatusEntry, JobStatusResponse, Menu,
+    MenuBarState, MenuItem, ObjectNode, PreselectionStateResponse, PropertyGroup,
+    PropertyResponse, RecentDocumentEntry, SelectionModeOption, SelectionStateResponse,
+    ShellLayoutState, ShellPanelState, ShellSnapshot, TaskPanelResponse, Toolbar, ToolbarBand,
+    ToolbarBandState, ToolbarItem, ViewportDiffResponse, ViewportResponse,
+    WorkbenchCatalog, WorkbenchCatalogEntry, WorkspaceSessionEntry,
 };
 
 use super::state::{BootPayload, HttpCommandExecutionResponse, SelectionResponse};
@@ -59,6 +70,7 @@ pub fn boot_payload_proto_from_http(response: BootPayload) -> ProtoBootPayload {
         }),
         bridge_status: Some(proto_bridge_status_from_http(response.bridge_status)),
         document: Some(proto_document_ref_from_http(response.document)),
+        shell_snapshot: Some(proto_shell_snapshot_from_http(response.shell_snapshot)),
         object_tree: response.object_tree.into_iter().map(proto_object_node_from_http).collect(),
         selected_object_id: response.selected_object_id,
         selection_state: Some(selection_state_proto_from_http(response.selection_state)),
@@ -79,6 +91,16 @@ pub fn http_boot_payload_from_proto(response: ProtoBootPayload) -> BootPayload {
         services: vec![],
         event_streams: vec![],
     });
+    let document = response
+        .document
+        .map(http_document_summary_from_proto)
+        .unwrap_or(DocumentSummary {
+            document_id: String::new(),
+            display_name: String::new(),
+            workbench: String::new(),
+            file_path: None,
+            dirty: false,
+        });
     BootPayload {
         boot_report: BootReport {
             services: boot_report.services,
@@ -88,16 +110,11 @@ pub fn http_boot_payload_from_proto(response: ProtoBootPayload) -> BootPayload {
             .bridge_status
             .map(http_bridge_status_from_proto)
             .unwrap_or_else(sample_bridge_status),
-        document: response
-            .document
-            .map(http_document_summary_from_proto)
-            .unwrap_or(DocumentSummary {
-                document_id: String::new(),
-                display_name: String::new(),
-                workbench: String::new(),
-                file_path: None,
-                dirty: false,
-            }),
+        document: document.clone(),
+        shell_snapshot: response
+            .shell_snapshot
+            .map(http_shell_snapshot_from_proto)
+            .unwrap_or_else(|| default_shell_snapshot(document.clone())),
         object_tree: response
             .object_tree
             .into_iter()
@@ -209,6 +226,373 @@ pub fn http_boot_payload_from_proto(response: ProtoBootPayload) -> BootPayload {
                 recent_signals: vec![],
             }),
         events: response.events.into_iter().map(http_event_from_proto).collect(),
+    }
+}
+
+pub fn proto_shell_snapshot_from_http(response: ShellSnapshot) -> ProtoShellSnapshot {
+    ProtoShellSnapshot {
+        document: Some(proto_document_ref_from_http(response.document)),
+        workbench_catalog: Some(proto_workbench_catalog_from_http(response.workbench_catalog)),
+        menu_bar: Some(proto_menu_bar_from_http(response.menu_bar)),
+        toolbar_bands: Some(proto_toolbar_band_state_from_http(response.toolbar_bands)),
+        layout: Some(proto_shell_layout_from_http(response.layout)),
+        recent_documents: response
+            .recent_documents
+            .into_iter()
+            .map(proto_recent_document_from_http)
+            .collect(),
+        workspace_sessions: response
+            .workspace_sessions
+            .into_iter()
+            .map(proto_workspace_session_from_http)
+            .collect(),
+    }
+}
+
+pub fn http_shell_snapshot_from_proto(response: ProtoShellSnapshot) -> ShellSnapshot {
+    let document = response
+        .document
+        .map(http_document_summary_from_proto)
+        .unwrap_or(DocumentSummary {
+            document_id: String::new(),
+            display_name: String::new(),
+            workbench: String::new(),
+            file_path: None,
+            dirty: false,
+        });
+
+    ShellSnapshot {
+        document: document.clone(),
+        workbench_catalog: response
+            .workbench_catalog
+            .map(http_workbench_catalog_from_proto)
+            .unwrap_or(WorkbenchCatalog {
+                active_workbench_id: document.workbench.to_lowercase(),
+                workbenches: vec![],
+            }),
+        menu_bar: response
+            .menu_bar
+            .map(http_menu_bar_from_proto)
+            .unwrap_or(MenuBarState {
+                workbench_id: document.workbench.to_lowercase(),
+                menus: vec![],
+            }),
+        toolbar_bands: response
+            .toolbar_bands
+            .map(http_toolbar_band_state_from_proto)
+            .unwrap_or(ToolbarBandState {
+                workbench_id: document.workbench.to_lowercase(),
+                bands: vec![],
+            }),
+        layout: response
+            .layout
+            .map(http_shell_layout_from_proto)
+            .unwrap_or(ShellLayoutState {
+                layout_id: format!("{}:freecad-classic", document.document_id),
+                panels: vec![],
+            }),
+        recent_documents: response
+            .recent_documents
+            .into_iter()
+            .map(http_recent_document_from_proto)
+            .collect(),
+        workspace_sessions: response
+            .workspace_sessions
+            .into_iter()
+            .map(http_workspace_session_from_proto)
+            .collect(),
+    }
+}
+
+fn default_shell_snapshot(document: DocumentSummary) -> ShellSnapshot {
+    ShellSnapshot {
+        workbench_catalog: WorkbenchCatalog {
+            active_workbench_id: document.workbench.to_lowercase(),
+            workbenches: vec![],
+        },
+        menu_bar: MenuBarState {
+            workbench_id: document.workbench.to_lowercase(),
+            menus: vec![],
+        },
+        toolbar_bands: ToolbarBandState {
+            workbench_id: document.workbench.to_lowercase(),
+            bands: vec![],
+        },
+        layout: ShellLayoutState {
+            layout_id: format!("{}:freecad-classic", document.document_id),
+            panels: vec![],
+        },
+        recent_documents: vec![],
+        workspace_sessions: vec![],
+        document,
+    }
+}
+
+fn proto_recent_document_from_http(response: RecentDocumentEntry) -> ProtoRecentDocumentEntry {
+    ProtoRecentDocumentEntry {
+        file_path: response.file_path,
+        display_name: response.display_name,
+        workbench: response.workbench,
+        dirty: response.dirty,
+    }
+}
+
+fn http_recent_document_from_proto(response: ProtoRecentDocumentEntry) -> RecentDocumentEntry {
+    RecentDocumentEntry {
+        file_path: response.file_path,
+        display_name: response.display_name,
+        workbench: response.workbench,
+        dirty: response.dirty,
+    }
+}
+
+fn proto_workspace_session_from_http(response: WorkspaceSessionEntry) -> ProtoWorkspaceSessionEntry {
+    ProtoWorkspaceSessionEntry {
+        session_id: response.session_id,
+        document_id: response.document_id,
+        display_name: response.display_name,
+        file_path: response.file_path,
+        workbench: response.workbench,
+        dirty: response.dirty,
+        selected_object_id: response.selected_object_id,
+    }
+}
+
+fn http_workspace_session_from_proto(response: ProtoWorkspaceSessionEntry) -> WorkspaceSessionEntry {
+    WorkspaceSessionEntry {
+        session_id: response.session_id,
+        document_id: response.document_id,
+        display_name: response.display_name,
+        file_path: response.file_path,
+        workbench: response.workbench,
+        dirty: response.dirty,
+        selected_object_id: response.selected_object_id,
+    }
+}
+
+fn proto_workbench_catalog_from_http(response: WorkbenchCatalog) -> ProtoWorkbenchCatalog {
+    ProtoWorkbenchCatalog {
+        active_workbench_id: response.active_workbench_id,
+        workbenches: response
+            .workbenches
+            .into_iter()
+            .map(|entry| ProtoWorkbenchCatalogEntry {
+                workbench_id: entry.workbench_id,
+                display_name: entry.display_name,
+                icon: entry.icon,
+                enabled: entry.enabled,
+                description: entry.description,
+            })
+            .collect(),
+    }
+}
+
+fn http_workbench_catalog_from_proto(response: ProtoWorkbenchCatalog) -> WorkbenchCatalog {
+    WorkbenchCatalog {
+        active_workbench_id: response.active_workbench_id,
+        workbenches: response
+            .workbenches
+            .into_iter()
+            .map(|entry| WorkbenchCatalogEntry {
+                workbench_id: entry.workbench_id,
+                display_name: entry.display_name,
+                icon: entry.icon,
+                enabled: entry.enabled,
+                description: entry.description,
+            })
+            .collect(),
+    }
+}
+
+fn proto_menu_item_from_http(response: MenuItem) -> ProtoMenuItem {
+    ProtoMenuItem {
+        kind: response.kind,
+        label: response.label,
+        command_id: response.command_id,
+        enabled: response.enabled,
+        checked: response.checked,
+        submenu: response.submenu.map(proto_menu_from_http),
+    }
+}
+
+fn http_menu_item_from_proto(response: ProtoMenuItem) -> MenuItem {
+    MenuItem {
+        kind: response.kind,
+        label: response.label,
+        command_id: response.command_id,
+        enabled: response.enabled,
+        checked: response.checked,
+        submenu: response.submenu.map(http_menu_from_proto),
+    }
+}
+
+fn proto_menu_from_http(response: Menu) -> ProtoMenu {
+    ProtoMenu {
+        menu_id: response.menu_id,
+        label: response.label,
+        visible: response.visible,
+        items: response.items.into_iter().map(proto_menu_item_from_http).collect(),
+    }
+}
+
+fn http_menu_from_proto(response: ProtoMenu) -> Menu {
+    Menu {
+        menu_id: response.menu_id,
+        label: response.label,
+        visible: response.visible,
+        items: response.items.into_iter().map(http_menu_item_from_proto).collect(),
+    }
+}
+
+fn proto_menu_bar_from_http(response: MenuBarState) -> ProtoMenuBarState {
+    ProtoMenuBarState {
+        workbench_id: response.workbench_id,
+        menus: response.menus.into_iter().map(proto_menu_from_http).collect(),
+    }
+}
+
+fn http_menu_bar_from_proto(response: ProtoMenuBarState) -> MenuBarState {
+    MenuBarState {
+        workbench_id: response.workbench_id,
+        menus: response.menus.into_iter().map(http_menu_from_proto).collect(),
+    }
+}
+
+fn proto_toolbar_item_from_http(response: ToolbarItem) -> ProtoToolbarItem {
+    ProtoToolbarItem {
+        kind: response.kind,
+        command_id: response.command_id,
+        label: response.label,
+        icon: response.icon,
+        enabled: response.enabled,
+        checked: response.checked,
+    }
+}
+
+fn http_toolbar_item_from_proto(response: ProtoToolbarItem) -> ToolbarItem {
+    ToolbarItem {
+        kind: response.kind,
+        command_id: response.command_id,
+        label: response.label,
+        icon: response.icon,
+        enabled: response.enabled,
+        checked: response.checked,
+    }
+}
+
+fn proto_toolbar_from_http(response: Toolbar) -> ProtoToolbar {
+    ProtoToolbar {
+        toolbar_id: response.toolbar_id,
+        label: response.label,
+        visible: response.visible,
+        items: response
+            .items
+            .into_iter()
+            .map(proto_toolbar_item_from_http)
+            .collect(),
+    }
+}
+
+fn http_toolbar_from_proto(response: ProtoToolbar) -> Toolbar {
+    Toolbar {
+        toolbar_id: response.toolbar_id,
+        label: response.label,
+        visible: response.visible,
+        items: response
+            .items
+            .into_iter()
+            .map(http_toolbar_item_from_proto)
+            .collect(),
+    }
+}
+
+fn proto_toolbar_band_from_http(response: ToolbarBand) -> ProtoToolbarBand {
+    ProtoToolbarBand {
+        band_id: response.band_id,
+        label: response.label,
+        toolbars: response
+            .toolbars
+            .into_iter()
+            .map(proto_toolbar_from_http)
+            .collect(),
+    }
+}
+
+fn http_toolbar_band_from_proto(response: ProtoToolbarBand) -> ToolbarBand {
+    ToolbarBand {
+        band_id: response.band_id,
+        label: response.label,
+        toolbars: response
+            .toolbars
+            .into_iter()
+            .map(http_toolbar_from_proto)
+            .collect(),
+    }
+}
+
+fn proto_toolbar_band_state_from_http(response: ToolbarBandState) -> ProtoToolbarBandState {
+    ProtoToolbarBandState {
+        workbench_id: response.workbench_id,
+        bands: response
+            .bands
+            .into_iter()
+            .map(proto_toolbar_band_from_http)
+            .collect(),
+    }
+}
+
+fn http_toolbar_band_state_from_proto(response: ProtoToolbarBandState) -> ToolbarBandState {
+    ToolbarBandState {
+        workbench_id: response.workbench_id,
+        bands: response
+            .bands
+            .into_iter()
+            .map(http_toolbar_band_from_proto)
+            .collect(),
+    }
+}
+
+fn proto_shell_panel_from_http(response: ShellPanelState) -> ProtoShellPanelState {
+    ProtoShellPanelState {
+        panel_id: response.panel_id,
+        region: response.region,
+        visible: response.visible,
+        order: response.order,
+        active_tab: response.active_tab,
+        size_hint: response.size_hint,
+    }
+}
+
+fn http_shell_panel_from_proto(response: ProtoShellPanelState) -> ShellPanelState {
+    ShellPanelState {
+        panel_id: response.panel_id,
+        region: response.region,
+        visible: response.visible,
+        order: response.order,
+        active_tab: response.active_tab,
+        size_hint: response.size_hint,
+    }
+}
+
+fn proto_shell_layout_from_http(response: ShellLayoutState) -> ProtoShellLayoutState {
+    ProtoShellLayoutState {
+        layout_id: response.layout_id,
+        panels: response
+            .panels
+            .into_iter()
+            .map(proto_shell_panel_from_http)
+            .collect(),
+    }
+}
+
+fn http_shell_layout_from_proto(response: ProtoShellLayoutState) -> ShellLayoutState {
+    ShellLayoutState {
+        layout_id: response.layout_id,
+        panels: response
+            .panels
+            .into_iter()
+            .map(http_shell_panel_from_proto)
+            .collect(),
     }
 }
 

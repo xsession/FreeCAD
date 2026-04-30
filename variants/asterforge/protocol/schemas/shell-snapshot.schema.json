@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/shell-snapshot.schema.json",
+  "title": "ShellSnapshot",
+  "type": "object",
+  "required": [
+    "document",
+    "workbench_catalog",
+    "menu_bar",
+    "toolbar_bands",
+    "layout"
+  ],
+  "properties": {
+    "document": {
+      "$ref": "./document.schema.json"
+    },
+    "workbench_catalog": {
+      "$ref": "./workbench-catalog.schema.json"
+    },
+    "menu_bar": {
+      "$ref": "./menu-bar.schema.json"
+    },
+    "toolbar_bands": {
+      "$ref": "./toolbar-band.schema.json"
+    },
+    "layout": {
+      "$ref": "./shell-layout.schema.json"
+    }
+  },
+  "additionalProperties": false
+}

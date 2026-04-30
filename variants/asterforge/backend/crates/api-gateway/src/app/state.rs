@@ -6,12 +6,16 @@ use asterforge_freecad_bridge::{open_document_snapshot, BridgeDocumentSnapshot, 
 use asterforge_protocol_types::asterforge::protocol::v1::{
     BootPayload as ProtoBootPayload, CommandCatalogResponse as ProtoCommandCatalogResponse,
     CommandInvocation, CommandReply, DiagnosticsResponse as ProtoDiagnosticsResponse,
+    DocumentRef as ProtoDocumentRef,
     EventEnvelope as ProtoEventEnvelope,
     FeatureHistoryResponse as ProtoFeatureHistoryResponse, JobStatusResponse as ProtoJobStatusResponse,
     ObjectTreeResponse as ProtoObjectTreeResponse,
     PreselectionRequest as ProtoPreselectionRequest,
     PreselectionState as ProtoPreselectionState,
+    ShellPanelMutationRequest as ProtoShellPanelMutationRequest,
     SelectionModeRequest as ProtoSelectionModeRequest, SelectionRef, SelectionReply,
+    ShellSnapshot as ProtoShellSnapshot,
+    WorkbenchActivationRequest as ProtoWorkbenchActivationRequest,
     SelectionState as ProtoSelectionState, PropertyResponse as ProtoPropertyResponse,
     TaskPanelResponse as ProtoTaskPanelResponse, ViewportResponse as ProtoViewportResponse,
 };
@@ -22,7 +26,8 @@ use super::protocol::{
     proto_command_catalog_from_http, proto_diagnostics_from_http, proto_document_ref_from_http,
     proto_event_from_http, proto_feature_history_from_http, proto_jobs_from_http,
     proto_object_node_from_http, proto_properties_from_http, proto_task_panel_from_http,
-    proto_viewport_from_http, selection_reply_from_http, selection_state_proto_from_http,
+    proto_shell_snapshot_from_http, proto_viewport_from_http, selection_reply_from_http,
+    selection_state_proto_from_http,
 };
 use super::command_runtime;
 
@@ -32,11 +37,14 @@ use crate::domain::{
     find_bridge_child, find_pad_length_mm, object_tree_from_bridge, sample_boot_report, sample_bridge_status,
     preselection_state_from_bridge, selectable_object_ids_for_mode, selection_state_from_bridge,
     sketch_constraint_summary,
+    shell_snapshot_from_bridge,
+    normalize_workbench_id, workbench_display_name,
     command_catalog_from_bridge, sample_event_stream, sample_property_groups, task_panel_from_bridge,
     viewport_from_bridge, BackendEvent, BootReport, CommandCatalogResponse,
     DiagnosticsResponse, FeatureHistoryResponse, ObjectNode, PropertyGroup,
     JobStageEntry, JobStatusEntry, JobStatusResponse, PreselectionStateResponse,
-    PropertyResponse, SelectionStateResponse, TaskPanelResponse,
+    PropertyResponse, RecentDocumentEntry, SelectionStateResponse, ShellSnapshot,
+    TaskPanelResponse, WorkspaceSessionEntry,
     ViewportDiffResponse, ViewportResponse, diagnostics_from_bridge,
 };
 
@@ -59,6 +67,14 @@ pub(super) struct AppModel {
     pub(super) properties_by_object: HashMap<String, Vec<PropertyGroup>>,
     pub(super) events: Vec<BackendEvent>,
     pub(super) undo_stack: UndoStack,
+    pub(super) recent_documents: Vec<RecentDocumentEntry>,
+    pub(super) workspace_sessions: Vec<WorkspaceSessionEntry>,
+    pub(super) combo_view_tab: String,
+    pub(super) bottom_dock_tab: String,
+    pub(super) combo_view_visible: bool,
+    pub(super) report_dock_visible: bool,
+    pub(super) combo_view_size_hint: f32,
+    pub(super) report_dock_size_hint: f32,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -74,6 +90,7 @@ pub struct BootPayload {
     pub boot_report: BootReport,
     pub bridge_status: BridgeStatus,
     pub document: DocumentSummary,
+    pub shell_snapshot: ShellSnapshot,
     pub object_tree: Vec<ObjectNode>,
     pub selected_object_id: String,
     pub selection_state: SelectionStateResponse,
@@ -111,9 +128,24 @@ pub struct SelectionModeRequest {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+pub struct ActivateWorkbenchRequest {
+    pub document_id: String,
+    pub workbench_id: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct PreselectionRequest {
     pub document_id: String,
     pub object_id: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct ShellPanelMutationRequest {
+    pub document_id: String,
+    pub panel_id: String,
+    pub active_tab: Option<String>,
+    pub visible: Option<bool>,
+    pub size_hint: Option<f32>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -134,6 +166,27 @@ impl AppState {
         let object_tree = object_tree_from_bridge(&snapshot);
         let selected_object_id = snapshot.selected_object_id.clone();
         let properties_by_object = build_property_map(&snapshot, &object_tree);
+        let recent_documents = vec![RecentDocumentEntry {
+            file_path: snapshot
+                .file_path
+                .clone()
+                .unwrap_or_else(|| "C:/models/actuator-mount.FCStd".into()),
+            display_name: snapshot.display_name.clone(),
+            workbench: snapshot.workbench.clone(),
+            dirty: snapshot.dirty,
+        }];
+        let workspace_sessions = vec![WorkspaceSessionEntry {
+            session_id: format!("{}:{}", snapshot.document_id, snapshot.file_path.clone().unwrap_or_default()),
+            document_id: snapshot.document_id.clone(),
+            display_name: snapshot.display_name.clone(),
+            file_path: snapshot
+                .file_path
+                .clone()
+                .unwrap_or_else(|| "C:/models/actuator-mount.FCStd".into()),
+            workbench: snapshot.workbench.clone(),
+            dirty: snapshot.dirty,
+            selected_object_id: Some(selected_object_id.clone()),
+        }];
 
         Self {
             inner: Arc::new(RwLock::new(AppModel {
@@ -149,6 +202,14 @@ impl AppState {
                 properties_by_object,
                 events: sample_event_stream(),
                 undo_stack: UndoStack::new(50),
+                recent_documents,
+                workspace_sessions,
+                combo_view_tab: "model".into(),
+                bottom_dock_tab: "report".into(),
+                combo_view_visible: true,
+                report_dock_visible: true,
+                combo_view_size_hint: 0.28,
+                report_dock_size_hint: 0.24,
             })),
         }
     }
@@ -171,6 +232,7 @@ impl AppState {
             boot_report: model.boot_report.clone(),
             bridge_status: model.bridge_status.clone(),
             document: model.document.summary().clone(),
+            shell_snapshot: model.shell_snapshot(),
             object_tree: model.object_tree.clone(),
             selected_object_id: selected_object_id.clone(),
             selection_state: model.selection_state(),
@@ -204,6 +266,7 @@ impl AppState {
         model.bridge_snapshot = snapshot;
         model.preselected_object_id = None;
         model.sync_from_snapshot();
+        model.remember_current_document();
         let document_id = model.document.document_id.clone();
         let next_job_id = format!("job-{}-document.open", model.jobs.len() + 1);
         let open_stages = vec![
@@ -389,6 +452,54 @@ impl AppState {
         .map(selection_state_proto_from_http)
     }
 
+    pub async fn activate_workbench(
+        &self,
+        request: ActivateWorkbenchRequest,
+    ) -> Option<DocumentSummary> {
+        let mut model = self.inner.write().await;
+        if model.document.document_id != request.document_id {
+            return None;
+        }
+
+        let workbench_id = normalize_workbench_id(&request.workbench_id);
+        if !["partdesign", "part", "sketcher", "mesh"].contains(&workbench_id.as_str()) {
+            return None;
+        }
+
+        let next_workbench = workbench_display_name(&workbench_id);
+        let document_id = model.document.document_id.clone();
+        let selected_object_id = model.selected_object_id.clone();
+        model.bridge_snapshot.workbench = next_workbench.clone();
+        model.document.summary.workbench = next_workbench.clone();
+        model.preselected_object_id = None;
+        model.remember_current_document();
+        model.events.insert(
+            0,
+            BackendEvent {
+                topic: "workbench_changed".into(),
+                level: "info".into(),
+                message: format!("Activated {} workbench", next_workbench),
+                document_id,
+                object_id: Some(selected_object_id),
+            },
+        );
+
+        Some(model.document.summary().clone())
+    }
+
+    #[allow(dead_code)]
+    pub async fn activate_workbench_proto(
+        &self,
+        request: ProtoWorkbenchActivationRequest,
+    ) -> Option<ProtoDocumentRef> {
+        self.activate_workbench(ActivateWorkbenchRequest {
+            document_id: request.document_id,
+            workbench_id: request.workbench_id,
+        })
+        .await
+        .map(proto_document_ref_from_http)
+    }
+
     pub async fn object_tree_proto(&self, document_id: &str) -> Option<ProtoObjectTreeResponse> {
         let model = self.inner.read().await;
         model.document.matches_document(document_id).then(|| ProtoObjectTreeResponse {
@@ -451,6 +562,99 @@ impl AppState {
     pub async fn command_catalog(&self, document_id: &str) -> Option<CommandCatalogResponse> {
         let model = self.inner.read().await;
         (model.document.document_id == document_id).then(|| model.command_catalog())
+    }
+
+    pub async fn shell_snapshot(&self, document_id: &str) -> Option<ShellSnapshot> {
+        let model = self.inner.read().await;
+        (model.document.document_id == document_id).then(|| model.shell_snapshot())
+    }
+
+    pub async fn shell_snapshot_proto(&self, document_id: &str) -> Option<ProtoShellSnapshot> {
+        self.shell_snapshot(document_id)
+            .await
+            .map(proto_shell_snapshot_from_http)
+    }
+
+    pub async fn update_shell_panel(
+        &self,
+        request: ShellPanelMutationRequest,
+    ) -> Option<ShellSnapshot> {
+        let mut model = self.inner.write().await;
+        if model.document.document_id != request.document_id {
+            return None;
+        }
+
+        match request.panel_id.as_str() {
+            "combo_view" => {
+                if let Some(active_tab) = request.active_tab.as_deref() {
+                    if !["model", "tasks"].contains(&active_tab) {
+                        return None;
+                    }
+                    model.combo_view_tab = active_tab.to_string();
+                }
+                if let Some(visible) = request.visible {
+                    model.combo_view_visible = visible;
+                }
+                if let Some(size_hint) = request.size_hint {
+                    model.combo_view_size_hint = size_hint.clamp(0.22, 0.42);
+                }
+            }
+            "report_dock" => {
+                if let Some(active_tab) = request.active_tab.as_deref() {
+                    if !["report", "python", "jobs", "diagnostics", "history", "commands"]
+                        .contains(&active_tab)
+                    {
+                        return None;
+                    }
+                    model.bottom_dock_tab = active_tab.to_string();
+                }
+                if let Some(visible) = request.visible {
+                    model.report_dock_visible = visible;
+                }
+                if let Some(size_hint) = request.size_hint {
+                    model.report_dock_size_hint = size_hint.clamp(0.18, 0.4);
+                }
+            }
+            _ => return None,
+        }
+
+        let document_id = model.document.document_id.clone();
+        let selected_object_id = model.selected_object_id.clone();
+        let detail = request
+            .active_tab
+            .clone()
+            .or_else(|| request.visible.map(|visible| if visible { "visible".into() } else { "hidden".into() }))
+            .or_else(|| request.size_hint.map(|value| format!("size {:.2}", value)))
+            .unwrap_or_else(|| "updated".into());
+
+        model.events.insert(
+            0,
+            BackendEvent {
+                topic: "shell_layout_changed".into(),
+                level: "info".into(),
+                message: format!("{} -> {}", request.panel_id, detail),
+                document_id,
+                object_id: Some(selected_object_id),
+            },
+        );
+
+        Some(model.shell_snapshot())
+    }
+
+    #[allow(dead_code)]
+    pub async fn update_shell_panel_proto(
+        &self,
+        request: ProtoShellPanelMutationRequest,
+    ) -> Option<ProtoShellSnapshot> {
+        self.update_shell_panel(ShellPanelMutationRequest {
+            document_id: request.document_id,
+            panel_id: request.panel_id,
+            active_tab: request.active_tab,
+            visible: request.visible,
+            size_hint: request.size_hint,
+        })
+        .await
+        .map(proto_shell_snapshot_from_http)
     }
 
     pub async fn command_catalog_proto(
@@ -629,6 +833,24 @@ impl AppModel {
         )
     }
 
+    fn shell_snapshot(&self) -> ShellSnapshot {
+        shell_snapshot_from_bridge(
+            &self.bridge_snapshot,
+            self.document.summary(),
+            Some(&self.selected_object_id),
+            self.undo_stack.can_undo(),
+            self.undo_stack.can_redo(),
+            &self.recent_documents,
+            &self.workspace_sessions,
+            &self.combo_view_tab,
+            &self.bottom_dock_tab,
+            self.combo_view_visible,
+            self.report_dock_visible,
+            self.combo_view_size_hint,
+            self.report_dock_size_hint,
+        )
+    }
+
     fn feature_history(&self) -> FeatureHistoryResponse {
         self.document.history().clone()
     }
@@ -699,6 +921,39 @@ impl AppModel {
         self.object_tree = object_tree_from_bridge(&self.bridge_snapshot);
         self.selected_object_id = self.bridge_snapshot.selected_object_id.clone();
         self.properties_by_object = build_property_map(&self.bridge_snapshot, &self.object_tree);
+        self.remember_current_document();
+    }
+
+    fn remember_current_document(&mut self) {
+        let file_path = self
+            .document
+            .file_path
+            .clone()
+            .unwrap_or_else(|| format!("C:/models/{}.FCStd", self.document.display_name));
+        let recent_entry = RecentDocumentEntry {
+            file_path: file_path.clone(),
+            display_name: self.document.display_name.clone(),
+            workbench: self.document.workbench.clone(),
+            dirty: self.document.dirty,
+        };
+        self.recent_documents.retain(|entry| entry.file_path != file_path);
+        self.recent_documents.insert(0, recent_entry);
+        self.recent_documents.truncate(8);
+
+        let session_id = format!("{}:{}", self.document.document_id, file_path);
+        let session_entry = WorkspaceSessionEntry {
+            session_id,
+            document_id: self.document.document_id.clone(),
+            display_name: self.document.display_name.clone(),
+            file_path: file_path.clone(),
+            workbench: self.document.workbench.clone(),
+            dirty: self.document.dirty,
+            selected_object_id: Some(self.selected_object_id.clone()),
+        };
+        self.workspace_sessions
+            .retain(|entry| entry.file_path != file_path);
+        self.workspace_sessions.insert(0, session_entry);
+        self.workspace_sessions.truncate(8);
     }
 
     fn normalize_selection_for_mode(
@@ -913,8 +1168,8 @@ mod tests {
     use std::collections::HashMap;
 
     use super::{
-        AppState, CommandExecutionRequest, PreselectionRequest, SelectionModeRequest,
-        SelectionRequest,
+        ActivateWorkbenchRequest, AppState, CommandExecutionRequest, PreselectionRequest,
+        SelectionModeRequest, SelectionRequest, ShellPanelMutationRequest,
     };
 
     fn command_request(command_id: &str, target_object_id: Option<&str>) -> CommandExecutionRequest {
@@ -1464,5 +1719,164 @@ mod tests {
             .find(|command| command.command_id == "document.redo")
             .expect("redo command should exist")
             .enabled);
+    }
+
+    #[tokio::test]
+    async fn shell_snapshot_exposes_layout_and_dynamic_command_state() {
+        let state = AppState::new();
+
+        let initial_snapshot = state
+            .shell_snapshot("doc-demo-001")
+            .await
+            .expect("shell snapshot should be available");
+        assert_eq!(initial_snapshot.workbench_catalog.active_workbench_id, "partdesign");
+        assert_eq!(initial_snapshot.document.document_id, "doc-demo-001");
+        assert_eq!(
+            initial_snapshot
+                .layout
+                .panels
+                .iter()
+                .find(|panel| panel.panel_id == "report_dock")
+                .and_then(|panel| panel.active_tab.as_deref()),
+            Some("report")
+        );
+
+        let initial_undo = initial_snapshot
+            .toolbar_bands
+            .bands
+            .iter()
+            .flat_map(|band| band.toolbars.iter())
+            .flat_map(|toolbar| toolbar.items.iter())
+            .find(|item| item.command_id.as_deref() == Some("document.undo"))
+            .expect("undo toolbar item should exist");
+        assert_eq!(initial_undo.enabled, Some(false));
+
+        state
+            .set_selection(SelectionRequest {
+                document_id: "doc-demo-001".to_string(),
+                object_id: "body-001".to_string(),
+            })
+            .await
+            .expect("body selection should succeed");
+        state
+            .run_command(CommandExecutionRequest {
+                command_id: "partdesign.new_sketch".to_string(),
+                document_id: "doc-demo-001".to_string(),
+                target_object_id: None,
+                arguments: HashMap::from([("sketch_label".to_string(), "ShellSketch".to_string())]),
+            })
+            .await
+            .expect("sketch creation should succeed");
+
+        let updated_snapshot = state
+            .shell_snapshot("doc-demo-001")
+            .await
+            .expect("shell snapshot should remain available");
+        let updated_undo = updated_snapshot
+            .toolbar_bands
+            .bands
+            .iter()
+            .flat_map(|band| band.toolbars.iter())
+            .flat_map(|toolbar| toolbar.items.iter())
+            .find(|item| item.command_id.as_deref() == Some("document.undo"))
+            .expect("undo toolbar item should exist");
+        assert_eq!(updated_undo.enabled, Some(true));
+    }
+
+    #[tokio::test]
+    async fn activate_workbench_updates_document_and_backend_owned_shell_state() {
+        let state = AppState::new();
+
+        let updated_document = state
+            .activate_workbench(ActivateWorkbenchRequest {
+                document_id: "doc-demo-001".to_string(),
+                workbench_id: "sketcher".to_string(),
+            })
+            .await
+            .expect("workbench activation should succeed");
+
+        assert_eq!(updated_document.workbench, "Sketcher");
+
+        let shell_snapshot = state
+            .shell_snapshot("doc-demo-001")
+            .await
+            .expect("shell snapshot should remain available");
+        assert_eq!(shell_snapshot.workbench_catalog.active_workbench_id, "sketcher");
+
+        let command_catalog = state
+            .command_catalog("doc-demo-001")
+            .await
+            .expect("command catalog should be available");
+        assert_eq!(command_catalog.workbench.display_name, "Sketcher");
+        assert!(!command_catalog
+            .commands
+            .iter()
+            .any(|command| command.command_id == "partdesign.new_sketch"));
+
+        let task_panel = state
+            .task_panel("doc-demo-001")
+            .await
+            .expect("task panel should be available");
+        assert_eq!(task_panel.title, "Sketcher Workspace");
+    }
+
+    #[tokio::test]
+    async fn shell_snapshot_tracks_recent_documents_sessions_and_panel_tabs() {
+        let state = AppState::new();
+
+        state
+            .open_document("C:/models/fixture-one.FCStd".to_string())
+            .await;
+        state
+            .update_shell_panel(ShellPanelMutationRequest {
+                document_id: "doc-demo-001".to_string(),
+                panel_id: "combo_view".to_string(),
+                active_tab: Some("tasks".to_string()),
+                visible: None,
+                size_hint: None,
+            })
+            .await
+            .expect("combo panel update should succeed");
+
+        let shell_snapshot = state
+            .shell_snapshot("doc-demo-001")
+            .await
+            .expect("shell snapshot should be available");
+        assert_eq!(shell_snapshot.recent_documents[0].file_path, "C:/models/fixture-one.FCStd");
+        assert_eq!(shell_snapshot.workspace_sessions[0].file_path, "C:/models/fixture-one.FCStd");
+        assert_eq!(
+            shell_snapshot
+                .layout
+                .panels
+                .iter()
+                .find(|panel| panel.panel_id == "combo_view")
+                .and_then(|panel| panel.active_tab.as_deref()),
+            Some("tasks")
+        );
+    }
+
+    #[tokio::test]
+    async fn shell_panel_mutation_updates_visibility_and_size_hints() {
+        let state = AppState::new();
+
+        let shell_snapshot = state
+            .update_shell_panel(ShellPanelMutationRequest {
+                document_id: "doc-demo-001".to_string(),
+                panel_id: "report_dock".to_string(),
+                active_tab: None,
+                visible: Some(false),
+                size_hint: Some(0.31),
+            })
+            .await
+            .expect("report dock mutation should succeed");
+
+        let report_dock = shell_snapshot
+            .layout
+            .panels
+            .iter()
+            .find(|panel| panel.panel_id == "report_dock")
+            .expect("report dock panel should exist");
+        assert!(!report_dock.visible);
+        assert_eq!(report_dock.size_hint, Some(0.31));
     }
 }

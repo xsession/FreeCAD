@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://asterforge.dev/schemas/workbench-catalog.schema.json",
+  "title": "WorkbenchCatalog",
+  "type": "object",
+  "required": [
+    "active_workbench_id",
+    "workbenches"
+  ],
+  "properties": {
+    "active_workbench_id": {
+      "type": "string"
+    },
+    "workbenches": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "workbench_id",
+          "display_name",
+          "icon",
+          "enabled"
+        ],
+        "properties": {
+          "workbench_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "icon": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

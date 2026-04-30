@@ -91,6 +91,108 @@ export interface WorkbenchState {
   mode: string;
 }
 
+export interface WorkbenchCatalogEntry {
+  workbench_id: string;
+  display_name: string;
+  icon: string | undefined;
+  enabled: boolean;
+  description: string | undefined;
+}
+
+export interface WorkbenchCatalog {
+  active_workbench_id: string;
+  workbenches: WorkbenchCatalogEntry[];
+}
+
+export interface MenuItem {
+  kind: string;
+  label: string | undefined;
+  command_id: string | undefined;
+  enabled: boolean | undefined;
+  checked: boolean | undefined;
+  submenu: Menu | undefined;
+}
+
+export interface Menu {
+  menu_id: string;
+  label: string;
+  visible: boolean;
+  items: MenuItem[];
+}
+
+export interface MenuBarState {
+  workbench_id: string;
+  menus: Menu[];
+}
+
+export interface ToolbarItem {
+  kind: string;
+  command_id: string | undefined;
+  label: string | undefined;
+  icon: string | undefined;
+  enabled: boolean | undefined;
+  checked: boolean | undefined;
+}
+
+export interface Toolbar {
+  toolbar_id: string;
+  label: string;
+  visible: boolean;
+  items: ToolbarItem[];
+}
+
+export interface ToolbarBand {
+  band_id: string;
+  label: string;
+  toolbars: Toolbar[];
+}
+
+export interface ToolbarBandState {
+  workbench_id: string;
+  bands: ToolbarBand[];
+}
+
+export interface ShellPanelState {
+  panel_id: string;
+  region: string;
+  visible: boolean;
+  order: number;
+  active_tab: string | undefined;
+  size_hint: number | undefined;
+}
+
+export interface ShellLayoutState {
+  layout_id: string;
+  panels: ShellPanelState[];
+}
+
+export interface RecentDocumentEntry {
+  file_path: string;
+  display_name: string;
+  workbench: string;
+  dirty: boolean;
+}
+
+export interface WorkspaceSessionEntry {
+  session_id: string;
+  document_id: string;
+  display_name: string;
+  file_path: string;
+  workbench: string;
+  dirty: boolean;
+  selected_object_id: string | undefined;
+}
+
+export interface ShellSnapshot {
+  document: DocumentRef;
+  workbench_catalog: WorkbenchCatalog;
+  menu_bar: MenuBarState;
+  toolbar_bands: ToolbarBandState;
+  layout: ShellLayoutState;
+  recent_documents: RecentDocumentEntry[];
+  workspace_sessions: WorkspaceSessionEntry[];
+}
+
 export interface CommandArgumentDefinition {
   argument_id: string;
   label: string;
@@ -230,6 +332,19 @@ export interface SelectionModeRequest {
   mode_id: string;
 }
 
+export interface WorkbenchActivationRequest {
+  document_id: string;
+  workbench_id: string;
+}
+
+export interface ShellPanelMutationRequest {
+  document_id: string;
+  panel_id: string;
+  active_tab: string | undefined;
+  visible: boolean | undefined;
+  size_hint: number | undefined;
+}
+
 export interface PreselectionState {
   document_id: string;
   current_mode: string;
@@ -338,6 +453,7 @@ export interface BootPayload {
   task_panel: TaskPanelResponse;
   diagnostics: DiagnosticsResponse;
   events: EventEnvelope[];
+  shell_snapshot: ShellSnapshot;
 }
 
 export interface Empty {

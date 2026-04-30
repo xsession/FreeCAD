@@ -220,6 +220,122 @@ pub struct WorkbenchState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkbenchCatalogEntry {
+    pub workbench_id: String,
+    pub display_name: String,
+    pub icon: Option<String>,
+    pub enabled: bool,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkbenchCatalog {
+    pub active_workbench_id: String,
+    pub workbenches: Vec<WorkbenchCatalogEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MenuItem {
+    pub kind: String,
+    pub label: Option<String>,
+    pub command_id: Option<String>,
+    pub enabled: Option<bool>,
+    pub checked: Option<bool>,
+    pub submenu: Option<Menu>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Menu {
+    pub menu_id: String,
+    pub label: String,
+    pub visible: bool,
+    pub items: Vec<MenuItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MenuBarState {
+    pub workbench_id: String,
+    pub menus: Vec<Menu>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolbarItem {
+    pub kind: String,
+    pub command_id: Option<String>,
+    pub label: Option<String>,
+    pub icon: Option<String>,
+    pub enabled: Option<bool>,
+    pub checked: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Toolbar {
+    pub toolbar_id: String,
+    pub label: String,
+    pub visible: bool,
+    pub items: Vec<ToolbarItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolbarBand {
+    pub band_id: String,
+    pub label: String,
+    pub toolbars: Vec<Toolbar>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolbarBandState {
+    pub workbench_id: String,
+    pub bands: Vec<ToolbarBand>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellPanelState {
+    pub panel_id: String,
+    pub region: String,
+    pub visible: bool,
+    pub order: u32,
+    pub active_tab: Option<String>,
+    pub size_hint: Option<f32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellLayoutState {
+    pub layout_id: String,
+    pub panels: Vec<ShellPanelState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecentDocumentEntry {
+    pub file_path: String,
+    pub display_name: String,
+    pub workbench: String,
+    pub dirty: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WorkspaceSessionEntry {
+    pub session_id: String,
+    pub document_id: String,
+    pub display_name: String,
+    pub file_path: String,
+    pub workbench: String,
+    pub dirty: bool,
+    pub selected_object_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellSnapshot {
+    pub document: DocumentSummary,
+    pub workbench_catalog: WorkbenchCatalog,
+    pub menu_bar: MenuBarState,
+    pub toolbar_bands: ToolbarBandState,
+    pub layout: ShellLayoutState,
+    pub recent_documents: Vec<RecentDocumentEntry>,
+    pub workspace_sessions: Vec<WorkspaceSessionEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommandCatalogResponse {
     pub document_id: String,
     pub workbench: WorkbenchState,
@@ -278,9 +394,494 @@ pub fn sample_boot_report() -> BootReport {
 
 pub fn workbench_state_from_bridge(snapshot: &BridgeDocumentSnapshot) -> WorkbenchState {
     WorkbenchState {
-        workbench_id: snapshot.workbench.to_lowercase(),
-        display_name: snapshot.workbench.clone(),
+        workbench_id: normalize_workbench_id(&snapshot.workbench),
+        display_name: workbench_display_name(&snapshot.workbench),
         mode: "feature_modeling".into(),
+    }
+}
+
+pub fn normalize_workbench_id(value: &str) -> String {
+    let collapsed = value
+        .chars()
+        .filter(|character| character.is_ascii_alphanumeric())
+        .collect::<String>()
+        .to_ascii_lowercase();
+
+    match collapsed.as_str() {
+        "" | "partdesign" => "partdesign".into(),
+        "part" => "part".into(),
+        "sketcher" => "sketcher".into(),
+        "mesh" | "meshdesign" => "mesh".into(),
+        _ => collapsed,
+    }
+}
+
+pub fn workbench_display_name(value: &str) -> String {
+    match normalize_workbench_id(value).as_str() {
+        "partdesign" => "PartDesign".into(),
+        "part" => "Part".into(),
+        "sketcher" => "Sketcher".into(),
+        "mesh" => "Mesh".into(),
+        _ if value.is_empty() => "PartDesign".into(),
+        _ => value.to_string(),
+    }
+}
+
+pub fn shell_snapshot_from_bridge(
+    snapshot: &BridgeDocumentSnapshot,
+    document: &DocumentSummary,
+    selected_object_id: Option<&str>,
+    can_undo: bool,
+    can_redo: bool,
+    recent_documents: &[RecentDocumentEntry],
+    workspace_sessions: &[WorkspaceSessionEntry],
+    combo_view_tab: &str,
+    bottom_dock_tab: &str,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    combo_view_size_hint: f32,
+    report_dock_size_hint: f32,
+) -> ShellSnapshot {
+    let workbench_catalog = workbench_catalog_from_bridge(snapshot);
+    ShellSnapshot {
+        document: document.clone(),
+        workbench_catalog: workbench_catalog.clone(),
+        menu_bar: menu_bar_state_from_bridge(
+            snapshot,
+            selected_object_id,
+            can_undo,
+            can_redo,
+            combo_view_visible,
+            report_dock_visible,
+            combo_view_tab,
+            bottom_dock_tab,
+        ),
+        toolbar_bands: toolbar_band_state_from_bridge(
+            snapshot,
+            selected_object_id,
+            can_undo,
+            can_redo,
+        ),
+        layout: shell_layout_state_from_bridge(
+            document,
+            combo_view_tab,
+            bottom_dock_tab,
+            combo_view_visible,
+            report_dock_visible,
+            combo_view_size_hint,
+            report_dock_size_hint,
+        ),
+        recent_documents: recent_documents.to_vec(),
+        workspace_sessions: workspace_sessions.to_vec(),
+    }
+}
+
+fn workbench_catalog_from_bridge(snapshot: &BridgeDocumentSnapshot) -> WorkbenchCatalog {
+    let active_workbench_id = normalize_workbench_id(&snapshot.workbench);
+    let mut workbenches = vec![
+        WorkbenchCatalogEntry {
+            workbench_id: "partdesign".into(),
+            display_name: "PartDesign".into(),
+            icon: Some("partdesign".into()),
+            enabled: true,
+            description: Some("Parametric feature modeling for bodies and sketches.".into()),
+        },
+        WorkbenchCatalogEntry {
+            workbench_id: "part".into(),
+            display_name: "Part".into(),
+            icon: Some("part".into()),
+            enabled: true,
+            description: Some("Direct solid modeling and Boolean operations.".into()),
+        },
+        WorkbenchCatalogEntry {
+            workbench_id: "sketcher".into(),
+            display_name: "Sketcher".into(),
+            icon: Some("sketcher".into()),
+            enabled: true,
+            description: Some("Constraint-driven 2D profile editing.".into()),
+        },
+        WorkbenchCatalogEntry {
+            workbench_id: "mesh".into(),
+            display_name: "Mesh".into(),
+            icon: Some("mesh".into()),
+            enabled: true,
+            description: Some("Mesh inspection and repair tools.".into()),
+        },
+    ];
+
+    if !workbenches
+        .iter()
+        .any(|entry| entry.workbench_id == active_workbench_id)
+    {
+        workbenches.insert(
+            0,
+            WorkbenchCatalogEntry {
+                workbench_id: active_workbench_id.clone(),
+                display_name: workbench_display_name(&snapshot.workbench),
+                icon: Some(active_workbench_id.clone()),
+                enabled: true,
+                description: Some("Workbench surfaced from the current bridge snapshot.".into()),
+            },
+        );
+    }
+
+    WorkbenchCatalog {
+        active_workbench_id,
+        workbenches,
+    }
+}
+
+fn menu_bar_state_from_bridge(
+    snapshot: &BridgeDocumentSnapshot,
+    selected_object_id: Option<&str>,
+    can_undo: bool,
+    can_redo: bool,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    combo_view_tab: &str,
+    bottom_dock_tab: &str,
+) -> MenuBarState {
+    let workbench_id = normalize_workbench_id(&snapshot.workbench);
+    let selected_node = selected_object_id.and_then(|object_id| find_bridge_object(snapshot, object_id));
+    let selected_is_body = matches!(selected_node.map(|node| node.object_type.as_str()), Some("PartDesign::Body"));
+    let selected_is_sketch = matches!(selected_node.map(|node| node.object_type.as_str()), Some("Sketcher::SketchObject"));
+    let selected_is_feature = matches!(
+        selected_node.map(|node| node.object_type.as_str()),
+        Some("PartDesign::Pad") | Some("PartDesign::Pocket")
+    );
+    let tools_menu_items = if workbench_id == "partdesign" {
+        vec![
+            command_menu_item("New Sketch", "partdesign.new_sketch", selected_is_body),
+            command_menu_item("Pad", "partdesign.pad", selected_is_sketch),
+            command_menu_item("Pocket", "partdesign.pocket", selected_is_sketch),
+            command_menu_item("Edit Pad", "partdesign.edit_pad", selected_is_feature),
+        ]
+    } else {
+        vec![
+            command_menu_item("Focus Selection", "selection.focus", selected_object_id.is_some()),
+            command_menu_item("Rollback Here", "history.rollback_here", selected_is_feature),
+            command_menu_item("Toggle Suppression", "model.toggle_suppression", selected_is_feature),
+            command_menu_item("Resume Full", "history.resume_full", snapshot.history_marker.is_some()),
+        ]
+    };
+
+    MenuBarState {
+        workbench_id,
+        menus: vec![
+            Menu {
+                menu_id: "file".into(),
+                label: "File".into(),
+                visible: true,
+                items: vec![
+                    command_menu_item("Open...", "document.open", true),
+                    command_menu_item("Save", "document.save", true),
+                    separator_menu_item(),
+                    command_menu_item("Recompute", "document.recompute", true),
+                ],
+            },
+            Menu {
+                menu_id: "edit".into(),
+                label: "Edit".into(),
+                visible: true,
+                items: vec![
+                    command_menu_item("Undo", "document.undo", can_undo),
+                    command_menu_item("Redo", "document.redo", can_redo),
+                    separator_menu_item(),
+                    command_menu_item("Focus Selection", "selection.focus", selected_object_id.is_some()),
+                ],
+            },
+            Menu {
+                menu_id: "view".into(),
+                label: "View".into(),
+                visible: true,
+                items: vec![
+                    toggle_menu_item("Combo View", combo_view_visible, Some("shell.toggle_combo_view")),
+                    toggle_menu_item(
+                        "Report View",
+                        report_dock_visible && bottom_dock_tab == "report",
+                        Some("shell.show_report_view"),
+                    ),
+                    toggle_menu_item(
+                        "Python Console",
+                        report_dock_visible && bottom_dock_tab == "python",
+                        Some("shell.show_python_console"),
+                    ),
+                ],
+            },
+            Menu {
+                menu_id: "tools".into(),
+                label: "Tools".into(),
+                visible: true,
+                items: tools_menu_items,
+            },
+            Menu {
+                menu_id: "macro".into(),
+                label: "Macro".into(),
+                visible: true,
+                items: vec![MenuItem {
+                    kind: "action".into(),
+                    label: Some("Macro manager pending backend wiring".into()),
+                    command_id: None,
+                    enabled: Some(false),
+                    checked: None,
+                    submenu: None,
+                }],
+            },
+            Menu {
+                menu_id: "window".into(),
+                label: "Window".into(),
+                visible: true,
+                items: vec![
+                    toggle_menu_item(
+                        "Model tree",
+                        combo_view_visible && combo_view_tab == "model",
+                        Some("shell.show_model_stack"),
+                    ),
+                    toggle_menu_item(
+                        "Task stack",
+                        combo_view_visible && combo_view_tab == "tasks",
+                        Some("shell.show_task_stack"),
+                    ),
+                    toggle_menu_item("Bottom dock", report_dock_visible, Some("shell.toggle_bottom_dock")),
+                ],
+            },
+            Menu {
+                menu_id: "help".into(),
+                label: "Help".into(),
+                visible: true,
+                items: vec![MenuItem {
+                    kind: "action".into(),
+                    label: Some("AsterForge parity workspace".into()),
+                    command_id: None,
+                    enabled: Some(true),
+                    checked: None,
+                    submenu: None,
+                }],
+            },
+        ],
+    }
+}
+
+fn toolbar_band_state_from_bridge(
+    snapshot: &BridgeDocumentSnapshot,
+    selected_object_id: Option<&str>,
+    can_undo: bool,
+    can_redo: bool,
+) -> ToolbarBandState {
+    let workbench_id = normalize_workbench_id(&snapshot.workbench);
+    let selected_node = selected_object_id.and_then(|object_id| find_bridge_object(snapshot, object_id));
+    let selected_kind = selected_node.map(|node| node.object_type.as_str()).unwrap_or("");
+    let selected_is_body = selected_kind == "PartDesign::Body";
+    let selected_is_sketch = selected_kind == "Sketcher::SketchObject";
+    let selected_is_feature = matches!(selected_kind, "PartDesign::Pad" | "PartDesign::Pocket");
+    let workbench_band = if workbench_id == "partdesign" {
+        ToolbarBand {
+            band_id: "partdesign".into(),
+            label: "PartDesign".into(),
+            toolbars: vec![Toolbar {
+                toolbar_id: "partdesign-operations".into(),
+                label: "Operations".into(),
+                visible: true,
+                items: vec![
+                    command_toolbar_item(
+                        "partdesign.new_sketch",
+                        "New Sketch",
+                        Some("sketch".into()),
+                        selected_is_body,
+                    ),
+                    command_toolbar_item("partdesign.pad", "Pad", Some("pad".into()), selected_is_sketch),
+                    command_toolbar_item(
+                        "partdesign.pocket",
+                        "Pocket",
+                        Some("pocket".into()),
+                        selected_is_sketch,
+                    ),
+                    command_toolbar_item(
+                        "partdesign.edit_pad",
+                        "Edit",
+                        Some("edit".into()),
+                        selected_is_feature,
+                    ),
+                ],
+            }],
+        }
+    } else {
+        ToolbarBand {
+            band_id: workbench_id.clone(),
+            label: workbench_display_name(&workbench_id),
+            toolbars: vec![Toolbar {
+                toolbar_id: format!("{}-tools", workbench_id),
+                label: "Workbench tools".into(),
+                visible: true,
+                items: vec![
+                    command_toolbar_item(
+                        "selection.focus",
+                        "Focus",
+                        Some("focus".into()),
+                        selected_object_id.is_some(),
+                    ),
+                    command_toolbar_item(
+                        "history.rollback_here",
+                        "Rollback",
+                        Some("history".into()),
+                        selected_is_feature,
+                    ),
+                    command_toolbar_item(
+                        "model.toggle_suppression",
+                        "Toggle",
+                        Some("toggle".into()),
+                        selected_is_feature,
+                    ),
+                ],
+            }],
+        }
+    };
+
+    ToolbarBandState {
+        workbench_id,
+        bands: vec![
+            ToolbarBand {
+                band_id: "document".into(),
+                label: "Document".into(),
+                toolbars: vec![Toolbar {
+                    toolbar_id: "document-standard".into(),
+                    label: "Standard".into(),
+                    visible: true,
+                    items: vec![
+                        command_toolbar_item("document.undo", "Undo", Some("undo".into()), can_undo),
+                        command_toolbar_item("document.redo", "Redo", Some("redo".into()), can_redo),
+                        command_toolbar_item("document.save", "Save", Some("save".into()), true),
+                        command_toolbar_item(
+                            "document.recompute",
+                            "Recompute",
+                            Some("recompute".into()),
+                            true,
+                        ),
+                    ],
+                }],
+            },
+            ToolbarBand {
+                band_id: "selection".into(),
+                label: "Selection".into(),
+                toolbars: vec![Toolbar {
+                    toolbar_id: "selection-tools".into(),
+                    label: "Selection tools".into(),
+                    visible: true,
+                    items: vec![
+                        command_toolbar_item(
+                            "selection.focus",
+                            "Focus",
+                            Some("focus".into()),
+                            selected_object_id.is_some(),
+                        ),
+                        command_toolbar_item(
+                            "history.resume_full",
+                            "Resume Full",
+                            Some("history".into()),
+                            true,
+                        ),
+                    ],
+                }],
+            },
+            workbench_band,
+        ],
+    }
+}
+
+fn shell_layout_state_from_bridge(
+    document: &DocumentSummary,
+    combo_view_tab: &str,
+    bottom_dock_tab: &str,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    combo_view_size_hint: f32,
+    report_dock_size_hint: f32,
+) -> ShellLayoutState {
+    ShellLayoutState {
+        layout_id: format!("{}:freecad-classic", document.document_id),
+        panels: vec![
+            ShellPanelState {
+                panel_id: "combo_view".into(),
+                region: "left".into(),
+                visible: combo_view_visible,
+                order: 0,
+                active_tab: Some(combo_view_tab.into()),
+                size_hint: Some(combo_view_size_hint),
+            },
+            ShellPanelState {
+                panel_id: "viewport".into(),
+                region: "center".into(),
+                visible: true,
+                order: 1,
+                active_tab: Some("3d".into()),
+                size_hint: Some(0.56),
+            },
+            ShellPanelState {
+                panel_id: "report_dock".into(),
+                region: "bottom".into(),
+                visible: report_dock_visible,
+                order: 2,
+                active_tab: Some(bottom_dock_tab.into()),
+                size_hint: Some(report_dock_size_hint),
+            },
+            ShellPanelState {
+                panel_id: "status_bar".into(),
+                region: "bottom".into(),
+                visible: true,
+                order: 3,
+                active_tab: None,
+                size_hint: Some(0.08),
+            },
+        ],
+    }
+}
+
+fn command_menu_item(label: &str, command_id: &str, enabled: bool) -> MenuItem {
+    MenuItem {
+        kind: "command".into(),
+        label: Some(label.into()),
+        command_id: Some(command_id.into()),
+        enabled: Some(enabled),
+        checked: None,
+        submenu: None,
+    }
+}
+
+fn separator_menu_item() -> MenuItem {
+    MenuItem {
+        kind: "separator".into(),
+        label: None,
+        command_id: None,
+        enabled: None,
+        checked: None,
+        submenu: None,
+    }
+}
+
+fn toggle_menu_item(label: &str, checked: bool, command_id: Option<&str>) -> MenuItem {
+    MenuItem {
+        kind: "toggle".into(),
+        label: Some(label.into()),
+        command_id: command_id.map(str::to_string),
+        enabled: Some(true),
+        checked: Some(checked),
+        submenu: None,
+    }
+}
+
+fn command_toolbar_item(
+    command_id: &str,
+    label: &str,
+    icon: Option<String>,
+    enabled: bool,
+) -> ToolbarItem {
+    ToolbarItem {
+        kind: "command".into(),
+        command_id: Some(command_id.into()),
+        label: Some(label.into()),
+        icon,
+        enabled: Some(enabled),
+        checked: None,
     }
 }
 
@@ -311,6 +912,7 @@ pub fn command_catalog_from_bridge(
     can_undo: bool,
     can_redo: bool,
 ) -> CommandCatalogResponse {
+    let workbench_id = normalize_workbench_id(&snapshot.workbench);
     let selected_is_body = matches!(selected_object_id, Some("body-001"));
     let selected_node = selected_object_id.and_then(|object_id| find_bridge_object(snapshot, object_id));
     let selected_state = selected_node.map(|node| bridge_object_state(snapshot, node));
@@ -343,14 +945,14 @@ pub fn command_catalog_from_bridge(
         .as_ref()
         .map(|state| state.active && !state.suppressed)
         .unwrap_or(false);
+    let mut commands = vec![
+        command_definition("document.recompute", true, vec![]),
+        command_definition("document.save", true, vec![]),
+        command_definition("selection.focus", selected_object_id.is_some(), vec![]),
+    ];
 
-    CommandCatalogResponse {
-        document_id: document_id.to_string(),
-        workbench: workbench_state_from_bridge(snapshot),
-        commands: vec![
-            command_definition("document.recompute", true, vec![]),
-            command_definition("document.save", true, vec![]),
-            command_definition("selection.focus", selected_object_id.is_some(), vec![]),
+    if workbench_id == "partdesign" {
+        commands.extend([
             command_definition("partdesign.new_sketch", selected_is_body, vec![CommandArgumentDefinition {
                     argument_id: "sketch_label".into(),
                     label: "Sketch label".into(),
@@ -452,12 +1054,21 @@ pub fn command_catalog_from_bridge(
                         options: vec!["dimension".into(), "through_all".into()],
                     },
                 ]),
-            command_definition("history.rollback_here", selected_is_feature, vec![]),
-            command_definition("history.resume_full", history_marker_active, vec![]),
-            command_definition("model.toggle_suppression", selected_is_feature, vec![]),
-            command_definition("document.undo", can_undo, vec![]),
-            command_definition("document.redo", can_redo, vec![]),
-        ],
+        ]);
+    }
+
+    commands.extend([
+        command_definition("history.rollback_here", selected_is_feature, vec![]),
+        command_definition("history.resume_full", history_marker_active, vec![]),
+        command_definition("model.toggle_suppression", selected_is_feature, vec![]),
+        command_definition("document.undo", can_undo, vec![]),
+        command_definition("document.redo", can_redo, vec![]),
+    ]);
+
+    CommandCatalogResponse {
+        document_id: document_id.to_string(),
+        workbench: workbench_state_from_bridge(snapshot),
+        commands,
     }
 }
 
@@ -469,8 +1080,246 @@ pub fn task_panel_from_bridge(
     can_undo: bool,
     can_redo: bool,
 ) -> TaskPanelResponse {
+    let workbench_id = normalize_workbench_id(&snapshot.workbench);
     let selected_node = selected_object_id.and_then(|object_id| find_bridge_object(snapshot, object_id));
     let selected_state = selected_node.map(|node| bridge_object_state(snapshot, node));
+    if workbench_id != "partdesign" {
+        let mut suggested_commands = vec!["document.recompute".into(), "document.save".into()];
+        if selected_object_id.is_some() {
+            suggested_commands.insert(0, "selection.focus".into());
+        }
+        if snapshot.history_marker.is_some() {
+            suggested_commands.push("history.resume_full".into());
+        }
+        if selected_object_id
+            .and_then(|object_id| find_bridge_object(snapshot, object_id))
+            .map(|node| node.object_id != "body-001")
+            .unwrap_or(false)
+        {
+            suggested_commands.push("model.toggle_suppression".into());
+        }
+        if can_undo {
+            suggested_commands.push("document.undo".into());
+        }
+        if can_redo {
+            suggested_commands.push("document.redo".into());
+        }
+
+        let (title, description, sections) = match workbench_id.as_str() {
+            "sketcher" => {
+                let sketch_node = selected_node.filter(|node| node.object_type == "Sketcher::SketchObject");
+                (
+                    "Sketcher Workspace".into(),
+                    sketch_node
+                        .map(sketch_workflow_description)
+                        .unwrap_or_else(|| {
+                            "Sketcher owns the current shell context. Select a sketch to inspect constraints, profile readiness, and plane setup while deeper sketch editing services are being migrated.".into()
+                        }),
+                    vec![
+                        TaskPanelSection {
+                            section_id: "sketch_session".into(),
+                            title: "Sketch Session".into(),
+                            rows: vec![
+                                TaskPanelRow {
+                                    label: "Active object".into(),
+                                    value: selected_node
+                                        .map(|node| node.label.clone())
+                                        .unwrap_or_else(|| "No sketch selected".into()),
+                                    emphasis: true,
+                                },
+                                TaskPanelRow {
+                                    label: "Reference plane".into(),
+                                    value: sketch_node
+                                        .and_then(|node| node.reference_plane.clone())
+                                        .unwrap_or_else(|| "Select a sketch to inspect plane alignment".into()),
+                                    emphasis: false,
+                                },
+                                TaskPanelRow {
+                                    label: "Constraint state".into(),
+                                    value: sketch_node
+                                        .map(sketch_constraint_summary)
+                                        .unwrap_or_else(|| "Constraint analysis pending selection".into()),
+                                    emphasis: false,
+                                },
+                                TaskPanelRow {
+                                    label: "Profile readiness".into(),
+                                    value: sketch_node
+                                        .map(sketch_profile_readiness)
+                                        .unwrap_or_else(|| "Open a sketch to evaluate profile closure".into()),
+                                    emphasis: true,
+                                },
+                            ],
+                        },
+                        TaskPanelSection {
+                            section_id: "workspace".into(),
+                            title: "Workspace".into(),
+                            rows: vec![
+                                TaskPanelRow {
+                                    label: "Shell mode".into(),
+                                    value: "Sketch inspection and selection parity".into(),
+                                    emphasis: false,
+                                },
+                                TaskPanelRow {
+                                    label: "History".into(),
+                                    value: history_marker_label(snapshot),
+                                    emphasis: false,
+                                },
+                                TaskPanelRow {
+                                    label: "Next migration focus".into(),
+                                    value: "Constraint editing and solver feedback".into(),
+                                    emphasis: false,
+                                },
+                            ],
+                        },
+                    ],
+                )
+            }
+            "part" => (
+                "Part Workspace".into(),
+                selected_node
+                    .map(|node| {
+                        format!(
+                            "Part shell context is active. {} is selected while direct modeling commands are still being extracted from the Qt shell.",
+                            node.label
+                        )
+                    })
+                    .unwrap_or_else(|| {
+                        "Part shell context is active. Use this workspace to inspect document structure, selection state, and viewport presence while direct modeling actions migrate out of Qt.".into()
+                    }),
+                vec![
+                    TaskPanelSection {
+                        section_id: "part_workspace".into(),
+                        title: "Part Workspace".into(),
+                        rows: vec![
+                            TaskPanelRow {
+                                label: "Active object".into(),
+                                value: selected_node
+                                    .map(|node| node.label.clone())
+                                    .unwrap_or_else(|| "Body".into()),
+                                emphasis: true,
+                            },
+                            TaskPanelRow {
+                                label: "Object type".into(),
+                                value: selected_node
+                                    .map(|node| node.object_type.clone())
+                                    .unwrap_or_else(|| "Part::Feature".into()),
+                                emphasis: false,
+                            },
+                            TaskPanelRow {
+                                label: "Viewport focus".into(),
+                                value: if selected_object_id.is_some() {
+                                    "Selection can be centered from the shell".into()
+                                } else {
+                                    "Pick an object to drive focus".into()
+                                },
+                                emphasis: false,
+                            },
+                        ],
+                    },
+                    TaskPanelSection {
+                        section_id: "migration_status".into(),
+                        title: "Migration Status".into(),
+                        rows: vec![
+                            TaskPanelRow {
+                                label: "Shell state".into(),
+                                value: "Backend-owned sessions, layout, and workbench chrome".into(),
+                                emphasis: false,
+                            },
+                            TaskPanelRow {
+                                label: "History".into(),
+                                value: history_marker_label(snapshot),
+                                emphasis: false,
+                            },
+                            TaskPanelRow {
+                                label: "Next migration focus".into(),
+                                value: "Direct solid operations and Boolean command extraction".into(),
+                                emphasis: false,
+                            },
+                        ],
+                    },
+                ],
+            ),
+            _ => (
+                format!("{} Workspace", workbench_display_name(&workbench_id)),
+                format!(
+                    "{} owns the active shell context. Modeling commands remain backend-authoritative while dedicated {} tools are still being migrated.",
+                    workbench_display_name(&workbench_id),
+                    workbench_display_name(&workbench_id)
+                ),
+                vec![
+                    TaskPanelSection {
+                        section_id: "workspace".into(),
+                        title: "Workspace".into(),
+                        rows: vec![
+                            TaskPanelRow {
+                                label: "Active workbench".into(),
+                                value: workbench_display_name(&workbench_id),
+                                emphasis: true,
+                            },
+                            TaskPanelRow {
+                                label: "Selection mode".into(),
+                                value: "object".into(),
+                                emphasis: false,
+                            },
+                            TaskPanelRow {
+                                label: "History".into(),
+                                value: history_marker_label(snapshot),
+                                emphasis: false,
+                            },
+                        ],
+                    },
+                    TaskPanelSection {
+                        section_id: "selection".into(),
+                        title: "Selection".into(),
+                        rows: vec![
+                            TaskPanelRow {
+                                label: "Active object".into(),
+                                value: selected_node
+                                    .map(|node| node.label.clone())
+                                    .unwrap_or_else(|| "Body".into()),
+                                emphasis: true,
+                            },
+                            TaskPanelRow {
+                                label: "Object type".into(),
+                                value: selected_node
+                                    .map(|node| node.object_type.clone())
+                                    .unwrap_or_else(|| "PartDesign::Body".into()),
+                                emphasis: false,
+                            },
+                            TaskPanelRow {
+                                label: "Availability".into(),
+                                value: selected_state
+                                    .as_ref()
+                                    .map(|state| {
+                                        if state.suppressed {
+                                            "Suppressed".into()
+                                        } else if state.active {
+                                            "Active".into()
+                                        } else {
+                                            state
+                                                .inactive_reason
+                                                .clone()
+                                                .unwrap_or_else(|| "Inactive".into())
+                                        }
+                                    })
+                                    .unwrap_or_else(|| "Active".into()),
+                                emphasis: false,
+                            },
+                        ],
+                    },
+                ],
+            ),
+        };
+
+        return TaskPanelResponse {
+            document_id: document_id.to_string(),
+            title,
+            description,
+            sections,
+            suggested_commands,
+        };
+    }
+
     let (title, description, sections, mut suggested_commands): (
         String,
         String,
