@@ -17,6 +17,8 @@ use asterforge_protocol_types::asterforge::protocol::v1::{
     PropertyMetadata as ProtoPropertyMetadata, PropertyResponse as ProtoPropertyResponse,
     RecentDocumentEntry as ProtoRecentDocumentEntry,
     ShellLayoutState as ProtoShellLayoutState, ShellPanelState as ProtoShellPanelState,
+    ShellStatusBarItem as ProtoShellStatusBarItem,
+    ShellStatusBarState as ProtoShellStatusBarState,
     ShellSnapshot as ProtoShellSnapshot,
     SelectionModeOption as ProtoSelectionModeOption, SelectionReply,
     SelectionState as ProtoSelectionState, TaskPanelResponse as ProtoTaskPanelResponse,
@@ -36,12 +38,15 @@ use crate::domain::{
     FeatureHistoryResponse, JobStageEntry, JobStatusEntry, JobStatusResponse, Menu,
     MenuBarState, MenuItem, ObjectNode, PreselectionStateResponse, PropertyGroup,
     PropertyResponse, RecentDocumentEntry, SelectionModeOption, SelectionStateResponse,
-    ShellLayoutState, ShellPanelState, ShellSnapshot, TaskPanelResponse, Toolbar,
+    ShellLayoutState, ShellPanelState, ShellSnapshot, ShellStatusBarItem,
+    ShellStatusBarState, TaskPanelResponse, Toolbar,
     ToolbarBand, ToolbarBandState, ToolbarItem, ViewportDiffResponse, ViewportResponse,
     WorkbenchCatalog, WorkbenchCatalogEntry, WorkspaceSessionEntry,
 };
 
-use super::state::{BootPayload, HttpCommandExecutionResponse, SelectionResponse};
+use super::state::HttpCommandExecutionResponse;
+use super::state_payloads::BootPayload;
+use super::state_requests::SelectionResponse;
 
 pub fn command_reply_from_http(response: HttpCommandExecutionResponse) -> CommandReply {
     CommandReply {
@@ -241,6 +246,7 @@ pub fn proto_shell_snapshot_from_http(response: ShellSnapshot) -> ProtoShellSnap
         extension_compatibility: Some(proto_extension_compatibility_state_from_http(
             response.extension_compatibility,
         )),
+        status_bar: response.status_bar.map(proto_shell_status_bar_state_from_http),
         recent_documents: response
             .recent_documents
             .into_iter()
@@ -311,6 +317,7 @@ pub fn http_shell_snapshot_from_proto(response: ProtoShellSnapshot) -> ShellSnap
             .extension_compatibility
             .map(http_extension_compatibility_state_from_proto)
             .unwrap_or_else(default_extension_compatibility_state),
+        status_bar: response.status_bar.map(http_shell_status_bar_state_from_proto),
     }
 }
 
@@ -336,7 +343,46 @@ fn default_shell_snapshot(document: DocumentSummary) -> ShellSnapshot {
         workspace_sessions: vec![],
         inspection: None,
         extension_compatibility: default_extension_compatibility_state(),
+        status_bar: None,
         document,
+    }
+}
+
+fn proto_shell_status_bar_state_from_http(response: ShellStatusBarState) -> ProtoShellStatusBarState {
+    ProtoShellStatusBarState {
+        items: response
+            .items
+            .into_iter()
+            .map(proto_shell_status_bar_item_from_http)
+            .collect(),
+    }
+}
+
+fn proto_shell_status_bar_item_from_http(response: ShellStatusBarItem) -> ProtoShellStatusBarItem {
+    ProtoShellStatusBarItem {
+        item_id: response.item_id,
+        label: response.label,
+        value: response.value,
+        tone: response.tone,
+    }
+}
+
+fn http_shell_status_bar_state_from_proto(response: ProtoShellStatusBarState) -> ShellStatusBarState {
+    ShellStatusBarState {
+        items: response
+            .items
+            .into_iter()
+            .map(http_shell_status_bar_item_from_proto)
+            .collect(),
+    }
+}
+
+fn http_shell_status_bar_item_from_proto(response: ProtoShellStatusBarItem) -> ShellStatusBarItem {
+    ShellStatusBarItem {
+        item_id: response.item_id,
+        label: response.label,
+        value: response.value,
+        tone: response.tone,
     }
 }
 

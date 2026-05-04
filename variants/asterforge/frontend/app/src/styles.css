@@ -186,7 +186,7 @@ select:focus-visible {
 .freecad-toolbar-stack {
   display: grid;
   gap: 2px;
-  padding: 3px 4px;
+  padding: 2px 4px;
   border-radius: 0;
 }
 
@@ -209,7 +209,7 @@ select:focus-visible {
 
 .freecad-brand strong {
   font-family: "Segoe UI", sans-serif;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 600;
 }
 
@@ -641,7 +641,7 @@ select:focus-visible {
 
 .freecad-workspace {
   display: grid;
-  grid-template-columns: minmax(290px, 330px) minmax(0, 1fr);
+  grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
   gap: var(--shell-workspace-gap);
   min-height: 0;
   flex: 1 1 auto;
@@ -653,20 +653,41 @@ select:focus-visible {
   align-content: start;
   gap: var(--shell-workspace-gap);
   min-height: 0;
+  background: linear-gradient(180deg, rgba(30, 36, 41, 0.94), rgba(24, 30, 34, 0.96));
 }
 
 .freecad-main-column {
   min-width: 0;
-  grid-template-rows: minmax(0, 1fr) minmax(260px, 0.45fr);
+  grid-template-rows: minmax(0, 1fr) minmax(220px, 0.34fr);
   gap: var(--shell-workspace-gap);
 }
 
 .freecad-viewport-panel {
   min-height: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  background:
+    radial-gradient(circle at top, rgba(74, 97, 120, 0.16), transparent 36%),
+    linear-gradient(180deg, rgba(18, 24, 28, 0.98), rgba(14, 19, 23, 0.99));
+}
+
+.freecad-viewport-panel > .panel-header {
+  position: absolute;
+  top: 12px;
+  left: 132px;
+  z-index: 1;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 8, 10, 0.58);
+  backdrop-filter: blur(6px);
 }
 
 .freecad-bottom-dock {
   min-height: 0;
+  background: linear-gradient(180deg, rgba(24, 29, 34, 0.96), rgba(18, 23, 27, 0.98));
 }
 
 .bottom-dock-content > .panel,
@@ -723,16 +744,50 @@ select:focus-visible {
 }
 
 .freecad-statusbar {
-  justify-content: space-between;
+  justify-content: flex-start;
   flex-wrap: wrap;
-  gap: 4px 10px;
-  padding-top: 2px;
-  padding-bottom: 2px;
+  gap: 6px;
+  padding-top: 4px;
+  padding-bottom: 4px;
 }
 
-.freecad-statusbar span {
+.freecad-statusbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.freecad-statusbar-label {
   color: var(--muted);
-  font-size: 0.7rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.freecad-statusbar-value {
+  color: var(--text);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.freecad-statusbar-item-info {
+  border-color: rgba(143, 227, 193, 0.24);
+  background: rgba(143, 227, 193, 0.08);
+}
+
+.freecad-statusbar-item-warning {
+  border-color: rgba(255, 209, 102, 0.28);
+  background: rgba(255, 209, 102, 0.1);
+}
+
+.freecad-statusbar-item-error {
+  border-color: rgba(255, 114, 114, 0.3);
+  background: rgba(255, 114, 114, 0.11);
 }
 
 .command-palette-backdrop {
@@ -751,9 +806,9 @@ select:focus-visible {
   max-height: min(76vh, 820px);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
-  gap: 14px;
-  padding: 20px;
-  border-radius: 10px;
+  gap: 12px;
+  padding: 18px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, var(--panel), var(--panel-strong));
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
@@ -770,12 +825,19 @@ select:focus-visible {
   margin: 4px 0 0;
 }
 
+.command-palette-shortcut-note {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+}
+
 .command-palette-input {
   width: 100%;
-  padding: 14px 16px;
-  border-radius: 16px;
+  padding: 12px 14px;
+  border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   font-size: 1rem;
 }
@@ -798,8 +860,8 @@ select:focus-visible {
   justify-content: space-between;
   gap: 14px;
   width: 100%;
-  padding: 14px;
-  border-radius: 18px;
+  padding: 12px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
@@ -868,8 +930,8 @@ select:focus-visible {
 
 .command-palette-detail {
   min-height: 0;
-  padding: 16px;
-  border-radius: 20px;
+  padding: 14px;
+  border-radius: 6px;
   border: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(255, 255, 255, 0.03);
   overflow: auto;
@@ -1067,6 +1129,12 @@ select:focus-visible {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
 }
 
+.selection-mode-chip-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .selection-mode-chip {
   padding: 6px 8px;
   border-radius: 2px;
@@ -1081,6 +1149,22 @@ select:focus-visible {
 .selection-mode-chip span,
 .selection-mode-chip small {
   display: block;
+}
+
+.selection-mode-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--accent-soft);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .selection-mode-chip span {
@@ -1523,7 +1607,7 @@ select:focus-visible {
   align-items: center;
   gap: 6px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   border-radius: var(--shell-panel-radius);
   padding: 4px var(--shell-control-padding-x);
@@ -1922,6 +2006,7 @@ select:focus-visible {
 }
 
 .viewport-orientation-chip,
+.viewport-quickbar,
 .viewport-hud-toolbar,
 .viewport-selection-hud {
   position: absolute;
@@ -1933,9 +2018,9 @@ select:focus-visible {
   left: 12px;
   display: grid;
   gap: 4px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 4px;
-  background: rgba(4, 8, 10, 0.72);
+  background: rgba(4, 8, 10, 0.66);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1961,15 +2046,154 @@ select:focus-visible {
   max-width: min(100%, 420px);
 }
 
+.viewport-quickbar {
+  top: 54px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  max-width: min(100% - 24px, 520px);
+}
+
+.viewport-quickbar-button,
+.viewport-quickbar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 8, 10, 0.64);
+  color: var(--text);
+  backdrop-filter: blur(6px);
+}
+
+.viewport-quickbar-button {
+  cursor: pointer;
+}
+
+.viewport-quickbar-button-primary {
+  border-color: rgba(255, 143, 61, 0.28);
+  background: linear-gradient(180deg, rgba(255, 143, 61, 0.18), rgba(4, 8, 10, 0.64));
+}
+
+.viewport-quickbar-chip {
+  display: inline-grid;
+  gap: 2px;
+}
+
+.viewport-quickbar-chip span,
+.viewport-quickbar-button span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.viewport-quickbar-chip strong,
+.viewport-quickbar-button strong {
+  color: var(--text);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+}
+
+.viewport-quickbar-button strong {
+  color: var(--accent-soft);
+}
+
+.viewport-quickbar-chip-muted strong {
+  color: var(--muted);
+}
+
+.viewport-command-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  z-index: 1;
+  display: grid;
+  gap: 6px;
+  min-width: min(100% - 24px, 680px);
+  transform: translateX(-50%);
+}
+
+.viewport-command-bar-label {
+  justify-self: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(4, 8, 10, 0.54);
+  color: var(--muted);
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.viewport-command-bar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 8, 10, 0.62);
+  backdrop-filter: blur(8px);
+}
+
+.viewport-command-bar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.viewport-command-bar-button-active {
+  border-color: rgba(255, 143, 61, 0.28);
+  background: rgba(255, 143, 61, 0.12);
+}
+
+.viewport-command-bar-button span {
+  font-size: 0.74rem;
+}
+
+.viewport-command-bar-button strong {
+  color: var(--accent-soft);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.viewport-command-bar-button-utility {
+  border-color: rgba(255, 143, 61, 0.28);
+  background: rgba(255, 143, 61, 0.12);
+}
+
+.viewport-command-editor {
+  justify-self: center;
+  width: min(100%, 420px);
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 8, 10, 0.82);
+  backdrop-filter: blur(10px);
+}
+
 .viewport-selection-hud {
   left: 12px;
-  top: 64px;
+  top: 98px;
   display: grid;
   gap: 8px;
   width: min(100% - 24px, 360px);
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 8px;
-  background: rgba(4, 8, 10, 0.76);
+  background: rgba(4, 8, 10, 0.68);
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -1998,10 +2222,10 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 5px 7px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.03);
   color: var(--text);
   cursor: pointer;
 }
@@ -2036,10 +2260,10 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 5px 8px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(4, 8, 10, 0.72);
+  background: rgba(4, 8, 10, 0.66);
   color: var(--text);
   cursor: pointer;
 }
@@ -2101,10 +2325,18 @@ select:focus-visible {
   bottom: 12px;
   display: grid;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 7px 9px;
   border-radius: 4px;
-  background: rgba(4, 8, 10, 0.55);
+  background: rgba(4, 8, 10, 0.46);
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.viewport-canvas {
+  min-height: 0;
+}
+
+.viewport-canvas > * {
+  min-height: 100%;
 }
 
 .viewport-overlay span {
@@ -2274,6 +2506,20 @@ select:focus-visible {
 
   .viewport-panel {
     min-height: 0;
+  }
+
+  .freecad-viewport-panel > .panel-header {
+    left: 12px;
+    right: 12px;
+    justify-content: space-between;
+  }
+
+  .viewport-command-bar {
+    left: 12px;
+    right: 12px;
+    bottom: 104px;
+    min-width: 0;
+    transform: none;
   }
 }
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -32,6 +32,7 @@ pub const COMMAND_STEP_VIEW_LEFT: &str = "step.view_left";
 pub const COMMAND_STEP_VIEW_TOP: &str = "step.view_top";
 pub const COMMAND_STEP_VIEW_BOTTOM: &str = "step.view_bottom";
 pub const COMMAND_EXTENSIONS_REFRESH_INVENTORY: &str = "extensions.refresh_inventory";
+pub const COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG: &str = "extensions.review_addon_catalog";
 pub const COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES: &str = "extensions.review_external_workbenches";
 pub const COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY: &str = "extensions.run_inventory_entry";
 
@@ -89,6 +90,276 @@ pub struct CommandExecutionResponse {
     pub document_dirty: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BridgeCommandErrorCategory {
+    ValidationError,
+    NativeError,
+    Timeout,
+    Cancelled,
+    WorkerCrashed,
+    Unsupported,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCommandFailure {
+    pub category: BridgeCommandErrorCategory,
+    pub code: String,
+    pub summary: String,
+    pub detail: String,
+    pub correlation_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCommandAdapterRequest {
+    pub session_id: String,
+    pub command_id: String,
+    pub target_object_id: Option<String>,
+    pub arguments: BTreeMap<String, String>,
+    pub correlation_id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BridgeCommandAdapterResponse {
+    pub command_id: String,
+    pub accepted: bool,
+    pub status_message: String,
+    pub document_dirty: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct BridgeCommandExecutionOutcome<TSnapshot> {
+    pub response: CommandExecutionResponse,
+    pub updated_snapshot: Option<TSnapshot>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryCommandAction {
+    Undo,
+    Redo,
+}
+
+#[derive(Debug, Clone)]
+pub struct HistoryCommandAdapterResponse<TSnapshot> {
+    pub accepted: bool,
+    pub status_message: String,
+    pub restored_snapshot: Option<TSnapshot>,
+}
+
+pub trait HistoryCommandAdapter {
+    type Snapshot;
+    type Stack;
+
+    fn execute_history_command(
+        &self,
+        correlation_id: &str,
+        action: HistoryCommandAction,
+        stack: &mut Self::Stack,
+        current_snapshot: &Self::Snapshot,
+    ) -> HistoryCommandAdapterResponse<Self::Snapshot>;
+}
+
+pub trait BridgeCommandAdapter {
+    type Snapshot;
+
+    fn execute_bridge_command(
+        &self,
+        correlation_id: &str,
+        request: BridgeCommandAdapterRequest,
+    ) -> Result<BridgeCommandAdapterResponse, BridgeCommandFailure>;
+
+    fn load_bridge_session_snapshot(
+        &self,
+        correlation_id: &str,
+        session_id: &str,
+    ) -> Option<Self::Snapshot>;
+}
+
+pub fn execute_bridge_command<TSnapshot, TAdapter>(
+    adapter: &TAdapter,
+    correlation_id: &str,
+    session_id: &str,
+    fallback_selected_object_id: Option<&str>,
+    request: &CommandExecutionRequest,
+) -> BridgeCommandExecutionOutcome<TSnapshot>
+where
+    TAdapter: BridgeCommandAdapter<Snapshot = TSnapshot>,
+{
+    let target_object_id = request.target_object_id.clone().or_else(|| {
+        fallback_selected_object_id
+            .filter(|value| !value.is_empty())
+            .map(|value| value.to_string())
+    });
+    let adapter_request = BridgeCommandAdapterRequest {
+        session_id: session_id.to_string(),
+        command_id: request.command_id.clone(),
+        target_object_id,
+        arguments: request
+            .arguments
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect::<BTreeMap<_, _>>(),
+        correlation_id: Some(correlation_id.to_string()),
+    };
+
+    tracing::debug!(
+        correlation_id,
+        command_id = %adapter_request.command_id,
+        session_id = %adapter_request.session_id,
+        target_object_id = ?adapter_request.target_object_id,
+        "executing bridge-backed command through command-core adapter"
+    );
+
+    match adapter.execute_bridge_command(correlation_id, adapter_request.clone()) {
+        Ok(adapter_response) => {
+            let updated_snapshot = adapter_response
+                .accepted
+                .then(|| adapter.load_bridge_session_snapshot(correlation_id, &adapter_request.session_id))
+                .flatten();
+            BridgeCommandExecutionOutcome {
+                response: CommandExecutionResponse {
+                    command_id: adapter_response.command_id,
+                    accepted: adapter_response.accepted,
+                    status_message: adapter_response.status_message,
+                    document_dirty: adapter_response.document_dirty,
+                },
+                updated_snapshot,
+            }
+        }
+        Err(error) => {
+            let effective_correlation_id = error
+                .correlation_id
+                .as_deref()
+                .unwrap_or(correlation_id);
+            tracing::warn!(
+                correlation_id = effective_correlation_id,
+                command_id = %request.command_id,
+                category = ?error.category,
+                code = %error.code,
+                "bridge command failed"
+            );
+            BridgeCommandExecutionOutcome {
+                response: CommandExecutionResponse {
+                    command_id: request.command_id.clone(),
+                    accepted: false,
+                    status_message: match error.category {
+                        BridgeCommandErrorCategory::Unsupported => error.summary,
+                        _ => error.detail,
+                    },
+                    document_dirty: false,
+                },
+                updated_snapshot: None,
+            }
+        }
+    }
+}
+
+pub fn execute_history_command<TAdapter>(
+    adapter: &TAdapter,
+    correlation_id: &str,
+    request: &CommandExecutionRequest,
+    stack: &mut TAdapter::Stack,
+    current_snapshot: &TAdapter::Snapshot,
+) -> BridgeCommandExecutionOutcome<TAdapter::Snapshot>
+where
+    TAdapter: HistoryCommandAdapter,
+{
+    let action = match request.command_id.as_str() {
+        COMMAND_DOCUMENT_UNDO => HistoryCommandAction::Undo,
+        COMMAND_DOCUMENT_REDO => HistoryCommandAction::Redo,
+        _ => {
+            return BridgeCommandExecutionOutcome {
+                response: CommandExecutionResponse {
+                    command_id: request.command_id.clone(),
+                    accepted: false,
+                    status_message: "Unsupported history command".into(),
+                    document_dirty: false,
+                },
+                updated_snapshot: None,
+            }
+        }
+    };
+
+    tracing::debug!(
+        correlation_id,
+        command_id = %request.command_id,
+        action = ?action,
+        "executing history command through command-core adapter"
+    );
+
+    let adapter_response = adapter.execute_history_command(
+        correlation_id,
+        action,
+        stack,
+        current_snapshot,
+    );
+
+    BridgeCommandExecutionOutcome {
+        response: CommandExecutionResponse {
+            command_id: request.command_id.clone(),
+            accepted: adapter_response.accepted,
+            status_message: adapter_response.status_message,
+            document_dirty: false,
+        },
+        updated_snapshot: adapter_response.restored_snapshot,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtensionInventorySeedEntry {
+    pub entry_id: String,
+    pub label: String,
+    pub origin: String,
+    pub trust_state: String,
+    pub compatibility: String,
+    pub detail: String,
+    pub action_command_id: Option<String>,
+    pub action_label: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExtensionLanePlan {
+    pub lane_id: String,
+    pub status: String,
+    pub summary: String,
+    pub next_steps: Vec<String>,
+    pub command_ids: Vec<String>,
+    pub inventory_entries: Vec<ExtensionInventorySeedEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtensionExecutionPolicyResult {
+    pub accepted: bool,
+    pub status_message: String,
+    pub event_level: String,
+    pub event_message: String,
+    pub last_run_kind: Option<String>,
+    pub last_run_level: Option<String>,
+    pub last_run_status: Option<String>,
+    pub last_run_detail: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandContext {
+    pub document_id: String,
+    pub selected_object_id: Option<String>,
+    pub selectable_object_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandValidationErrorKind {
+    UnknownCommand,
+    DocumentMismatch,
+    MissingSelection,
+    InvalidTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommandValidationError {
+    pub kind: CommandValidationErrorKind,
+    pub command_id: String,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandTransactionMode {
     ReadOnly,
@@ -102,6 +373,15 @@ pub enum CommandJobKind {
     PersistDocument,
     BridgeMutation,
     BackendDispatch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommandDispatchRoute {
+    Step,
+    BridgeVerticalSlice,
+    UndoRedo,
+    Extension,
+    Unknown,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,6 +442,7 @@ pub fn command_behavior(command_id: &str) -> CommandBehavior {
         | COMMAND_STEP_VIEW_TOP
         | COMMAND_STEP_VIEW_BOTTOM
         | COMMAND_EXTENSIONS_REFRESH_INVENTORY
+        | COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG
         | COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES
         | COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY => {
             CommandBehavior {
@@ -174,6 +455,227 @@ pub fn command_behavior(command_id: &str) -> CommandBehavior {
             job_kind: CommandJobKind::BackendDispatch,
         },
     }
+}
+
+pub fn command_dispatch_route(command_id: &str, step_context_active: bool) -> CommandDispatchRoute {
+    match command_id {
+        COMMAND_SELECTION_FOCUS if step_context_active => CommandDispatchRoute::Step,
+        COMMAND_STEP_SELECT_PARENT
+        | COMMAND_STEP_SELECT_FIRST_CHILD
+        | COMMAND_STEP_INSPECT_PMI
+        | COMMAND_STEP_HIDE_SELECTION
+        | COMMAND_STEP_ISOLATE_SELECTION
+        | COMMAND_STEP_SHOW_ALL
+        | COMMAND_STEP_MEASURE_SELECTION
+        | COMMAND_STEP_VIEW_ISO
+        | COMMAND_STEP_VIEW_FIT_ALL
+        | COMMAND_STEP_VIEW_RESET
+        | COMMAND_STEP_VIEW_FRONT
+        | COMMAND_STEP_VIEW_BACK
+        | COMMAND_STEP_VIEW_RIGHT
+        | COMMAND_STEP_VIEW_LEFT
+        | COMMAND_STEP_VIEW_TOP
+        | COMMAND_STEP_VIEW_BOTTOM => CommandDispatchRoute::Step,
+        COMMAND_DOCUMENT_RECOMPUTE
+        | COMMAND_DOCUMENT_SAVE
+        | COMMAND_SELECTION_FOCUS
+        | COMMAND_PARTDESIGN_NEW_SKETCH
+        | COMMAND_PARTDESIGN_PAD
+        | COMMAND_PARTDESIGN_POCKET
+        | COMMAND_PARTDESIGN_EDIT_PAD
+        | COMMAND_PARTDESIGN_EDIT_POCKET
+        | COMMAND_HISTORY_ROLLBACK_HERE
+        | COMMAND_HISTORY_RESUME_FULL
+        | COMMAND_MODEL_TOGGLE_SUPPRESSION => CommandDispatchRoute::BridgeVerticalSlice,
+        COMMAND_DOCUMENT_UNDO | COMMAND_DOCUMENT_REDO => CommandDispatchRoute::UndoRedo,
+        COMMAND_EXTENSIONS_REFRESH_INVENTORY
+        | COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG
+        | COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES
+        | COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY => CommandDispatchRoute::Extension,
+        _ => CommandDispatchRoute::Unknown,
+    }
+}
+
+pub fn extension_refresh_lane_plans() -> Vec<ExtensionLanePlan> {
+    vec![
+        ExtensionLanePlan {
+            lane_id: "macros".into(),
+            status: "inventory-ready".into(),
+            summary: "Macro inventory is now staged in backend-owned compatibility state so trust review and execution boundaries can be layered in without reviving Qt dialogs.".into(),
+            next_steps: vec![
+                "Review discovered macros and assign trust boundaries.".into(),
+                "Replace the reviewed fixture launch with discovered user-macro inventory and persisted approval state.".into(),
+            ],
+            command_ids: vec![COMMAND_EXTENSIONS_REFRESH_INVENTORY.into()],
+            inventory_entries: vec![
+                ExtensionInventorySeedEntry {
+                    entry_id: "macro:auto_dimensioning".into(),
+                    label: "AutoDimensioning.FCMacro".into(),
+                    origin: "Reviewed fixture bundle".into(),
+                    trust_state: "reviewed".into(),
+                    compatibility: "shell-ready".into(),
+                    detail: "Launches through the repo FreeCAD console wrapper against a reviewed headless-safe macro fixture so backend execution, logging, and trust boundaries are exercised end to end.".into(),
+                    action_command_id: Some(COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY.into()),
+                    action_label: Some("Run Reviewed Macro".into()),
+                },
+                ExtensionInventorySeedEntry {
+                    entry_id: "macro:broken_reviewed".into(),
+                    label: "BrokenReviewedFixture.FCMacro".into(),
+                    origin: "Reviewed failure fixture".into(),
+                    trust_state: "reviewed".into(),
+                    compatibility: "shell-ready".into(),
+                    detail: "Exercises launcher failure handling so the Extensions dock can surface readable execution errors without relying on Qt-era dialogs.".into(),
+                    action_command_id: Some(COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY.into()),
+                    action_label: Some("Run Broken Reviewed Macro".into()),
+                },
+                ExtensionInventorySeedEntry {
+                    entry_id: "macro:legacy_sheetmetal".into(),
+                    label: "LegacySheetMetalTools.FCMacro".into(),
+                    origin: "Migrated macro bundle".into(),
+                    trust_state: "needs-review".into(),
+                    compatibility: "qt-bound".into(),
+                    detail: "Still assumes Qt dialogs for parameter entry and needs a shell-safe fallback before execution is enabled.".into(),
+                    action_command_id: None,
+                    action_label: None,
+                },
+            ],
+        },
+        ExtensionLanePlan {
+            lane_id: "addon-manager".into(),
+            status: "inventory-ready".into(),
+            summary: "Addon provenance and compatibility inventory is now staged in backend state so install and update flows can be wired without reopening Qt-owned UI assumptions.".into(),
+            next_steps: vec![
+                "Review backend-owned addon provenance, blockers, and shell-safe migration candidates.".into(),
+                "Promote reviewed install, update, and disable flows into explicit backend commands.".into(),
+            ],
+            command_ids: vec![COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG.into()],
+            inventory_entries: vec![ExtensionInventorySeedEntry {
+                entry_id: "addon:ifc_tools".into(),
+                label: "IFC Coordination Tools".into(),
+                origin: "Addon registry".into(),
+                trust_state: "registry-signed".into(),
+                compatibility: "reviewing".into(),
+                detail: "Metadata and provenance are available, but the task surfaces still assume PySide widgets.".into(),
+                action_command_id: None,
+                action_label: None,
+            }],
+        },
+    ]
+}
+
+pub fn extension_addon_catalog_review_plan() -> ExtensionLanePlan {
+    ExtensionLanePlan {
+        lane_id: "addon-manager".into(),
+        status: "reviewing".into(),
+        summary: "AddonManager compatibility review is active so provenance, install blockers, and shell-safe migration candidates can be audited through backend-owned inventory instead of Qt-only dialogs.".into(),
+        next_steps: vec![
+            "Promote reviewed addon install and update flows into explicit backend commands.".into(),
+            "Replace PySide-only preference and task widgets with protocol-driven shell surfaces.".into(),
+        ],
+        command_ids: vec![COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG.into()],
+        inventory_entries: vec![
+            ExtensionInventorySeedEntry {
+                entry_id: "addon:ifc_tools".into(),
+                label: "IFC Coordination Tools".into(),
+                origin: "Addon registry".into(),
+                trust_state: "registry-signed".into(),
+                compatibility: "reviewing".into(),
+                detail: "Manifest, provenance, and dependency metadata are now available in backend state, but task editing still depends on PySide widgets and Qt-bound install surfaces.".into(),
+                action_command_id: None,
+                action_label: None,
+            },
+            ExtensionInventorySeedEntry {
+                entry_id: "addon:sheetmetal_plus".into(),
+                label: "SheetMetal Plus".into(),
+                origin: "Community addon feed".into(),
+                trust_state: "needs-review".into(),
+                compatibility: "qt-bound".into(),
+                detail: "Install metadata is discoverable, but command onboarding and parameter dialogs still assume Qt task panels and modal prompts.".into(),
+                action_command_id: None,
+                action_label: None,
+            },
+            ExtensionInventorySeedEntry {
+                entry_id: "addon:render_studio".into(),
+                label: "Render Studio".into(),
+                origin: "Reviewed internal catalog".into(),
+                trust_state: "reviewed".into(),
+                compatibility: "shell-candidate".into(),
+                detail: "Manifest registration, icon metadata, and command grouping are portable, but preferences and post-install setup still need backend-owned replacement flows.".into(),
+                action_command_id: None,
+                action_label: None,
+            },
+        ],
+    }
+}
+
+pub fn extension_external_workbench_review_plan() -> ExtensionLanePlan {
+    ExtensionLanePlan {
+        lane_id: "external-workbenches".into(),
+        status: "reviewing".into(),
+        summary: "External workbench registration is under active compatibility review so command registration, onboarding, and Qt-bound UI fallbacks can move into explicit shell-safe contracts.".into(),
+        next_steps: vec![],
+        command_ids: vec![COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES.into()],
+        inventory_entries: vec![ExtensionInventorySeedEntry {
+            entry_id: "workbench:robotics_plus".into(),
+            label: "RoboticsPlusWorkbench".into(),
+            origin: "External workbench manifest".into(),
+            trust_state: "manifest-verified".into(),
+            compatibility: "reviewing".into(),
+            detail: "Command registration is portable, but task panels still require a shell-safe replacement for Qt docking widgets.".into(),
+            action_command_id: None,
+            action_label: None,
+        }],
+    }
+}
+
+pub fn evaluate_extension_inventory_execution_policy(
+    label: &str,
+    trust_state: &str,
+    compatibility: &str,
+) -> Option<ExtensionExecutionPolicyResult> {
+    if trust_state == "reviewed" && compatibility == "shell-ready" {
+        return None;
+    }
+
+    Some(ExtensionExecutionPolicyResult {
+        accepted: false,
+        status_message: format!("{} is not approved for backend execution yet", label),
+        event_level: "warning".into(),
+        event_message: format!(
+            "Rejected backend execution for {} because the entry is not reviewed and shell-ready yet",
+            label
+        ),
+        last_run_kind: Some("policy-rejected".into()),
+        last_run_level: Some("warning".into()),
+        last_run_status: Some("Blocked by trust policy".into()),
+        last_run_detail: Some(
+            "Reviewed backend execution only runs shell-ready entries that have passed explicit trust review.".into(),
+        ),
+    })
+}
+
+pub fn extension_execution_failure_status_message(label: &str) -> String {
+    format!("Failed to execute reviewed inventory entry {}", label)
+}
+
+pub fn extension_execution_success_status_message(label: &str) -> String {
+    format!("Executed reviewed inventory entry {}", label)
+}
+
+pub fn extension_execution_success_event_message(
+    label: &str,
+    origin: &str,
+    status_summary: &str,
+    output_excerpt: &str,
+) -> String {
+    format!(
+        "Executed reviewed inventory entry {} from {} ({}). Output: {}",
+        label, origin, status_summary, output_excerpt
+    )
+}
+
+pub fn extension_execution_failure_event_message(label: &str, detail: &str) -> String {
+    format!("Failed to execute reviewed inventory entry {}: {}", label, detail)
 }
 
 pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
@@ -478,6 +980,16 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             description: "Refresh backend-owned macro, addon, and external workbench compatibility inventory.",
             action_label: Some("Refresh Inventory"),
         }),
+        COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG => Some(CommandSpec {
+            command_id: COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG,
+            label: "Review Addon Catalog",
+            group: "Extensions",
+            icon: Some("list"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Inspect addon provenance, compatibility blockers, and shell-safe migration candidates in the backend-owned Extensions lane.",
+            action_label: Some("Review Addons"),
+        }),
         COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES => Some(CommandSpec {
             command_id: COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES,
             label: "Review External Workbenches",
@@ -500,6 +1012,103 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
         }),
         _ => None,
     }
+}
+
+pub fn command_definition(
+    command_id: &str,
+    enabled: bool,
+    arguments: Vec<CommandArgumentDefinition>,
+) -> Option<CommandDefinition> {
+    let spec = command_spec(command_id)?;
+
+    Some(CommandDefinition {
+        command_id: spec.command_id.into(),
+        label: spec.label.into(),
+        group: spec.group.into(),
+        icon: spec.icon.map(str::to_string),
+        shortcut: spec.shortcut.map(str::to_string),
+        enabled,
+        requires_selection: spec.requires_selection,
+        description: spec.description.into(),
+        action_label: spec.action_label.map(str::to_string),
+        arguments,
+    })
+}
+
+pub fn validate_command_request(
+    request: &CommandExecutionRequest,
+    context: &CommandContext,
+) -> Result<CommandBehavior, CommandValidationError> {
+    tracing::debug!(
+        command_id = %request.command_id,
+        document_id = %request.document_id,
+        target_object_id = ?request.target_object_id,
+        "validating command request in command-core"
+    );
+    let Some(spec) = command_spec(&request.command_id) else {
+        tracing::warn!(command_id = %request.command_id, "unknown command rejected during validation");
+        return Err(CommandValidationError {
+            kind: CommandValidationErrorKind::UnknownCommand,
+            command_id: request.command_id.clone(),
+            message: format!("Unknown command: {}", request.command_id),
+        });
+    };
+
+    if request.document_id != context.document_id {
+        tracing::warn!(command_id = %request.command_id, request_document_id = %request.document_id, active_document_id = %context.document_id, "command rejected due to document mismatch");
+        return Err(CommandValidationError {
+            kind: CommandValidationErrorKind::DocumentMismatch,
+            command_id: request.command_id.clone(),
+            message: format!(
+                "Command targets document '{}' but active document is '{}'",
+                request.document_id, context.document_id
+            ),
+        });
+    }
+
+    let requested_target = request
+        .target_object_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let selected_target = context
+        .selected_object_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let effective_target = requested_target.or(selected_target);
+
+    if spec.requires_selection && effective_target.is_none() {
+        tracing::warn!(command_id = %request.command_id, "command rejected due to missing selection");
+        return Err(CommandValidationError {
+            kind: CommandValidationErrorKind::MissingSelection,
+            command_id: request.command_id.clone(),
+            message: format!("Command '{}' requires an active selection", request.command_id),
+        });
+    }
+
+    if let Some(target_object_id) = requested_target {
+        if !context.selectable_object_ids.is_empty()
+            && !context
+                .selectable_object_ids
+                .iter()
+                .any(|candidate| candidate == target_object_id)
+        {
+            tracing::warn!(command_id = %request.command_id, target_object_id, "command rejected due to invalid target");
+            return Err(CommandValidationError {
+                kind: CommandValidationErrorKind::InvalidTarget,
+                command_id: request.command_id.clone(),
+                message: format!(
+                    "Target object '{}' is not selectable in the active command context",
+                    target_object_id
+                ),
+            });
+        }
+    }
+
+    let behavior = command_behavior(&request.command_id);
+    tracing::debug!(command_id = %request.command_id, ?behavior, "command validation accepted");
+    Ok(behavior)
 }
 
 pub fn job_title_from_command_id(command_id: &str) -> String {
@@ -527,6 +1136,15 @@ pub struct PlannedCommandEvent {
     pub topic: String,
     pub level: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlannedCommandRuntime {
+    pub job_title: String,
+    pub job_state: String,
+    pub job_progress_percent: u32,
+    pub job_stages: Vec<PlannedJobStage>,
+    pub events: Vec<PlannedCommandEvent>,
 }
 
 pub fn plan_job_stages(
@@ -649,15 +1267,122 @@ pub fn viewport_invalidated_event() -> PlannedCommandEvent {
     }
 }
 
+pub fn plan_command_runtime(
+    command_id: &str,
+    status_message: &str,
+    accepted: bool,
+    viewport_changed: bool,
+    source: Option<&str>,
+) -> PlannedCommandRuntime {
+    tracing::debug!(command_id, accepted, viewport_changed, source = ?source, "planning command runtime in command-core");
+    let job_stages = plan_job_stages(command_id, accepted, viewport_changed);
+    let events = plan_command_events(command_id, status_message, accepted, &job_stages, source);
+
+    PlannedCommandRuntime {
+        job_title: job_title_from_command_id(command_id),
+        job_state: if accepted {
+            "completed".into()
+        } else {
+            "failed".into()
+        },
+        job_progress_percent: if accepted { 100 } else { 0 },
+        job_stages,
+        events,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        command_behavior, command_spec, job_title_from_command_id, outcome_event_plan,
-        plan_command_events, plan_job_stages, stage_event_topic, viewport_invalidated_event,
-        CommandJobKind, CommandTransactionMode, COMMAND_DOCUMENT_REDO,
-        COMMAND_DOCUMENT_RECOMPUTE, COMMAND_DOCUMENT_SAVE, COMMAND_HISTORY_ROLLBACK_HERE,
-        COMMAND_EXTENSIONS_REFRESH_INVENTORY, COMMAND_SELECTION_FOCUS,
+        execute_bridge_command, execute_history_command, BridgeCommandAdapter,
+        BridgeCommandAdapterRequest, BridgeCommandAdapterResponse, BridgeCommandErrorCategory,
+        BridgeCommandFailure, HistoryCommandAction, HistoryCommandAdapter,
+        HistoryCommandAdapterResponse,
+        command_behavior, command_definition, command_dispatch_route, command_spec, job_title_from_command_id,
+        evaluate_extension_inventory_execution_policy, extension_execution_failure_event_message,
+        extension_execution_failure_status_message, extension_execution_success_event_message,
+        extension_execution_success_status_message, extension_external_workbench_review_plan,
+        extension_refresh_lane_plans,
+        outcome_event_plan, plan_command_events, plan_command_runtime, plan_job_stages,
+        stage_event_topic, validate_command_request, viewport_invalidated_event, CommandContext,
+        CommandDispatchRoute, CommandJobKind, CommandTransactionMode, CommandValidationErrorKind,
+        COMMAND_DOCUMENT_REDO, COMMAND_DOCUMENT_RECOMPUTE, COMMAND_DOCUMENT_SAVE,
+        COMMAND_DOCUMENT_UNDO,
+        COMMAND_EXTENSIONS_REFRESH_INVENTORY, COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG,
+        COMMAND_HISTORY_ROLLBACK_HERE,
+        COMMAND_SELECTION_FOCUS, COMMAND_STEP_VIEW_ISO,
+        extension_addon_catalog_review_plan,
     };
+    use std::collections::{BTreeMap, HashMap};
+
+    #[derive(Default)]
+    struct RecordingBridgeAdapter {
+        execute_response: Option<Result<BridgeCommandAdapterResponse, BridgeCommandFailure>>,
+        loaded_snapshot: Option<&'static str>,
+        recorded_request: Option<BridgeCommandAdapterRequest>,
+        load_calls: Vec<(String, String)>,
+    }
+
+    impl BridgeCommandAdapter for std::cell::RefCell<RecordingBridgeAdapter> {
+        type Snapshot = &'static str;
+
+        fn execute_bridge_command(
+            &self,
+            _correlation_id: &str,
+            request: BridgeCommandAdapterRequest,
+        ) -> Result<BridgeCommandAdapterResponse, BridgeCommandFailure> {
+            let mut adapter = self.borrow_mut();
+            adapter.recorded_request = Some(request);
+            adapter
+                .execute_response
+                .clone()
+                .expect("execute response should be configured")
+        }
+
+        fn load_bridge_session_snapshot(
+            &self,
+            correlation_id: &str,
+            session_id: &str,
+        ) -> Option<Self::Snapshot> {
+            let mut adapter = self.borrow_mut();
+            adapter
+                .load_calls
+                .push((correlation_id.to_string(), session_id.to_string()));
+            adapter.loaded_snapshot
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingHistoryAdapter {
+        response: Option<HistoryCommandAdapterResponse<&'static str>>,
+        recorded_action: Option<HistoryCommandAction>,
+        recorded_correlation_id: Option<String>,
+        recorded_stack: Option<&'static str>,
+        recorded_snapshot: Option<&'static str>,
+    }
+
+    impl HistoryCommandAdapter for std::cell::RefCell<RecordingHistoryAdapter> {
+        type Snapshot = &'static str;
+        type Stack = &'static str;
+
+        fn execute_history_command(
+            &self,
+            correlation_id: &str,
+            action: HistoryCommandAction,
+            stack: &mut Self::Stack,
+            current_snapshot: &Self::Snapshot,
+        ) -> HistoryCommandAdapterResponse<Self::Snapshot> {
+            let mut adapter = self.borrow_mut();
+            adapter.recorded_action = Some(action);
+            adapter.recorded_correlation_id = Some(correlation_id.to_string());
+            adapter.recorded_stack = Some(*stack);
+            adapter.recorded_snapshot = Some(*current_snapshot);
+            adapter
+                .response
+                .clone()
+                .expect("history response should be configured")
+        }
+    }
 
     #[test]
     fn classifies_mutating_bridge_commands() {
@@ -710,6 +1435,244 @@ mod tests {
     }
 
     #[test]
+    fn builds_command_definition_from_shared_registry() {
+        let definition = command_definition(COMMAND_DOCUMENT_SAVE, true, vec![])
+            .expect("save definition should exist");
+
+        assert_eq!(definition.command_id, COMMAND_DOCUMENT_SAVE);
+        assert!(definition.enabled);
+        assert_eq!(definition.label, "Save");
+    }
+
+    #[test]
+    fn validates_selection_requirement_against_context() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_SELECTION_FOCUS.into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let context = CommandContext {
+            document_id: "doc-001".into(),
+            selected_object_id: None,
+            selectable_object_ids: vec!["pad-001".into()],
+        };
+
+        let error = validate_command_request(&request, &context).expect_err("selection should be required");
+
+        assert_eq!(error.kind, CommandValidationErrorKind::MissingSelection);
+    }
+
+    #[test]
+    fn bridge_adapter_shapes_request_and_loads_snapshot_for_accepted_commands() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_DOCUMENT_SAVE.into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::from([("source".into(), "toolbar".into())]),
+        };
+        let adapter = std::cell::RefCell::new(RecordingBridgeAdapter {
+            execute_response: Some(Ok(BridgeCommandAdapterResponse {
+                command_id: COMMAND_DOCUMENT_SAVE.into(),
+                accepted: true,
+                status_message: "Document marked as saved".into(),
+                document_dirty: false,
+            })),
+            loaded_snapshot: Some("snapshot-a"),
+            recorded_request: None,
+            load_calls: vec![],
+        });
+
+        let outcome = execute_bridge_command(
+            &adapter,
+            "af-00000042",
+            "session-001",
+            Some("pad-001"),
+            &request,
+        );
+
+        let adapter = adapter.borrow();
+        assert_eq!(
+            adapter.recorded_request,
+            Some(BridgeCommandAdapterRequest {
+                session_id: "session-001".into(),
+                command_id: COMMAND_DOCUMENT_SAVE.into(),
+                target_object_id: Some("pad-001".into()),
+                arguments: BTreeMap::from([("source".into(), "toolbar".into())]),
+                correlation_id: Some("af-00000042".into()),
+            })
+        );
+        assert_eq!(adapter.load_calls.len(), 1);
+        assert_eq!(adapter.load_calls[0], ("af-00000042".into(), "session-001".into()));
+        assert!(outcome.response.accepted);
+        assert_eq!(outcome.updated_snapshot, Some("snapshot-a"));
+    }
+
+    #[test]
+    fn bridge_adapter_uses_summary_for_unsupported_failures() {
+        let request = super::CommandExecutionRequest {
+            command_id: "document.unsupported".into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let adapter = std::cell::RefCell::new(RecordingBridgeAdapter {
+            execute_response: Some(Err(BridgeCommandFailure {
+                category: BridgeCommandErrorCategory::Unsupported,
+                code: "bridge.command_unsupported".into(),
+                summary: "Bridge command is not supported".into(),
+                detail: "The prototype bridge does not handle this command.".into(),
+                correlation_id: Some("af-00000043".into()),
+            })),
+            loaded_snapshot: Some("snapshot-a"),
+            recorded_request: None,
+            load_calls: vec![],
+        });
+
+        let outcome = execute_bridge_command(&adapter, "af-00000043", "session-001", None, &request);
+
+        assert!(!outcome.response.accepted);
+        assert_eq!(outcome.response.status_message, "Bridge command is not supported");
+        assert!(outcome.updated_snapshot.is_none());
+        assert!(adapter.borrow().load_calls.is_empty());
+    }
+
+    #[test]
+    fn bridge_adapter_uses_detail_for_validation_failures() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_DOCUMENT_SAVE.into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let adapter = std::cell::RefCell::new(RecordingBridgeAdapter {
+            execute_response: Some(Err(BridgeCommandFailure {
+                category: BridgeCommandErrorCategory::ValidationError,
+                code: "bridge.session_not_found".into(),
+                summary: "Bridge session was not found".into(),
+                detail: "Open or synchronize the prototype bridge session before executing commands.".into(),
+                correlation_id: Some("af-00000044".into()),
+            })),
+            loaded_snapshot: None,
+            recorded_request: None,
+            load_calls: vec![],
+        });
+
+        let outcome = execute_bridge_command(&adapter, "af-00000044", "session-001", None, &request);
+
+        assert!(!outcome.response.accepted);
+        assert_eq!(
+            outcome.response.status_message,
+            "Open or synchronize the prototype bridge session before executing commands."
+        );
+        assert!(outcome.updated_snapshot.is_none());
+    }
+
+    #[test]
+    fn history_adapter_routes_undo_and_restores_snapshot() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_DOCUMENT_UNDO.into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let adapter = std::cell::RefCell::new(RecordingHistoryAdapter {
+            response: Some(HistoryCommandAdapterResponse {
+                accepted: true,
+                status_message: "Undo applied".into(),
+                restored_snapshot: Some("snapshot-prev"),
+            }),
+            recorded_action: None,
+            recorded_correlation_id: None,
+            recorded_stack: None,
+            recorded_snapshot: None,
+        });
+        let mut stack = "undo-stack";
+        let current_snapshot = "snapshot-current";
+
+        let outcome = execute_history_command(
+            &adapter,
+            "af-00000045",
+            &request,
+            &mut stack,
+            &current_snapshot,
+        );
+
+        let adapter = adapter.borrow();
+        assert_eq!(adapter.recorded_action, Some(HistoryCommandAction::Undo));
+        assert_eq!(adapter.recorded_correlation_id.as_deref(), Some("af-00000045"));
+        assert_eq!(adapter.recorded_stack, Some("undo-stack"));
+        assert_eq!(adapter.recorded_snapshot, Some("snapshot-current"));
+        assert!(outcome.response.accepted);
+        assert_eq!(outcome.response.status_message, "Undo applied");
+        assert_eq!(outcome.updated_snapshot, Some("snapshot-prev"));
+    }
+
+    #[test]
+    fn history_adapter_rejects_non_history_commands() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_DOCUMENT_SAVE.into(),
+            document_id: "doc-001".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let adapter = std::cell::RefCell::new(RecordingHistoryAdapter::default());
+        let mut stack = "undo-stack";
+        let current_snapshot = "snapshot-current";
+
+        let outcome = execute_history_command(
+            &adapter,
+            "af-00000046",
+            &request,
+            &mut stack,
+            &current_snapshot,
+        );
+
+        assert!(!outcome.response.accepted);
+        assert_eq!(outcome.response.status_message, "Unsupported history command");
+        assert!(outcome.updated_snapshot.is_none());
+        assert!(adapter.borrow().recorded_action.is_none());
+    }
+
+    #[test]
+    fn validates_requested_target_against_selectable_ids() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_SELECTION_FOCUS.into(),
+            document_id: "doc-001".into(),
+            target_object_id: Some("sketch-404".into()),
+            arguments: HashMap::new(),
+        };
+        let context = CommandContext {
+            document_id: "doc-001".into(),
+            selected_object_id: Some("pad-001".into()),
+            selectable_object_ids: vec!["pad-001".into(), "sketch-001".into()],
+        };
+
+        let error = validate_command_request(&request, &context).expect_err("target should be rejected");
+
+        assert_eq!(error.kind, CommandValidationErrorKind::InvalidTarget);
+    }
+
+    #[test]
+    fn rejects_document_mismatch_during_validation() {
+        let request = super::CommandExecutionRequest {
+            command_id: COMMAND_DOCUMENT_SAVE.into(),
+            document_id: "doc-other".into(),
+            target_object_id: None,
+            arguments: HashMap::new(),
+        };
+        let context = CommandContext {
+            document_id: "doc-001".into(),
+            selected_object_id: Some("pad-001".into()),
+            selectable_object_ids: vec![],
+        };
+
+        let error = validate_command_request(&request, &context).expect_err("document mismatch should fail");
+
+        assert_eq!(error.kind, CommandValidationErrorKind::DocumentMismatch);
+    }
+
+    #[test]
     fn derives_job_title_from_registry_before_fallback() {
         assert_eq!(job_title_from_command_id(COMMAND_HISTORY_ROLLBACK_HERE), "Rollback Here");
         assert_eq!(job_title_from_command_id("custom.command_name"), "command name");
@@ -745,6 +1708,30 @@ mod tests {
     }
 
     #[test]
+    fn routes_commands_by_shared_dispatch_metadata() {
+        assert_eq!(
+            command_dispatch_route(COMMAND_STEP_VIEW_ISO, false),
+            CommandDispatchRoute::Step
+        );
+        assert_eq!(
+            command_dispatch_route(COMMAND_SELECTION_FOCUS, true),
+            CommandDispatchRoute::Step
+        );
+        assert_eq!(
+            command_dispatch_route(COMMAND_SELECTION_FOCUS, false),
+            CommandDispatchRoute::BridgeVerticalSlice
+        );
+        assert_eq!(
+            command_dispatch_route(COMMAND_DOCUMENT_REDO, false),
+            CommandDispatchRoute::UndoRedo
+        );
+        assert_eq!(
+            command_dispatch_route(COMMAND_EXTENSIONS_REFRESH_INVENTORY, false),
+            CommandDispatchRoute::Extension
+        );
+    }
+
+    #[test]
     fn plans_command_events_with_stage_messages_and_source_suffix() {
         let stages = plan_job_stages(COMMAND_HISTORY_ROLLBACK_HERE, true, false);
         let events = plan_command_events(
@@ -758,6 +1745,79 @@ mod tests {
         assert!(events[0].message.starts_with("history.rollback_here: Queued by shell"));
         assert_eq!(events.last().expect("outcome event").topic, "task_status");
         assert!(events.last().expect("outcome event").message.ends_with(" via toolbar"));
+    }
+
+    #[test]
+    fn plans_runtime_bundle_with_job_and_event_metadata() {
+        let runtime = plan_command_runtime(
+            COMMAND_HISTORY_ROLLBACK_HERE,
+            "Rolled back model evaluation",
+            true,
+            true,
+            Some("toolbar"),
+        );
+
+        assert_eq!(runtime.job_title, "Rollback Here");
+        assert_eq!(runtime.job_state, "completed");
+        assert_eq!(runtime.job_progress_percent, 100);
+        assert_eq!(runtime.job_stages[1].stage_id, "bridge_mutation");
+        assert_eq!(runtime.job_stages[2].stage_id, "viewport_sync");
+        assert_eq!(runtime.events.last().expect("outcome event").topic, "task_status");
+        assert!(runtime.events.last().expect("outcome event").message.ends_with(" via toolbar"));
+    }
+
+    #[test]
+    fn exposes_extension_lane_plans_and_execution_policy() {
+        let refresh_plans = extension_refresh_lane_plans();
+        assert_eq!(refresh_plans.len(), 2);
+        assert_eq!(refresh_plans[0].lane_id, "macros");
+        assert_eq!(refresh_plans[0].inventory_entries[0].entry_id, "macro:auto_dimensioning");
+        assert_eq!(
+            refresh_plans[1].command_ids,
+            vec![COMMAND_EXTENSIONS_REVIEW_ADDON_CATALOG.to_string()]
+        );
+
+        let addon_review_plan = extension_addon_catalog_review_plan();
+        assert_eq!(addon_review_plan.lane_id, "addon-manager");
+        assert_eq!(addon_review_plan.inventory_entries.len(), 3);
+        assert_eq!(addon_review_plan.inventory_entries[1].entry_id, "addon:sheetmetal_plus");
+
+        let review_plan = extension_external_workbench_review_plan();
+        assert_eq!(review_plan.lane_id, "external-workbenches");
+        assert_eq!(review_plan.inventory_entries[0].entry_id, "workbench:robotics_plus");
+
+        let blocked = evaluate_extension_inventory_execution_policy(
+            "LegacySheetMetalTools.FCMacro",
+            "needs-review",
+            "qt-bound",
+        )
+        .expect("policy should reject non-shell-ready entry");
+        assert!(!blocked.accepted);
+        assert!(blocked.status_message.contains("not approved"));
+    }
+
+    #[test]
+    fn formats_extension_execution_messages() {
+        assert_eq!(
+            extension_execution_failure_status_message("AutoDimensioning.FCMacro"),
+            "Failed to execute reviewed inventory entry AutoDimensioning.FCMacro"
+        );
+        assert_eq!(
+            extension_execution_success_status_message("AutoDimensioning.FCMacro"),
+            "Executed reviewed inventory entry AutoDimensioning.FCMacro"
+        );
+        assert!(extension_execution_success_event_message(
+            "AutoDimensioning.FCMacro",
+            "Reviewed fixture bundle",
+            "launcher success",
+            "ASTERFORGE_MACRO_OK"
+        )
+        .contains("Executed reviewed inventory entry AutoDimensioning.FCMacro"));
+        assert!(extension_execution_failure_event_message(
+            "AutoDimensioning.FCMacro",
+            "test launcher failure"
+        )
+        .contains("test launcher failure"));
     }
 
     #[test]

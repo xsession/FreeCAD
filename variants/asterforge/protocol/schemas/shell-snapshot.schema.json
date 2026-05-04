@@ -25,6 +25,42 @@
     },
     "layout": {
       "$ref": "./shell-layout.schema.json"
+    },
+    "status_bar": {
+      "type": "object",
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "item_id",
+              "label",
+              "value",
+              "tone"
+            ],
+            "properties": {
+              "item_id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "value": {
+                "type": "string"
+              },
+              "tone": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

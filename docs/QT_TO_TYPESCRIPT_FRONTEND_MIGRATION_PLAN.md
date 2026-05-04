@@ -4,13 +4,13 @@ Status: active implementation plan with AsterForge shell in progress
 
 ## Progress Snapshot
 
-Estimated overall progress against the milestone plan: `████░░░░░░ 42%`
+Estimated overall progress against the milestone plan: `█████░░░░░ 51%`
 
 | Milestone | Status | Notes |
 | --- | --- | --- |
 | A. Discovery and Baselines | In progress | Inventory and ownership artifacts exist, the Qt screenshot baseline set is captured, and the manual interaction recording lane is scaffolded; final recording review remains open. |
-| B. Static TS Shell Parity | Largely complete | The TypeScript shell, chrome, and shell scaffolding are present and actively used. |
-| C. Command and Layout Parity | In progress | Menus, toolbars, workbench-specific chrome, and in-canvas command access exist; persistence and broader layout parity are still incomplete. |
+| B. Static TS Shell Parity | Largely complete | The TypeScript shell, chrome, and shell scaffolding are present and actively used, and the viewport now carries an in-canvas quick-access strip, a backend-driven command shelf, and a denser, more restrained shell treatment that keeps attention on the model area. |
+| C. Command and Layout Parity | Largely complete | Menus, toolbars, workbench-specific chrome, command palette and in-canvas command access, a viewport-anchored quick-access rail plus backend-driven command shelf with inline argument editing for suggested commands, keyboard-first quick open plus numeric selection-mode shortcuts, panel visibility and tab switching, workspace-session restore hooks, a backend-owned diagnostics-aware shell status bar, and an Extensions dock with backend-owned macro, addon, and external-workbench review lanes are implemented; broader layout polish and full parity are still incomplete. |
 | D. Editing Surface Parity | In progress | Tree, property, task, report, diagnostics, history, and jobs surfaces are functional, but full editing parity is not done. |
 | E. Viewport Parity | In progress | STEP focus, fit-all, reset, standard views, selection linkage, and shell-local wheel zoom are working; full navigation-feel parity is still missing. |
 | F. Standards Foundation | In progress | AP242 and early EXPRESS groundwork are implemented, but broader standards transport and downstream workflows remain partial. |
@@ -31,6 +31,9 @@ Interpretation:
 - `docs/PYSIDE_USAGE_TABLE.md`
 - `docs/GUI_OWNERSHIP_TABLE.md`
 - `docs/SRC_GUI_FILE_LEVEL_OWNERSHIP_INVENTORY.md`
+- `docs/FREECAD_RUST_BACKEND_MIGRATION_PLAN.md`
+- `docs/ASTERFORGE_FREECAD_FEATURESET_STATUS.md`
+- `docs/PLASTICITY_UX_BACKEND_BENCHMARK.md`
 - `docs/FRONTEND_PARITY_BASELINE_SPEC.md`
 - `docs/QT_TO_TYPESCRIPT_REPO_EXECUTION_PLAN.md`
 - `docs/architecture/ADR-0010-typescript-shell-and-qt-retirement.md`
@@ -41,12 +44,14 @@ Interpretation:
 
 The repository is already beyond pure planning for the shell migration. The active implementation anchor is the AsterForge variant under `variants/asterforge`.
 
+For a stricter implementation-versus-gap audit of the current migrated FreeCAD-facing featureset, see `docs/ASTERFORGE_FREECAD_FEATURESET_STATUS.md`.
+
 Implemented slices in the current tree:
 
 - React plus TypeScript shell scaffold exists in `variants/asterforge/frontend/app`
 - Rust backend shell services exist in `variants/asterforge/backend/crates`
 - protocol schemas and generated bindings exist in `variants/asterforge/protocol`
-- the current shell renders menu bar, toolbar bands, combo view, tree, property, task panel, report, diagnostics, history, jobs, and status surfaces from backend payloads
+- the current shell renders menu bar, toolbar bands, combo view, tree, property, task panel, report, diagnostics, history, jobs, and status surfaces from backend payloads, and the shell snapshot now carries a backend-owned status-bar payload for active workbench, save state, selection mode, selection summary, diagnostics, dock context, worker mode, jobs, and panel visibility instead of leaving that footer as a frontend-only composition
 - command, toolbar, and workbench icon metadata now flow through the shell via a shared TypeScript icon renderer instead of frontend-only placeholders
 - a repo-level launcher now exists at `Start-FreeCADShell.ps1` so Qt, AsterForge, or dual-shell startup can be invoked from one shell-neutral entry point
 - a repeatable Qt parity capture runner now exists at `tools/profile/capture_qt_shell_matrix.ps1` with a repo-owned starter manifest under `docs/parity/fixtures`
@@ -56,13 +61,15 @@ Implemented slices in the current tree:
 - `asterforge-api-gateway` now exposes parser-backed STEP document and scene endpoints and binds them to the active document path instead of a global fixture-only response
 - STEP documents now project a backend-owned synthetic model tree, property groups, selection state, diagnostics summary, task panel summary, and viewport drawables so the shell can inspect imported topology through the same panel surfaces used by FCStd-backed documents
 - the React shell now conditionally loads STEP scene payloads for `.stp`, `.step`, and `.p21` documents and renders a selectable STEP viewport that uses the same object identifiers as the backend selection and property model
+- the command palette now supports both `F` and `Ctrl+K` quick-open paths outside editable fields, while selection-mode switching now also supports numeric `1-9` shortcuts based on the backend-published mode order so viewport interaction is faster and more keyboard-forward
+- the viewport shell now includes a dedicated in-canvas quick-access strip for search and session context plus a backend-driven command shelf sourced from task and hover suggestions, and that shelf can now expand suggested argument-bearing commands into the shared inline command editor directly inside the viewport instead of forcing those flows back into distant docks or palettes, while the layout has been rebalanced toward a narrower subordinate combo view, a shorter lower dock, lighter top chrome, and a stronger viewport-first visual hierarchy aligned with the Plasticity benchmark direction without copying Plasticity assets or exact composition
 - the React shell now includes in-canvas viewport heads-up controls, backend-owned STEP focus, fit-all framing, reset-to-home, and standard view-direction commands including mirrored left, back, and bottom inspection views, a live orientation readout, viewport-level selection mode controls, shell-local wheel zoom for the STEP renderer, and hover-candidate action cards that resolve shared shell command metadata, while task, hover, selection, command-palette, structured-report, and Shell Notice surfaces now share the same metadata-resolved command presentation path and parameterized command editor implementation, and task, hover, and selection suggestion surfaces also share suggested-command state orchestration, so model, task, report, focus, low-travel selection changes, target-aware palette execution against selected or hovered objects, actionable structured inspection refresh/focus workflows, backend activity select/focus plus topic-aware reinspection and remeasurement actions, and remaining selection-scoped plus global command-status notices are available inside the graphics area through the same actionable notice surface instead of splitting into separate event-only and command-only affordance paths, without duplicating the same live backend activity across notice and report surfaces, surfacing low-signal progress, viewport-sync chatter, worker-lifecycle open progress, shell-local selection, workbench, and dock-layout status chatter, or repeated background job-update bursts in those user-facing report channels, emitting a second command-status notice for the same PMI or measurement activity already represented by matching backend activity in either the Shell Notice stack or the report feed, emitting a second failed-command warning when the same rejection is already represented by a backend warning event, falling back to raw command ids in command-status notice titles when shared command metadata is already available, spending two notice slots on the same open-document change burst, spending the capped Shell Notice stack on low-value document-change, background job-update chatter, or informational command-status noise ahead of higher-severity or more actionable inspection notices, spending the report-dock backend activity feed on that same low-value document and job chatter ahead of warnings or actionable inspection updates, spending the report-dock backend activity feed on repeated document-change, job-update, or same-object PMI annotation bursts that could be summarized into one row, or spending the Shell Notice stack on repeated PMI annotation rows for the same inspected object
 - the frontend app now includes a focused Vitest regression harness for shell view helpers and rendered shell surfaces so structured report filtering, structured inspection command-notice suppression, command-status deduplication against matching backend activity notices, report-feed activity, and backend warning events, open-document change-burst summarization, job-update burst summarization, priority ordering of actionable inspection notices over generic document and job status chatter when the event-notice list is capped, severity-first ranking across the combined Shell Notice stack so stronger backend warnings and event notices can displace low-value informational command notices instead of reserving a fixed command slot, report-dock ordering that surfaces warnings and actionable STEP inspection activity ahead of generic document-open and job-update chatter while preserving those rows in the feed, report-feed burst summarization for repeated document-change, job-update, and same-object PMI annotation rows, metadata-resolved command-status notice titles and selection-scoped plus global notice actions, the report-dock activity empty state, actionable backend activity rows, Shell Notice action cards, report-tab backend activity notice deduplication, low-signal backend progress filtering, shell-local event filtering for selection, preselection, workbench, layout, and worker-lifecycle chatter, PMI annotation burst summarization, backend activity topic-to-command mapping for PMI and measurement workflows, expanded STEP viewport preset projection for mirrored left, back, and bottom navigation views, the viewport HUD, structured inspection panels, and command-palette parameter submission are covered by executable tests instead of build-only checks
 - STEP documents now expose a STEP-specific read-only command deck in the backend catalog, including fit-all plus reset and preset viewport commands, parent-child topology navigation, PMI inspection, measurement, and visibility controls that drive task-panel drill-down, structured report-dock inspection, command-palette discovery, and viewport emphasis for inspected STEP targets through a dedicated shell inspection state carried by the shell snapshot
 - STEP inspection now includes backend-owned visibility controls for imported topology, including isolate, hide-selection, and show-all commands that update the tree, task panel, diagnostics, viewport, and STEP shell chrome from one shared state model, and the STEP frontend renderer now filters its static scene bundle through the backend viewport-visible drawable set so hidden geometry no longer remains visible client-side
 - STEP inspection now includes backend-owned measurement for imported topology, with a measure-selection command that computes tessellated extents and surfaces them through the task panel, structured report-dock inspection, command deck, and STEP shell chrome
 - STEP documents now switch the shell snapshot to a STEP-specific workbench identity, menu bar, and toolbar band layout so imported Part 21 sessions no longer inherit PartDesign-oriented chrome, and that chrome now exposes the same backend-owned fit-all, reset, and standard view commands used by the in-canvas viewport HUD
-- the AsterForge shell now has a first backend-owned plugin and macro compatibility surface: backend menus route into a dedicated Extensions dock tab, the shared shell snapshot carries an extension-compatibility inventory for macros, AddonManager flows, and external workbench registration, each compatibility lane now advertises its own backend action ids through that shared payload, refreshed lanes can publish concrete inventory entries with provenance, compatibility, and trust metadata through the normal shell refresh path, and reviewed shell-safe entries can now expose backend-owned run actions that cover launcher-backed fixture execution plus dock-visible categorized run results for success, trust-policy rejection, and launcher or fixture failures instead of frontend-only placeholders
+- the AsterForge shell now has a first backend-owned plugin and macro compatibility surface: backend menus route into a dedicated Extensions dock tab, the shared shell snapshot carries an extension-compatibility inventory for macros, AddonManager flows, and external workbench registration, each compatibility lane now advertises its own backend action ids through that shared payload, refreshed lanes can publish concrete inventory entries with provenance, compatibility, and trust metadata through the normal shell refresh path, reviewed shell-safe entries can now expose backend-owned run actions that cover launcher-backed fixture execution plus dock-visible categorized run results for success, trust-policy rejection, and launcher or fixture failures instead of frontend-only placeholders, and the AddonManager lane now has a dedicated backend review command that stages addon provenance, blocker diagnostics, and shell-candidate inventory entries inside the same Extensions dock contract
 
 Still incomplete in the current tree:
 
@@ -260,6 +267,24 @@ Planning implication:
 - the AsterForge shell should preserve a manager-pane architecture for tree, property, and contextual task editing rather than scattering those surfaces across unrelated docks
 - in-canvas command affordances should be treated as core workflow requirements, not optional polish
 - tree, property, and graphics selection must remain tightly synchronized by contract for both native FreeCAD documents and imported STEP documents
+
+### Plasticity Benchmark
+
+Based on Plasticity's public docs, product site, and public repository, Plasticity should be treated as a benchmark for shell comfort, direct-manipulation command flow, and viewport-first interaction rather than as a source of brand or asset cloning.
+
+Plasticity is a useful reference point for:
+
+- calm, dense, low-chroma desktop chrome that keeps attention on the model instead of on dashboard-like panel framing
+- viewport-first command access through command palette, command bar, radial-menu style interaction, view cube, and contextual prompts
+- compact dialogs and gizmos that work together during an active command instead of pushing the user into distant form-heavy workflows
+- explicit editor architecture with centralized command execution, history, backup, keybindings, theme loading, and viewport helper layers
+
+Planning implication:
+
+- the TypeScript shell should pursue Plasticity-like comfort through spacing discipline, restrained chrome, compact prompts, and low-travel command access without copying Plasticity branding, icons, wording, or exact layouts
+- the Rust backend should continue toward an explicit session and command-runtime architecture where preview, commit, cancel, cleanup, autosave, history, settings, and keybindings are first-class services rather than ad hoc UI behavior
+- viewport protocols should distinguish durable geometry, preview geometry, and helper overlays so command previews and gizmos remain lightweight and deterministic
+- shell review should include a dedicated benchmark pass against Plasticity for direct-editing comfort and viewport dominance alongside the existing Inventor and SolidWorks engineering-shell checks
 
 ### Accessibility, Internationalization, and Procurement Baseline
 
@@ -1080,7 +1105,7 @@ Mitigation:
 - every bundled workbench family is accounted for by either a migration checklist or a supported compatibility checklist before production cutover
 - AP242 document indexing, lazy entity loading, and PMI transport validated against representative exchange samples
 - standards backlog exists for ISO and ASME drawing plus GD&T behaviors, IFC interoperability, and regulated auditability before production cutover
-- benchmark shell reviews confirm acceptable density, manager-pane behavior, and in-canvas command proximity against representative Inventor and SolidWorks workflows
+- benchmark shell reviews confirm acceptable density, manager-pane behavior, direct-editing comfort, and in-canvas command proximity against representative Inventor, SolidWorks, and Plasticity workflows
 - keyboard traversal, focus visibility, and contrast checks pass for shell chrome and primary panels before production cutover
 - localization review demonstrates that translated or text-expanded command labels do not break major menu, toolbar, tab, and property layouts
 

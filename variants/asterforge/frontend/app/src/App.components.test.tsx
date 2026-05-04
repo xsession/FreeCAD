@@ -17,6 +17,7 @@ import {
   SelectionInspector,
   StepViewportScene,
   SuggestedCommandEditor,
+  ViewportCommandBar,
   ViewportHeadsUp,
   ViewportHoverCard
 } from "./App";
@@ -171,6 +172,7 @@ describe("App component surfaces", () => {
     const onChangeSelectionMode = vi.fn();
     const onFitAll = vi.fn();
     const onFocusSelection = vi.fn();
+    const onOpenPalette = vi.fn();
     const onOpenModel = vi.fn();
     const onOpenReport = vi.fn();
     const onOpenTasks = vi.fn();
@@ -209,6 +211,7 @@ describe("App component surfaces", () => {
         onApplyPreset={onApplyPreset}
         onFitAll={onFitAll}
         onFocusSelection={onFocusSelection}
+        onOpenPalette={onOpenPalette}
         onOpenModel={onOpenModel}
         onOpenReport={onOpenReport}
         onOpenTasks={onOpenTasks}
@@ -217,6 +220,7 @@ describe("App component surfaces", () => {
         selectionState={selectionState}
         selectedObjectId={"step-entity-20"}
         stepAvailable={true}
+        workbenchLabel={"STEP Inspection"}
       />
     );
 
@@ -224,7 +228,10 @@ describe("App component surfaces", () => {
 
     expect(scoped.getByText("STEP HUD")).toBeTruthy();
     expect(scoped.getByText("Right / Front")).toBeTruthy();
+    expect(scoped.getByText("Workbench")).toBeTruthy();
+    expect(scoped.getByText("STEP Inspection")).toBeTruthy();
 
+    fireEvent.click(scoped.getByRole("button", { name: /Search F/i }));
     fireEvent.click(scoped.getByRole("button", { name: "Front" }));
     fireEvent.click(scoped.getByRole("button", { name: "Back" }));
     fireEvent.click(scoped.getByRole("button", { name: "Left" }));
@@ -237,6 +244,7 @@ describe("App component surfaces", () => {
     fireEvent.click(scoped.getByRole("button", { name: "Live" }));
     fireEvent.click(scoped.getByRole("button", { name: /Bodies 3/i }));
 
+    expect(onOpenPalette).toHaveBeenCalledTimes(1);
     expect(onApplyPreset).toHaveBeenNthCalledWith(1, "front");
     expect(onApplyPreset).toHaveBeenNthCalledWith(2, "back");
     expect(onApplyPreset).toHaveBeenNthCalledWith(3, "left");
@@ -248,6 +256,166 @@ describe("App component surfaces", () => {
     expect(onOpenReport).toHaveBeenCalledTimes(1);
     expect(onFitAll).toHaveBeenCalledTimes(1);
     expect(onResetPreset).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders a viewport command bar from backend suggestions and routes commands through the active target", () => {
+    const onOpenPalette = vi.fn();
+    const onRunCommand = vi.fn();
+    const commandCatalog: CommandCatalogResponse = {
+      document_id: "doc-step",
+      workbench: {
+        workbench_id: "step",
+        display_name: "STEP",
+        mode: "inspection"
+      },
+      commands: [
+        {
+          command_id: "step.inspect_pmi",
+          label: "Inspect PMI",
+          group: "inspect",
+          icon: "measure",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: true,
+          description: "Inspect semantic PMI for the current STEP entity.",
+          action_label: "Refresh PMI",
+          arguments: []
+        },
+        {
+          command_id: "step.measure_selection",
+          label: "Measure Selection",
+          group: "inspect",
+          icon: "measure",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: true,
+          description: "Measure the current STEP selection.",
+          action_label: "Refresh Measure",
+          arguments: []
+        },
+        {
+          command_id: "selection.focus",
+          label: "Focus Selection",
+          group: "view",
+          icon: "focus",
+          shortcut: "F",
+          enabled: true,
+          requires_selection: true,
+          description: "Focus the selected item.",
+          action_label: "Focus",
+          arguments: []
+        }
+      ]
+    };
+
+    render(
+      <ViewportCommandBar
+        commandCatalog={commandCatalog}
+        onOpenPalette={onOpenPalette}
+        onRunCommand={onRunCommand}
+        preselectionState={{
+          document_id: "doc-step",
+          current_mode: "object",
+          object_id: "step-entity-20",
+          object_label: "Housing",
+          object_type: "STEP::MANIFOLD_SOLID_BREP",
+          selectable: true,
+          model_state: "parsed",
+          dependency_note: "",
+          suggested_commands: ["step.inspect_pmi", "step.measure_selection"],
+          detail: "Hovered shell candidate",
+        }}
+        selectedObjectId={"step-entity-10"}
+        taskPanel={{
+          document_id: "doc-step",
+          title: "STEP Inspection",
+          description: "",
+          sections: [],
+          suggested_commands: ["selection.focus"],
+        }}
+      />
+    );
+
+    const commandBar = screen.getByText("Command Bar").closest(".viewport-command-bar");
+
+    expect(commandBar).not.toBeNull();
+
+    const commandBarQueries = within(commandBar as HTMLElement);
+
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /Refresh PMI/i }));
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /Refresh Measure/i }));
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /Focus F/i }));
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /More F/i }));
+
+    expect(onRunCommand).toHaveBeenNthCalledWith(1, "step.inspect_pmi", undefined, "step-entity-20");
+    expect(onRunCommand).toHaveBeenNthCalledWith(2, "step.measure_selection", undefined, "step-entity-20");
+    expect(onRunCommand).toHaveBeenNthCalledWith(3, "selection.focus", undefined, "step-entity-20");
+    expect(onOpenPalette).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands parameterized viewport commands into the shared editor and submits them against the active target", () => {
+    const onRunCommand = vi.fn();
+
+    render(
+      <ViewportCommandBar
+        commandCatalog={{
+          document_id: "doc-step",
+          workbench: {
+            workbench_id: "partdesign",
+            display_name: "Part Design",
+            mode: "edit"
+          },
+          commands: [
+            {
+              command_id: "partdesign.pad",
+              label: "Create Pad",
+              group: "partdesign",
+              icon: "pad",
+              shortcut: undefined,
+              enabled: true,
+              requires_selection: true,
+              description: "Create a pad from the active sketch.",
+              action_label: "Pad",
+              arguments: [
+                {
+                  argument_id: "length",
+                  label: "Length",
+                  value_type: "quantity",
+                  required: true,
+                  default_value: "10",
+                  placeholder: "10 mm",
+                  unit: "mm",
+                  options: []
+                }
+              ]
+            }
+          ]
+        }}
+        onOpenPalette={vi.fn()}
+        onRunCommand={onRunCommand}
+        preselectionState={{
+          document_id: "doc-step",
+          current_mode: "object",
+          object_id: "sketch-001",
+          object_label: "Sketch",
+          object_type: "Sketcher::SketchObject",
+          selectable: true,
+          model_state: "editing",
+          dependency_note: "Ready for feature creation",
+          suggested_commands: ["partdesign.pad"],
+          detail: "Active profile"
+        }}
+        selectedObjectId={"sketch-000"}
+        taskPanel={null}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Pad Edit/i }));
+    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "18" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pad" }));
+
+    expect(onRunCommand).toHaveBeenCalledWith("partdesign.pad", { length: "18" }, "sketch-001");
+    expect(screen.queryByRole("spinbutton")).toBeNull();
   });
 
   it("filters STEP viewport geometry through backend-visible drawables", () => {
@@ -422,6 +590,7 @@ describe("App component surfaces", () => {
         onApplyPreset={vi.fn()}
         onFitAll={vi.fn()}
         onFocusSelection={vi.fn()}
+        onOpenPalette={vi.fn()}
         onOpenModel={vi.fn()}
         onOpenReport={vi.fn()}
         onOpenTasks={vi.fn()}
@@ -430,6 +599,7 @@ describe("App component surfaces", () => {
         selectionState={selectionState}
         selectedObjectId={"pad-001"}
         stepAvailable={false}
+        workbenchLabel={"Part Design"}
       />
     );
 

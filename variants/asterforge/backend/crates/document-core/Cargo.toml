@@ -6,4 +6,6 @@ license = "LGPL-2.1-or-later"
 publish = false
 
 [dependencies]
+asterforge-freecad-bridge = { path = "../../../native/freecad-bridge" }
 serde.workspace = true
+tracing.workspace = true

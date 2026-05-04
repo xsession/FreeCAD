@@ -202,6 +202,18 @@ export interface ShellSnapshot {
   workspace_sessions: WorkspaceSessionEntry[];
   inspection: ShellInspectionState | undefined;
   extension_compatibility: ExtensionCompatibilityState | undefined;
+  status_bar: ShellStatusBarState | undefined;
+}
+
+export interface ShellStatusBarState {
+  items: ShellStatusBarItem[];
+}
+
+export interface ShellStatusBarItem {
+  item_id: string;
+  label: string;
+  value: string;
+  tone: string;
 }
 
 export interface ShellInspectionState {

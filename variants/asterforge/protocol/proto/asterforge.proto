@@ -204,6 +204,18 @@ message ShellSnapshot {
   repeated WorkspaceSessionEntry workspace_sessions = 7;
   optional ShellInspectionState inspection = 8;
   optional ExtensionCompatibilityState extension_compatibility = 9;
+  optional ShellStatusBarState status_bar = 10;
+}
+
+message ShellStatusBarState {
+  repeated ShellStatusBarItem items = 1;
+}
+
+message ShellStatusBarItem {
+  string item_id = 1;
+  string label = 2;
+  string value = 3;
+  string tone = 4;
 }
 
 message ShellInspectionState {

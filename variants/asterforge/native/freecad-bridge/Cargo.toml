@@ -10,3 +10,4 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 serde.workspace = true
+tracing.workspace = true

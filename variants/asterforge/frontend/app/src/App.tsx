@@ -37,6 +37,7 @@ import {
   type PropertyResponse,
   type RecentDocumentEntry,
   type SelectionStateResponse,
+  type ShellStatusBarItem as ProtocolShellStatusBarItem,
   type ShellSnapshot,
   type TaskPanelResponse,
   type ViewportDiffResponse,
@@ -73,6 +74,8 @@ type ActivityCommandAction = {
   commandId: string;
   label: string;
 };
+
+type StatusbarTone = "neutral" | "info" | "warning" | "error";
 
 function shellNoticePriority(notice: ShellNotice) {
   let priority = 0;
@@ -111,6 +114,74 @@ export function buildShellNotices(
     .sort((left, right) => right.priority - left.priority || left.index - right.index)
     .slice(0, maxNotices)
     .map(({ notice }) => notice);
+}
+
+function titleCaseShellToken(value: string | null | undefined, fallback: string) {
+  if (!value) {
+    return fallback;
+  }
+
+  return value
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function isEditableEventTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  const tagName = target.tagName.toLowerCase();
+  return target.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
+}
+
+function selectionModeShortcutLabel(index: number) {
+  return index >= 0 && index < 9 ? `${index + 1}` : null;
+}
+
+function normalizeStatusbarTone(tone: string | null | undefined): StatusbarTone {
+  switch (tone) {
+    case "info":
+    case "warning":
+    case "error":
+      return tone;
+    default:
+      return "neutral";
+  }
+}
+
+function statusbarToneClass(tone: StatusbarTone) {
+  switch (tone) {
+    case "info":
+      return "freecad-statusbar-item-info";
+    case "warning":
+      return "freecad-statusbar-item-warning";
+    case "error":
+      return "freecad-statusbar-item-error";
+    default:
+      return "";
+  }
+}
+
+function StatusbarItem({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  tone?: string | null;
+}) {
+  const normalizedTone = normalizeStatusbarTone(tone);
+
+  return (
+    <span className={`freecad-statusbar-item ${statusbarToneClass(normalizedTone)}`.trim()}>
+      <span className="freecad-statusbar-label">{label}</span>
+      <span className="freecad-statusbar-value">{value}</span>
+    </span>
+  );
 }
 
 type WorkspaceSession = {
@@ -510,6 +581,7 @@ export function ViewportHeadsUp({
   onApplyPreset,
   onFitAll,
   onFocusSelection,
+  onOpenPalette,
   onOpenModel,
   onOpenReport,
   onOpenTasks,
@@ -517,7 +589,8 @@ export function ViewportHeadsUp({
   reportDockVisible,
   selectionState,
   selectedObjectId,
-  stepAvailable
+  stepAvailable,
+  workbenchLabel
 }: {
   activePreset: StepViewportPreset | null;
   cameraEye: number[] | undefined;
@@ -527,6 +600,7 @@ export function ViewportHeadsUp({
   onApplyPreset: (preset: StepViewportPreset) => void;
   onFitAll: () => void;
   onFocusSelection: () => void;
+  onOpenPalette: () => void;
   onOpenModel: () => void;
   onOpenReport: () => void;
   onOpenTasks: () => void;
@@ -535,12 +609,28 @@ export function ViewportHeadsUp({
   selectionState: SelectionStateResponse | null;
   selectedObjectId: string | null;
   stepAvailable: boolean;
+  workbenchLabel: string;
 }) {
   return (
     <>
       <div className="viewport-orientation-chip">
         <span>{stepAvailable ? "STEP HUD" : "Viewport HUD"}</span>
         <strong>{viewportOrientationLabel(cameraEye, cameraTarget)}</strong>
+      </div>
+      <div className="viewport-quickbar">
+        <button className="viewport-quickbar-button viewport-quickbar-button-primary" onClick={onOpenPalette} type="button">
+          <ShellIcon icon="list" title="Open command palette" />
+          <span>Search</span>
+          <strong>F</strong>
+        </button>
+        <div className="viewport-quickbar-chip">
+          <span>Workbench</span>
+          <strong>{workbenchLabel}</strong>
+        </div>
+        <div className="viewport-quickbar-chip viewport-quickbar-chip-muted">
+          <span>Panels</span>
+          <strong>{comboViewVisible || reportDockVisible ? "Live" : "Minimal"}</strong>
+        </div>
       </div>
       <div className="viewport-hud-toolbar">
         {stepAvailable ? (
@@ -608,8 +698,9 @@ export function ViewportHeadsUp({
             <strong>{selectionState.current_mode}</strong>
           </div>
           <div className="viewport-selection-mode-list">
-            {selectionState.available_modes.map((mode) => {
+            {selectionState.available_modes.map((mode, index) => {
               const active = mode.mode_id === selectionState.current_mode;
+              const shortcutLabel = selectionModeShortcutLabel(index);
 
               return (
                 <button
@@ -617,9 +708,10 @@ export function ViewportHeadsUp({
                   disabled={!mode.enabled}
                   key={mode.mode_id}
                   onClick={() => onChangeSelectionMode(mode.mode_id)}
-                  title={mode.description}
+                  title={shortcutLabel ? `${mode.description} Shortcut: ${shortcutLabel}` : mode.description}
                   type="button"
                 >
+                  {shortcutLabel ? <span className="selection-mode-shortcut">{shortcutLabel}</span> : null}
                   <strong>{mode.label}</strong>
                   <span>{mode.object_count}</span>
                 </button>
@@ -1258,6 +1350,149 @@ export function ViewportHoverCard({
   );
 }
 
+export function ViewportCommandBar({
+  commandCatalog,
+  onOpenPalette,
+  onRunCommand,
+  preselectionState,
+  selectedObjectId,
+  taskPanel,
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  onOpenPalette: () => void;
+  onRunCommand: (
+    commandId: string,
+    commandArguments?: Record<string, string>,
+    targetObjectId?: string
+  ) => void;
+  preselectionState: PreselectionStateResponse | null;
+  selectedObjectId: string | null;
+  taskPanel: TaskPanelResponse | null;
+}) {
+  const [commandDrafts, setCommandDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [expandedCommandId, setExpandedCommandId] = useState<string | null>(null);
+
+  if (!commandCatalog) {
+    return null;
+  }
+
+  const prioritizedCommandIds = [
+    ...(preselectionState?.suggested_commands ?? []),
+    ...(taskPanel?.suggested_commands ?? []),
+    ...(selectedObjectId ? ["selection.focus"] : []),
+  ];
+  const commandById = new Map(commandCatalog.commands.map((command) => [command.command_id, command]));
+  const visibleCommands = Array.from(new Set(prioritizedCommandIds))
+    .map((commandId) => commandById.get(commandId))
+    .filter((command): command is CommandDefinition => Boolean(command))
+    .filter((command) => command.enabled)
+    .slice(0, 5);
+  const visibleCommandStateKey = visibleCommands
+    .map((command) => `${command.command_id}:${command.arguments.length}`)
+    .join("|");
+
+  useEffect(() => {
+    setCommandDrafts((current) => initializeCommandDrafts(current, visibleCommands));
+
+    if (
+      expandedCommandId &&
+      !visibleCommands.some(
+        (command) => command.command_id === expandedCommandId && command.arguments.length > 0
+      )
+    ) {
+      setExpandedCommandId(null);
+    }
+  }, [expandedCommandId, visibleCommandStateKey]);
+
+  if (visibleCommands.length === 0) {
+    return null;
+  }
+
+  const targetObjectId = preselectionState?.object_id ?? selectedObjectId ?? undefined;
+  const expandedCommand =
+    expandedCommandId
+      ? visibleCommands.find((command) => command.command_id === expandedCommandId) ?? null
+      : null;
+
+  function updateDraftValue(commandId: string, argumentId: string, value: string) {
+    setCommandDrafts((current) => ({
+      ...current,
+      [commandId]: {
+        ...(current[commandId] ?? {}),
+        [argumentId]: value,
+      },
+    }));
+  }
+
+  function currentDraftValue(commandId: string, argument: CommandArgumentDefinition) {
+    return commandDrafts[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
+  }
+
+  function handleViewportCommand(command: CommandDefinition) {
+    if (command.arguments.length > 0) {
+      setExpandedCommandId((current) =>
+        current === command.command_id ? null : command.command_id
+      );
+      return;
+    }
+
+    onRunCommand(
+      command.command_id,
+      undefined,
+      command.requires_selection ? targetObjectId : undefined
+    );
+  }
+
+  return (
+    <div className="viewport-command-bar">
+      <div className="viewport-command-bar-label">Command Bar</div>
+      <div className="viewport-command-bar-actions">
+        {visibleCommands.map((command) => (
+          <button
+            className={`viewport-command-bar-button ${
+              expandedCommandId === command.command_id ? "viewport-command-bar-button-active" : ""
+            }`}
+            key={command.command_id}
+            onClick={() => handleViewportCommand(command)}
+            type="button"
+          >
+            <ShellIcon icon={command.icon} title={command.label} />
+            <span>{command.action_label ?? command.label}</span>
+            {command.arguments.length > 0 ? <strong>Edit</strong> : null}
+            {!command.arguments.length && command.shortcut ? <strong>{command.shortcut}</strong> : null}
+          </button>
+        ))}
+        <button className="viewport-command-bar-button viewport-command-bar-button-utility" onClick={onOpenPalette} type="button">
+          <ShellIcon icon="list" title="More commands" />
+          <span>More</span>
+          <strong>F</strong>
+        </button>
+      </div>
+      {expandedCommand && expandedCommand.arguments.length > 0 ? (
+        <SuggestedCommandEditor
+          className="task-editor viewport-command-editor"
+          command={expandedCommand}
+          currentDraftValue={(argument) => currentDraftValue(expandedCommand.command_id, argument)}
+          headerLabel={expandedCommand.action_label ?? expandedCommand.label}
+          idPrefix="viewport-command-bar"
+          onSubmitCommand={(commandArguments) => {
+            onRunCommand(
+              expandedCommand.command_id,
+              commandArguments,
+              expandedCommand.requires_selection ? targetObjectId : undefined
+            );
+            setExpandedCommandId(null);
+          }}
+          onUpdateDraftValue={(argumentId, value) =>
+            updateDraftValue(expandedCommand.command_id, argumentId, value)
+          }
+          submitLabel={expandedCommand.action_label ?? expandedCommand.label}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function ReportActivityFeed({
   commandCatalog,
   onFocusActivityObject,
@@ -1615,8 +1850,9 @@ function SelectionModeToolbar({
         <span className="selection-mode-meta">{selectionState.selected_object_type}</span>
       </div>
       <div className="selection-mode-list">
-        {selectionState.available_modes.map((mode) => {
+        {selectionState.available_modes.map((mode, index) => {
           const active = mode.mode_id === selectionState.current_mode;
+          const shortcutLabel = selectionModeShortcutLabel(index);
 
           return (
             <button
@@ -1624,9 +1860,13 @@ function SelectionModeToolbar({
               disabled={!mode.enabled}
               key={mode.mode_id}
               onClick={() => onChangeMode(mode.mode_id)}
+              title={shortcutLabel ? `${mode.description} Shortcut: ${shortcutLabel}` : mode.description}
               type="button"
             >
-              <strong>{mode.label}</strong>
+              <div className="selection-mode-chip-title">
+                {shortcutLabel ? <span className="selection-mode-shortcut">{shortcutLabel}</span> : null}
+                <strong>{mode.label}</strong>
+              </div>
               <span>{mode.object_count} mapped</span>
               <small>{mode.description}</small>
             </button>
@@ -1767,6 +2007,7 @@ export function CommandPalette({
           <div>
             <div className="eyebrow">Command Palette</div>
             <h2>{catalog.workbench.display_name}</h2>
+            <div className="command-palette-shortcut-note">Quick open: F or Ctrl+K</div>
           </div>
           <button className="action-button" onClick={onClose} type="button">
             Close
@@ -2699,10 +2940,36 @@ export default function App() {
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
+      if (isEditableEventTarget(event.target)) {
+        if (event.key === "Escape") {
+          setPaletteOpen(false);
+        }
+        return;
+      }
+
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen(true);
         return;
+      }
+
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "f") {
+        event.preventDefault();
+        setPaletteOpen(true);
+        return;
+      }
+
+      if (!paletteOpen && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        const shortcutMatch = event.code.match(/^(Digit|Numpad)([1-9])$/);
+        if (shortcutMatch && selectionState) {
+          const shortcutIndex = Number(shortcutMatch[2]) - 1;
+          const targetMode = selectionState.available_modes[shortcutIndex];
+          if (targetMode?.enabled && targetMode.mode_id !== selectionState.current_mode) {
+            event.preventDefault();
+            void handleSelectionModeChange(targetMode.mode_id);
+            return;
+          }
+        }
       }
 
       if (event.key === "Escape") {
@@ -2712,7 +2979,7 @@ export default function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [paletteOpen, selectionState]);
 
   useEffect(() => {
     let active = true;
@@ -3501,6 +3768,96 @@ export default function App() {
   const comboViewSizeHint = comboViewPanel?.size_hint ?? 0.28;
   const reportDockSizeHint = reportDockPanel?.size_hint ?? 0.24;
   const comboColumnPercent = Math.round(comboViewSizeHint * 100);
+  const selectionModeLabel =
+    selectionState?.available_modes.find((mode) => mode.mode_id === selectionState.current_mode)?.label ??
+    titleCaseShellToken(selectionState?.current_mode, "Object");
+  const selectionSummary =
+    selectionState?.selected_object_label ?? selectedObjectId ?? diagnostics?.selection.object_label ?? "None";
+  const warningCount = diagnostics?.summary.warning_count ?? 0;
+  const errorCount = diagnostics?.summary.error_count ?? 0;
+  const diagnosticsSummary =
+    diagnostics === null
+      ? "Pending"
+      : errorCount > 0
+        ? `${errorCount} errors, ${warningCount} warnings`
+        : warningCount > 0
+          ? `${warningCount} warnings`
+          : "Clear";
+  const diagnosticsTone: StatusbarTone = errorCount > 0 ? "error" : warningCount > 0 ? "warning" : "info";
+  const noticeTone: StatusbarTone = shellNotices.some((notice) => notice.level === "error")
+    ? "error"
+    : shellNotices.some((notice) => notice.level === "warning")
+      ? "warning"
+      : "info";
+  const jobsCount = jobs?.jobs.length ?? 0;
+  const workerModeLabel = titleCaseShellToken(boot.bridge_status.worker_mode, "Unknown");
+  const dockSummary = reportDockVisible ? titleCaseShellToken(bottomDockTab, "Report") : "Hidden";
+  const totalPanels = shellSnapshot?.layout.panels.length ?? 0;
+  const fallbackStatusbarItems: ProtocolShellStatusBarItem[] = [
+    {
+      item_id: "workbench",
+      label: "Workbench",
+      value: activeWorkbench.display_name,
+      tone: "neutral",
+    },
+    {
+      item_id: "document",
+      label: "Document",
+      value: document.display_name,
+      tone: "neutral",
+    },
+    {
+      item_id: "state",
+      label: "State",
+      value: document.dirty ? "Modified" : "Saved",
+      tone: document.dirty ? "warning" : "info",
+    },
+    {
+      item_id: "mode",
+      label: "Mode",
+      value: selectionModeLabel,
+      tone: "neutral",
+    },
+    {
+      item_id: "selection",
+      label: "Selection",
+      value: selectionSummary,
+      tone: "neutral",
+    },
+    {
+      item_id: "diagnostics",
+      label: "Diagnostics",
+      value: diagnosticsSummary,
+      tone: diagnosticsTone,
+    },
+    {
+      item_id: "dock",
+      label: "Dock",
+      value: dockSummary,
+      tone: reportDockVisible ? "info" : "warning",
+    },
+    {
+      item_id: "worker",
+      label: "Worker",
+      value: workerModeLabel,
+      tone: "neutral",
+    },
+    {
+      item_id: "jobs",
+      label: "Jobs",
+      value: `${jobsCount}`,
+      tone: jobsCount > 0 ? "warning" : "info",
+    },
+    {
+      item_id: "panels",
+      label: "Panels",
+      value: `${visiblePanels}/${totalPanels} visible`,
+      tone: "neutral",
+    },
+  ];
+  const statusbarItems = (shellSnapshot?.status_bar?.items ?? fallbackStatusbarItems).filter(
+    (item) => item.item_id !== "notices"
+  );
   const workspaceStyle = comboViewVisible
     ? {
         gridTemplateColumns: `minmax(260px, ${comboColumnPercent}%) minmax(0, ${100 - comboColumnPercent}%)`
@@ -3610,7 +3967,7 @@ export default function App() {
           </form>
           <button className="action-button" onClick={() => setPaletteOpen(true)} type="button">
             Command Palette
-            <strong>Ctrl+K</strong>
+            <strong>F / Ctrl+K</strong>
           </button>
         </div>
 
@@ -3862,6 +4219,7 @@ export default function App() {
                 onApplyPreset={(preset) => void handleApplyStepViewportPreset(preset)}
                 onFitAll={() => void handleFitAllStepViewport()}
                 onFocusSelection={() => void handleCommand("selection.focus")}
+                onOpenPalette={() => setPaletteOpen(true)}
                 onOpenModel={() => void handlePanelTabChange("combo_view", "model")}
                 onOpenReport={() => void handlePanelTabChange("report_dock", "report")}
                 onOpenTasks={() => void handlePanelTabChange("combo_view", "tasks")}
@@ -3870,6 +4228,17 @@ export default function App() {
                 selectionState={selectionState}
                 selectedObjectId={selectedObjectId}
                 stepAvailable={stepAvailable}
+                workbenchLabel={activeWorkbench.display_name}
+              />
+              <ViewportCommandBar
+                commandCatalog={commandCatalog}
+                onOpenPalette={() => setPaletteOpen(true)}
+                onRunCommand={(commandId, commandArguments, targetObjectId) =>
+                  void handleCommand(commandId, commandArguments ?? {}, targetObjectId)
+                }
+                preselectionState={preselectionState}
+                selectedObjectId={selectedObjectId}
+                taskPanel={taskPanel}
               />
               <div className="viewport-overlay">
                 <span>
@@ -4097,13 +4466,10 @@ export default function App() {
       </main>
 
       <footer className="freecad-statusbar">
-        <span>Workbench: {document.workbench}</span>
-        <span>Document: {document.display_name}</span>
-        <span>{document.dirty ? "State: modified" : "State: saved"}</span>
-        <span>Selection: {selectedObjectId ?? "none"}</span>
-        <span>Worker: {boot.bridge_status.worker_mode}</span>
-        <span>Jobs: {jobs?.jobs.length ?? 0}</span>
-        <span>Layout: {shellSnapshot?.layout.layout_id ?? "shell-pending"}</span>
+        {statusbarItems.map((item) => (
+          <StatusbarItem key={item.item_id} label={item.label} value={item.value} tone={item.tone} />
+        ))}
+        <StatusbarItem label="Notices" value={`${shellNotices.length} live`} tone={noticeTone} />
       </footer>
     </div>
   );

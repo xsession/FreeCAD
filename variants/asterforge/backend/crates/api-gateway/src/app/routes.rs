@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
 };
 use asterforge_command_core::CommandExecutionRequest;
+use asterforge_freecad_bridge::BridgeRuntimeDescriptor;
 use asterforge_protocol_types::asterforge::protocol::v1::{
     CommandInvocation, PreselectionRequest as ProtoPreselectionRequest,
     ShellSessionMutationRequest as ProtoShellSessionMutationRequest,
@@ -29,14 +30,19 @@ use super::protocol::{
     http_task_panel_from_proto, http_viewport_from_proto,
 };
 use super::state::{
-    ActivateWorkbenchRequest, AppState, BootPayload, HttpCommandExecutionResponse,
-    PreselectionRequest, SelectionModeRequest, SelectionRequest, SelectionResponse,
-    ShellPanelMutationRequest, ShellSessionMutationRequest,
+    AppState, HttpCommandExecutionResponse,
+};
+use super::state_payloads::BootPayload;
+use super::state_requests::{
+    ActivateWorkbenchRequest, OpenDocumentHttpRequest, PreselectionRequest,
+    SelectionModeRequest, SelectionRequest, SelectionResponse, ShellPanelMutationRequest,
+    ShellSessionMutationRequest,
 };
 
 pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/api/health", get(health))
+        .route("/api/runtime/bridge", get(fetch_bridge_runtime))
         .route("/api/bootstrap", get(bootstrap))
         .route("/api/documents/open", post(open_document))
         .route("/api/workbench/activate", post(activate_workbench))
@@ -77,9 +83,13 @@ async fn bootstrap(State(state): State<AppState>) -> Json<BootPayload> {
     Json(http_boot_payload_from_proto(state.boot_payload_proto().await))
 }
 
+async fn fetch_bridge_runtime(State(state): State<AppState>) -> Json<BridgeRuntimeDescriptor> {
+    Json(state.bridge_runtime_descriptor().await)
+}
+
 async fn open_document(
     State(state): State<AppState>,
-    Json(request): Json<super::state::OpenDocumentHttpRequest>,
+    Json(request): Json<OpenDocumentHttpRequest>,
 ) -> Json<DocumentSummary> {
     Json(state.open_document(request.file_path).await)
 }

@@ -178,6 +178,109 @@ pub struct StepMappedFile {
     sections: StepSectionRanges,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StepViewPreset {
+    Iso,
+    Front,
+    Back,
+    Right,
+    Left,
+    Top,
+    Bottom,
+}
+
+impl StepViewPreset {
+    pub fn preset_id(self) -> &'static str {
+        match self {
+            StepViewPreset::Iso => "iso",
+            StepViewPreset::Front => "front",
+            StepViewPreset::Back => "back",
+            StepViewPreset::Right => "right",
+            StepViewPreset::Left => "left",
+            StepViewPreset::Top => "top",
+            StepViewPreset::Bottom => "bottom",
+        }
+    }
+
+    pub fn status_message(self) -> String {
+        format!("Applied STEP {} view", self.preset_id())
+    }
+}
+
+pub fn step_view_preset_from_command_id(command_id: &str) -> Option<StepViewPreset> {
+    match command_id {
+        "step.view_iso" => Some(StepViewPreset::Iso),
+        "step.view_front" => Some(StepViewPreset::Front),
+        "step.view_back" => Some(StepViewPreset::Back),
+        "step.view_right" => Some(StepViewPreset::Right),
+        "step.view_left" => Some(StepViewPreset::Left),
+        "step.view_top" => Some(StepViewPreset::Top),
+        "step.view_bottom" => Some(StepViewPreset::Bottom),
+        _ => None,
+    }
+}
+
+pub fn step_focus_selection_message(object_id: &str) -> String {
+    format!("Focused STEP selection {object_id}")
+}
+
+pub fn step_view_reset_message() -> String {
+    "Reset STEP view to the default inspection camera".into()
+}
+
+pub fn step_view_fit_all_message() -> String {
+    "Fit all visible STEP geometry in the viewport".into()
+}
+
+pub fn step_selected_parent_message(object_id: &str) -> String {
+    format!("Selected parent node {object_id}")
+}
+
+pub fn step_selected_child_message(object_id: &str) -> String {
+    format!("Selected child node {object_id}")
+}
+
+pub fn step_pmi_loaded_status_message(label: &str, annotation_count: usize) -> String {
+    format!("Loaded PMI inspection for {label} ({annotation_count} annotations)")
+}
+
+pub fn step_pmi_loaded_event_message(label: &str, entity_id: u64) -> String {
+    format!("Loaded PMI inspection for {label} / #{entity_id}")
+}
+
+pub fn step_pmi_annotation_event_message(
+    semantic_type: &str,
+    text: &str,
+    target_entity_ids: &[u64],
+) -> String {
+    format!(
+        "{}: {} (targets: {})",
+        semantic_type,
+        text,
+        target_entity_ids
+            .iter()
+            .map(|entity_id| format!("#{}", entity_id))
+            .collect::<Vec<_>>()
+            .join(", ")
+    )
+}
+
+pub fn step_hidden_subtree_message(object_id: &str) -> String {
+    format!("Hidden STEP subtree rooted at {object_id}")
+}
+
+pub fn step_measurement_message(label: &str, span_x: f32, span_y: f32, span_z: f32) -> String {
+    format!("Measured {label} at {:.2} x {:.2} x {:.2}", span_x, span_y, span_z)
+}
+
+pub fn step_isolated_subtree_message(object_id: &str) -> String {
+    format!("Isolated STEP subtree rooted at {object_id}")
+}
+
+pub fn step_show_all_message() -> String {
+    "Restored all STEP nodes to the inspection viewport".into()
+}
+
 impl StepMappedFile {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let source_path = path.as_ref().to_path_buf();
@@ -644,7 +747,13 @@ fn strip_wrapping_parens(token: &str) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::{
+        step_focus_selection_message, step_measurement_message,
+        step_pmi_annotation_event_message, step_pmi_loaded_event_message,
+        step_pmi_loaded_status_message, step_selected_child_message,
+        step_selected_parent_message, step_show_all_message,
+        step_view_preset_from_command_id, step_view_reset_message,
         ClosedShell, ManifoldSolidBrep, StepApplicationProtocol, StepMappedFile,
+        StepViewPreset,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -737,5 +846,40 @@ END-ISO-10303-21;
             .contains(&StepApplicationProtocol::Ap242));
 
         let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn exposes_step_shell_preset_and_message_helpers() {
+        assert_eq!(
+            step_view_preset_from_command_id("step.view_iso"),
+            Some(StepViewPreset::Iso)
+        );
+        assert_eq!(StepViewPreset::Top.preset_id(), "top");
+        assert_eq!(StepViewPreset::Back.status_message(), "Applied STEP back view");
+        assert_eq!(step_view_reset_message(), "Reset STEP view to the default inspection camera");
+        assert_eq!(step_focus_selection_message("node-7"), "Focused STEP selection node-7");
+        assert_eq!(step_selected_parent_message("asm-1"), "Selected parent node asm-1");
+        assert_eq!(step_selected_child_message("part-9"), "Selected child node part-9");
+        assert_eq!(step_show_all_message(), "Restored all STEP nodes to the inspection viewport");
+    }
+
+    #[test]
+    fn formats_step_measurement_and_pmi_messages() {
+        assert_eq!(
+            step_measurement_message("Bracket", 10.0, 20.25, 30.5),
+            "Measured Bracket at 10.00 x 20.25 x 30.50"
+        );
+        assert_eq!(
+            step_pmi_loaded_status_message("Housing", 3),
+            "Loaded PMI inspection for Housing (3 annotations)"
+        );
+        assert_eq!(
+            step_pmi_loaded_event_message("Housing", 42),
+            "Loaded PMI inspection for Housing / #42"
+        );
+        assert_eq!(
+            step_pmi_annotation_event_message("datum", "A", &[10, 20]),
+            "datum: A (targets: #10, #20)"
+        );
     }
 }
