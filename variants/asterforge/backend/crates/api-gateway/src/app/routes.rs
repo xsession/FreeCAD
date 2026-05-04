@@ -15,7 +15,8 @@ use tracing::info;
 use crate::domain::{
     BackendEvent, CommandCatalogResponse, DiagnosticsResponse, DocumentSummary,
     FeatureHistoryResponse, JobStatusResponse, ObjectNode, PreselectionStateResponse,
-    PropertyResponse, SelectionStateResponse, ShellSnapshot, TaskPanelResponse, ViewportResponse,
+    PropertyResponse, SelectionStateResponse, ShellSnapshot, StepDocumentIndex,
+    StepSceneBundle, TaskPanelResponse, ViewportResponse,
 };
 
 use super::protocol::{
@@ -59,6 +60,8 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/documents/{document_id}/jobs", get(fetch_jobs))
         .route("/api/documents/{document_id}/viewport", get(fetch_viewport))
         .route("/api/documents/{document_id}/events", get(fetch_events))
+        .route("/api/step/documents/{document_id}/index", get(fetch_step_document_index))
+        .route("/api/step/documents/{document_id}/scene", get(fetch_step_scene_bundle))
         .route("/api/commands/run", post(run_command))
         .with_state(state)
 }
@@ -313,6 +316,28 @@ async fn fetch_viewport(
     .map(http_viewport_from_proto)
         .map(Json)
         .ok_or(StatusCode::NOT_FOUND)
+}
+
+async fn fetch_step_document_index(
+    Path(document_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<StepDocumentIndex>, StatusCode> {
+    match state.step_document_index(&document_id).await {
+        Ok(Some(index)) => Ok(Json(index)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
+}
+
+async fn fetch_step_scene_bundle(
+    Path(document_id): Path<String>,
+    State(state): State<AppState>,
+) -> Result<Json<StepSceneBundle>, StatusCode> {
+    match state.step_scene_bundle(&document_id).await {
+        Ok(Some(scene)) => Ok(Json(scene)),
+        Ok(None) => Err(StatusCode::NOT_FOUND),
+        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+    }
 }
 
 async fn run_command(

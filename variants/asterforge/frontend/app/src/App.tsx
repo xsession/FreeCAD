@@ -29,6 +29,7 @@ import {
   type CommandExecutionResponse,
   type DiagnosticsResponse,
   type DocumentRef,
+  type ExtensionCompatibilityState,
   type FeatureHistoryResponse,
   type JobStatusResponse,
   type ObjectNode,
@@ -43,13 +44,74 @@ import {
   type ViewportResponse,
   type WorkspaceSessionEntry
 } from "./protocol";
+import { ShellIcon } from "./shellIcons";
+import {
+  filteredReportEvents,
+  prioritizeReportEvents,
+  summarizeReportEvents,
+  shouldHideCommandNoticeForActivity,
+  shouldHideStructuredInspectionCommandNotice,
+  type StepViewportPreset,
+  viewportOrientationLabel
+} from "./shellViewUtils";
+import { StepViewportScene } from "./StepViewportScene";
+import { fetchStepDocumentIndex, fetchStepSceneBundle } from "./stepClient";
+import type { StepDocumentIndex, StepSceneBundle } from "./stepTypes";
+
+export { StepViewportScene } from "./StepViewportScene";
 
 type ShellNotice = {
   id: string;
   level: "info" | "warning" | "error";
   title: string;
   detail: string;
+  objectId?: string | null;
+  commandAction?: ActivityCommandAction | null;
 };
+
+type ActivityCommandAction = {
+  commandId: string;
+  label: string;
+};
+
+function shellNoticePriority(notice: ShellNotice) {
+  let priority = 0;
+
+  if (notice.level === "error") {
+    priority += 8;
+  } else if (notice.level === "warning") {
+    priority += 6;
+  }
+  if (notice.commandAction) {
+    priority += 3;
+  }
+  if (notice.objectId) {
+    priority += 2;
+  }
+  if (notice.title === "document opened") {
+    priority -= 1;
+  }
+  if (notice.title === "document changed") {
+    priority -= 3;
+  }
+  if (notice.title === "job update" || notice.title === "job updates") {
+    priority -= 2;
+  }
+
+  return priority;
+}
+
+export function buildShellNotices(
+  commandNotices: ShellNotice[],
+  eventNotices: ShellNotice[],
+  maxNotices = 4
+): ShellNotice[] {
+  return [...commandNotices, ...eventNotices]
+    .map((notice, index) => ({ notice, index, priority: shellNoticePriority(notice) }))
+    .sort((left, right) => right.priority - left.priority || left.index - right.index)
+    .slice(0, maxNotices)
+    .map(({ notice }) => notice);
+}
 
 type WorkspaceSession = {
   session_id: string;
@@ -68,7 +130,187 @@ type WorkspaceSession = {
   report_dock_size_hint: number | null;
 };
 
-type BottomDockTab = "report" | "python" | "jobs" | "diagnostics" | "history" | "commands";
+type BottomDockTab = "report" | "python" | "jobs" | "diagnostics" | "history" | "commands" | "extensions";
+
+type ShellInspectionState = NonNullable<ShellSnapshot["inspection"]>;
+type StepPmiInspection = NonNullable<ShellInspectionState["step_pmi"]>;
+type StepMeasurementInspection = NonNullable<ShellInspectionState["step_measurement"]>;
+type CommandTargetOption = {
+  objectId: string;
+  label: string;
+  detail: string;
+};
+
+const STEP_VIEWPORT_COMMAND_BY_PRESET: Record<StepViewportPreset, string> = {
+  iso: "step.view_iso",
+  front: "step.view_front",
+  back: "step.view_back",
+  right: "step.view_right",
+  left: "step.view_left",
+  top: "step.view_top",
+  bottom: "step.view_bottom"
+};
+
+function stepViewportPresetFromCommand(commandId: string): StepViewportPreset | null {
+  switch (commandId) {
+    case "step.view_iso":
+      return "iso";
+    case "step.view_front":
+      return "front";
+    case "step.view_back":
+      return "back";
+    case "step.view_right":
+      return "right";
+    case "step.view_left":
+      return "left";
+    case "step.view_top":
+      return "top";
+    case "step.view_bottom":
+      return "bottom";
+    default:
+      return null;
+  }
+}
+
+function isStepViewportResetCommand(commandId: string) {
+  return commandId === "step.view_reset" || commandId === "step.view_fit_all";
+}
+
+function ExtensionCompatibilityPanel({
+  commandCatalog,
+  extensionCompatibility,
+  onRunCommand,
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  extensionCompatibility: ExtensionCompatibilityState | undefined;
+  onRunCommand: (commandId: string, commandArguments?: Record<string, string>) => void;
+}) {
+  if (!extensionCompatibility) {
+    return (
+      <section className="dock-panel python-console-placeholder">
+        <div className="panel-header">
+          <h2>Extension Compatibility</h2>
+          <span>Waiting for backend state</span>
+        </div>
+        <div className="python-console-shell">
+          <div className="python-console-note">
+            Extension compatibility data has not been published by the backend yet.
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="dock-panel python-console-placeholder">
+      <div className="panel-header">
+        <h2>{extensionCompatibility.title}</h2>
+        <span>{extensionCompatibility.lanes.length} migration lanes</span>
+      </div>
+      <div className="python-console-shell">
+        <div className="python-console-note">{extensionCompatibility.summary}</div>
+        <div className="property-groups combo-pane-scroll">
+          {extensionCompatibility.lanes.map((lane: ExtensionCompatibilityState["lanes"][number]) => (
+            <div className="property-group" key={lane.lane_id}>
+              {(() => {
+                const inventoryEntries = lane.inventory_entries ?? [];
+                return (
+                  <>
+              <h3>{lane.label}</h3>
+              <div className="property-row">
+                <div>
+                  <div className="property-name">Status</div>
+                  <div className="property-type">Owner: {lane.owner}</div>
+                </div>
+                <div className="property-value">
+                  <span>{lane.status}</span>
+                </div>
+              </div>
+              {lane.command_ids.length > 0 ? (
+                <div className="selection-actions">
+                  {lane.command_ids
+                    .map((commandId) =>
+                      commandCatalog?.commands.find((command) => command.command_id === commandId) ?? null
+                    )
+                    .filter((command): command is CommandDefinition => command !== null)
+                    .map((command) => (
+                      <button
+                        className="suggested-command-button"
+                        disabled={!command.enabled}
+                        key={`${lane.lane_id}:${command.command_id}`}
+                        onClick={() => onRunCommand(command.command_id)}
+                        type="button"
+                      >
+                        {command.action_label ?? command.label}
+                      </button>
+                    ))}
+                </div>
+              ) : null}
+              {inventoryEntries.length > 0 ? (
+                <div className="property-groups combo-pane-scroll">
+                  {inventoryEntries.map((entry) => (
+                    <div className="property-group" key={entry.entry_id}>
+                      <h3>{entry.label}</h3>
+                      <div className="property-row">
+                        <div>
+                          <div className="property-name">Origin</div>
+                          <div className="property-type">Trust: {entry.trust_state}</div>
+                        </div>
+                        <div className="property-value">
+                          <span>{entry.compatibility}</span>
+                        </div>
+                      </div>
+                      <div className="python-console-note">{entry.origin}</div>
+                      <div className="python-console-log">
+                        <div>{entry.detail}</div>
+                      </div>
+                      {entry.last_run_status ? (
+                        <div className="python-console-note">
+                          Last run
+                          {entry.last_run_kind || entry.last_run_level
+                            ? ` (${[entry.last_run_kind, entry.last_run_level].filter(Boolean).join(", ")})`
+                            : ""}
+                          : {entry.last_run_status}
+                        </div>
+                      ) : null}
+                      {entry.last_run_detail ? (
+                        <div className="python-console-log">
+                          <div>{entry.last_run_detail}</div>
+                        </div>
+                      ) : null}
+                      {entry.action_command_id ? (
+                        <div className="selection-actions">
+                          <button
+                            className="suggested-command-button"
+                            onClick={() =>
+                              onRunCommand(entry.action_command_id!, { entry_id: entry.entry_id })
+                            }
+                            type="button"
+                          >
+                            {entry.action_label ?? "Run Entry"}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="python-console-note">{lane.summary}</div>
+              <div className="python-console-log">
+                {lane.next_steps.map((step: string) => (
+                  <div key={step}>{step}</div>
+                ))}
+              </div>
+                  </>
+                );
+              })()}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function TreeNode({
   node,
@@ -255,6 +497,820 @@ function DrawableShape({
   );
 }
 
+function formatStepSpan(value: number) {
+  return value.toFixed(2);
+}
+
+export function ViewportHeadsUp({
+  activePreset,
+  cameraEye,
+  cameraTarget,
+  comboViewVisible,
+  onChangeSelectionMode,
+  onApplyPreset,
+  onFitAll,
+  onFocusSelection,
+  onOpenModel,
+  onOpenReport,
+  onOpenTasks,
+  onResetPreset,
+  reportDockVisible,
+  selectionState,
+  selectedObjectId,
+  stepAvailable
+}: {
+  activePreset: StepViewportPreset | null;
+  cameraEye: number[] | undefined;
+  cameraTarget: number[] | undefined;
+  comboViewVisible: boolean;
+  onChangeSelectionMode: (modeId: string) => void;
+  onApplyPreset: (preset: StepViewportPreset) => void;
+  onFitAll: () => void;
+  onFocusSelection: () => void;
+  onOpenModel: () => void;
+  onOpenReport: () => void;
+  onOpenTasks: () => void;
+  onResetPreset: () => void;
+  reportDockVisible: boolean;
+  selectionState: SelectionStateResponse | null;
+  selectedObjectId: string | null;
+  stepAvailable: boolean;
+}) {
+  return (
+    <>
+      <div className="viewport-orientation-chip">
+        <span>{stepAvailable ? "STEP HUD" : "Viewport HUD"}</span>
+        <strong>{viewportOrientationLabel(cameraEye, cameraTarget)}</strong>
+      </div>
+      <div className="viewport-hud-toolbar">
+        {stepAvailable ? (
+          <div className="viewport-hud-preset-group">
+            {([
+              ["Iso", "iso"],
+              ["Front", "front"],
+              ["Back", "back"],
+              ["Right", "right"],
+              ["Left", "left"],
+              ["Top", "top"],
+              ["Bottom", "bottom"]
+            ] as Array<[string, StepViewportPreset]>).map(([label, preset]) => (
+              <button
+                className={`viewport-hud-button ${activePreset === preset ? "viewport-hud-button-active" : ""}`}
+                key={preset}
+                onClick={() => onApplyPreset(preset)}
+                type="button"
+              >
+                <span>{label}</span>
+              </button>
+            ))}
+            <button className="viewport-hud-button" onClick={onFitAll} type="button">
+              <span>Fit</span>
+            </button>
+            <button className="viewport-hud-button" onClick={onResetPreset} type="button">
+              <span>Live</span>
+            </button>
+          </div>
+        ) : null}
+        <button
+          className="viewport-hud-button"
+          disabled={!selectedObjectId}
+          onClick={onFocusSelection}
+          type="button"
+        >
+          <ShellIcon icon="focus" title="Focus selection" />
+          <span>Focus</span>
+        </button>
+        <button
+          className={`viewport-hud-button ${comboViewVisible ? "viewport-hud-button-active" : ""}`}
+          onClick={onOpenModel}
+          type="button"
+        >
+          <ShellIcon icon="part" title="Open model stack" />
+          <span>Model</span>
+        </button>
+        <button className="viewport-hud-button" onClick={onOpenTasks} type="button">
+          <ShellIcon icon="history" title="Open task panel" />
+          <span>Tasks</span>
+        </button>
+        <button
+          className={`viewport-hud-button ${reportDockVisible ? "viewport-hud-button-active" : ""}`}
+          onClick={onOpenReport}
+          type="button"
+        >
+          <ShellIcon icon="measure" title="Open report dock" />
+          <span>Report</span>
+        </button>
+      </div>
+      {selectionState ? (
+        <div className="viewport-selection-hud">
+          <div className="viewport-selection-hud-header">
+            <span className="selection-label">Selection</span>
+            <strong>{selectionState.current_mode}</strong>
+          </div>
+          <div className="viewport-selection-mode-list">
+            {selectionState.available_modes.map((mode) => {
+              const active = mode.mode_id === selectionState.current_mode;
+
+              return (
+                <button
+                  className={`viewport-selection-mode-chip ${active ? "viewport-selection-mode-chip-active" : ""}`}
+                  disabled={!mode.enabled}
+                  key={mode.mode_id}
+                  onClick={() => onChangeSelectionMode(mode.mode_id)}
+                  title={mode.description}
+                  type="button"
+                >
+                  <strong>{mode.label}</strong>
+                  <span>{mode.object_count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function StepPmiInspectionCard({
+  inspection
+}: {
+  inspection: StepPmiInspection;
+}) {
+  return (
+    <article className="inspection-card">
+      <div className="panel-header panel-header-dense">
+        <h3>PMI Inspection</h3>
+        <span>Entity #{inspection.entity_id}</span>
+      </div>
+      <div className="selection-kv-list">
+        <div className="selection-kv">
+          <span>Target</span>
+          <strong>{inspection.label}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Object Id</span>
+          <strong>{inspection.object_id}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Linked geometry</span>
+          <strong>{inspection.target_object_ids.length}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Presentation refs</span>
+          <strong>{inspection.presentation_object_ids.length}</strong>
+        </div>
+      </div>
+      {inspection.annotation_lines.length > 0 ? (
+        <div className="inspection-annotation-list">
+          {inspection.annotation_lines.map((line, index) => (
+            <div className="inspection-annotation-item" key={`${inspection.object_id}-${index}`}>
+              {line}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
+function StepMeasurementInspectionCard({
+  inspection
+}: {
+  inspection: StepMeasurementInspection;
+}) {
+  return (
+    <article className="inspection-card">
+      <div className="panel-header panel-header-dense">
+        <h3>Measurement Overlay</h3>
+        <span>{inspection.label}</span>
+      </div>
+      <div className="selection-kv-list">
+        <div className="selection-kv">
+          <span>Span X</span>
+          <strong>{formatStepSpan(inspection.span_x)}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Span Y</span>
+          <strong>{formatStepSpan(inspection.span_y)}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Span Z</span>
+          <strong>{formatStepSpan(inspection.span_z)}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Representations</span>
+          <strong>{inspection.representation_count}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Annotations</span>
+          <strong>{inspection.annotation_count}</strong>
+        </div>
+        <div className="selection-kv">
+          <span>Object Id</span>
+          <strong>{inspection.object_id}</strong>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function inspectionCommand(
+  commandCatalog: CommandCatalogResponse | null,
+  commandId: string
+) {
+  return commandCatalog?.commands.find((command) => command.command_id === commandId) ?? null;
+}
+
+export function commandNoticeTitle(
+  commandCatalog: CommandCatalogResponse | null,
+  commandId: string
+) {
+  const command = inspectionCommand(commandCatalog, commandId);
+  return command?.action_label ?? command?.label ?? commandId;
+}
+
+export function commandNoticeAction(
+  commandCatalog: CommandCatalogResponse | null,
+  commandId: string
+): ActivityCommandAction | null {
+  const command = inspectionCommand(commandCatalog, commandId);
+  if (!command) {
+    return null;
+  }
+
+  return {
+    commandId,
+    label: command.action_label ?? command.label
+  };
+}
+
+export function commandNoticeObjectId(
+  commandCatalog: CommandCatalogResponse | null,
+  commandId: string,
+  selectedObjectId: string | null
+) {
+  const command = inspectionCommand(commandCatalog, commandId);
+  if (!command?.requires_selection || !selectedObjectId) {
+    return null;
+  }
+
+  return selectedObjectId;
+}
+
+function reportActivityCommand(activity: ActivityEvent): ActivityCommandAction | null {
+  switch (activity.topic) {
+    case "step_pmi_annotation":
+    case "step_pmi_inspection":
+      return {
+        commandId: "step.inspect_pmi",
+        label: "Refresh PMI"
+      };
+    case "step_measurement":
+      return {
+        commandId: "step.measure_selection",
+        label: "Refresh Measure"
+      };
+    default:
+      return null;
+  }
+}
+
+export function buildEventNotices(
+  reportEvents: ActivityEvent[],
+  includeActivityNotices = true,
+  maxNotices = 3
+): ShellNotice[] {
+  if (!includeActivityNotices) {
+    return [];
+  }
+
+  const notices: ShellNotice[] = [];
+  for (let index = 0; index < reportEvents.length; index += 1) {
+    const event = reportEvents[index];
+
+    if (event.topic === "document_changed") {
+      const grouped = [event.message];
+      let cursor = index + 1;
+
+      while (cursor < reportEvents.length) {
+        const nextEvent = reportEvents[cursor];
+        if (nextEvent.topic !== "document_changed") {
+          break;
+        }
+        grouped.push(nextEvent.message);
+        cursor += 1;
+      }
+
+      notices.push({
+        id: `document-changed-${index}`,
+        level: event.level,
+        title: grouped[0].startsWith("Opened ") ? "document opened" : "document changed",
+        detail:
+          grouped.length > 1
+            ? `${grouped[0]} (${grouped.length - 1} additional document update${grouped.length > 2 ? "s" : ""})`
+            : grouped[0]
+      });
+      index = cursor - 1;
+      continue;
+    }
+
+    if (event.topic === "job_update") {
+      const grouped = [event.message];
+      let cursor = index + 1;
+
+      while (cursor < reportEvents.length) {
+        const nextEvent = reportEvents[cursor];
+        if (nextEvent.topic !== "job_update") {
+          break;
+        }
+        grouped.push(nextEvent.message);
+        cursor += 1;
+      }
+
+      notices.push({
+        id: `job-update-${index}`,
+        level: event.level,
+        title: grouped.length > 1 ? "job updates" : "job update",
+        detail:
+          grouped.length > 1
+            ? `${grouped[0]} (${grouped.length - 1} additional job update${grouped.length > 2 ? "s" : ""})`
+            : grouped[0]
+      });
+      index = cursor - 1;
+      continue;
+    }
+
+    if (event.topic === "step_pmi_annotation" && event.object_id) {
+      const grouped = [event.message];
+      let cursor = index + 1;
+
+      while (cursor < reportEvents.length) {
+        const nextEvent = reportEvents[cursor];
+        if (nextEvent.topic !== "step_pmi_annotation" || nextEvent.object_id !== event.object_id) {
+          break;
+        }
+        grouped.push(nextEvent.message);
+        cursor += 1;
+      }
+
+      notices.push({
+        id: `step-pmi-annotations-${event.object_id}-${index}`,
+        level: event.level,
+        title: grouped.length > 1 ? "step pmi annotations" : "step pmi annotation",
+        detail:
+          grouped.length > 1
+            ? `${grouped.length} PMI annotations captured for ${event.object_id}: ${grouped[0]}`
+            : grouped[0],
+        objectId: event.object_id,
+        commandAction: {
+          commandId: "step.inspect_pmi",
+          label: "Refresh PMI"
+        }
+      });
+      index = cursor - 1;
+      continue;
+    }
+
+    notices.push({
+      id: `${event.topic}-${index}`,
+      level: event.level,
+      title: event.topic.replaceAll("_", " "),
+      detail: event.message,
+      objectId: event.object_id,
+      commandAction: reportActivityCommand(event)
+    });
+  }
+
+  return notices
+    .map((notice, index) => ({ notice, index, priority: shellNoticePriority(notice) }))
+    .sort((left, right) => right.priority - left.priority || left.index - right.index)
+    .slice(0, maxNotices)
+    .map(({ notice }) => notice);
+}
+
+function ActivityObjectActions({
+  activity,
+  commandActionOverride,
+  commandCatalog,
+  onFocusActivityObject,
+  onRunCommand,
+  onSelectActivityObject
+}: {
+  activity: Pick<ActivityEvent, "object_id" | "topic">;
+  commandActionOverride?: ActivityCommandAction | null;
+  commandCatalog?: CommandCatalogResponse | null;
+  onFocusActivityObject?: (objectId: string) => void;
+  onRunCommand?: (commandId: string, targetObjectId?: string) => void;
+  onSelectActivityObject?: (objectId: string) => void;
+}) {
+  const commandAction = commandActionOverride ?? reportActivityCommand(activity as ActivityEvent);
+
+  if (!activity.object_id && !commandAction) {
+    return null;
+  }
+  const command = commandAction ? inspectionCommand(commandCatalog ?? null, commandAction.commandId) : null;
+
+  return (
+    <div className="activity-actions">
+      {commandAction ? (
+        <InspectionActionButton
+          command={command}
+          label={commandAction.label}
+          onClick={() => onRunCommand?.(commandAction.commandId, activity.object_id ?? undefined)}
+        />
+      ) : null}
+      {activity.object_id ? (
+        <>
+          <button
+            className="action-button"
+            onClick={() => onSelectActivityObject?.(activity.object_id!)}
+            type="button"
+          >
+            <ShellIcon icon="part" title="Select activity object" />
+            <span>Select</span>
+          </button>
+          <button
+            className="action-button"
+            onClick={() => onFocusActivityObject?.(activity.object_id!)}
+            type="button"
+          >
+            <ShellIcon icon="focus" title="Focus activity object" />
+            <span>Focus</span>
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function InspectionActionButton({
+  command,
+  disabled,
+  label,
+  onClick
+}: {
+  command: CommandDefinition | null;
+  disabled?: boolean;
+  label?: string;
+  onClick: () => void;
+}) {
+  if (!command) {
+    return null;
+  }
+
+  return (
+    <button
+      className="action-button"
+      disabled={disabled ?? !command.enabled}
+      onClick={onClick}
+      type="button"
+    >
+      <CommandSummaryContent command={command} label={label} showGroup={false} />
+    </button>
+  );
+}
+
+export function ReportInspectionSummary({
+  commandCatalog,
+  onRunCommand,
+  shellSnapshot
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  onRunCommand: (commandId: string, targetObjectId?: string) => void;
+  shellSnapshot: ShellSnapshot | null;
+}) {
+  const inspection = shellSnapshot?.inspection;
+  const focusCommand = inspectionCommand(commandCatalog, "selection.focus");
+  const inspectPmiCommand = inspectionCommand(commandCatalog, "step.inspect_pmi");
+  const measureSelectionCommand = inspectionCommand(commandCatalog, "step.measure_selection");
+
+  if (!inspection?.step_pmi && !inspection?.step_measurement) {
+    return null;
+  }
+
+  return (
+    <section className="dock-panel">
+      <div className="panel-header">
+        <h2>Structured Inspection</h2>
+        <span>Shell snapshot driven</span>
+      </div>
+      <div className="inspection-summary-grid">
+        {inspection.step_pmi ? (
+          <div className="inspection-card-stack">
+            <StepPmiInspectionCard inspection={inspection.step_pmi} />
+            <div className="inspection-card-actions">
+              <InspectionActionButton
+                command={inspectPmiCommand}
+                label="Refresh PMI"
+                onClick={() => onRunCommand("step.inspect_pmi", inspection.step_pmi?.object_id)}
+              />
+              <InspectionActionButton
+                command={focusCommand}
+                onClick={() => onRunCommand("selection.focus", inspection.step_pmi?.object_id)}
+              />
+            </div>
+          </div>
+        ) : null}
+        {inspection.step_measurement ? (
+          <div className="inspection-card-stack">
+            <StepMeasurementInspectionCard inspection={inspection.step_measurement} />
+            <div className="inspection-card-actions">
+              <InspectionActionButton
+                command={measureSelectionCommand}
+                label="Refresh Measure"
+                onClick={() =>
+                  onRunCommand("step.measure_selection", inspection.step_measurement?.object_id)
+                }
+              />
+              <InspectionActionButton
+                command={focusCommand}
+                onClick={() => onRunCommand("selection.focus", inspection.step_measurement?.object_id)}
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function CommandSummaryContent({
+  command,
+  label,
+  showGroup = true
+}: {
+  command: Pick<CommandDefinition, "action_label" | "group" | "icon" | "label">;
+  label?: string;
+  showGroup?: boolean;
+}) {
+  return (
+    <>
+      <ShellIcon icon={command.icon} title={command.label} />
+      <div className="command-summary-content">
+        <strong>{label ?? command.action_label ?? command.label}</strong>
+        {showGroup ? <span>{command.group}</span> : null}
+      </div>
+    </>
+  );
+}
+
+function commandInputType(argument: CommandArgumentDefinition) {
+  return argument.value_type === "quantity" || argument.value_type === "float"
+    ? "number"
+    : "text";
+}
+
+function resolveSuggestedCommands(
+  commandCatalog: CommandCatalogResponse | null,
+  suggestedCommandIds: string[] | undefined
+) {
+  if (!commandCatalog || !suggestedCommandIds) {
+    return [];
+  }
+
+  return suggestedCommandIds
+    .map((commandId) => commandCatalog.commands.find((command) => command.command_id === commandId))
+    .filter((command): command is CommandDefinition => Boolean(command));
+}
+
+function initializeCommandDrafts(
+  currentDrafts: Record<string, Record<string, string>>,
+  commands: CommandDefinition[]
+) {
+  const next: Record<string, Record<string, string>> = {};
+
+  for (const command of commands) {
+    if (command.arguments.length === 0) {
+      continue;
+    }
+
+    next[command.command_id] = {};
+    for (const argument of command.arguments) {
+      next[command.command_id][argument.argument_id] =
+        currentDrafts[command.command_id]?.[argument.argument_id] ?? argument.default_value ?? "";
+    }
+  }
+
+  return next;
+}
+
+function initializeSuggestedCommandDrafts(
+  currentDrafts: Record<string, Record<string, string>>,
+  commandCatalog: CommandCatalogResponse | null,
+  suggestedCommandIds: string[] | undefined
+) {
+  if (!commandCatalog || !suggestedCommandIds) {
+    return {};
+  }
+
+  return initializeCommandDrafts(
+    currentDrafts,
+    resolveSuggestedCommands(commandCatalog, suggestedCommandIds)
+  );
+}
+
+export function SuggestedCommandEditor({
+  className,
+  command,
+  currentDraftValue,
+  headerLabel,
+  idPrefix,
+  onSubmitCommand,
+  onUpdateDraftValue,
+  submitLabel
+}: {
+  className: string;
+  command: CommandDefinition;
+  currentDraftValue: (argument: CommandArgumentDefinition) => string;
+  headerLabel?: string;
+  idPrefix: string;
+  onSubmitCommand: (commandArguments: Record<string, string>) => void;
+  onUpdateDraftValue: (argumentId: string, value: string) => void;
+  submitLabel: string;
+}) {
+  return (
+    <form
+      className={className}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmitCommand(
+          Object.fromEntries(
+            command.arguments.map((argument) => [
+              argument.argument_id,
+              currentDraftValue(argument)
+            ])
+          )
+        );
+      }}
+    >
+      <div className="task-editor-header">
+        <CommandSummaryContent command={command} label={headerLabel} />
+      </div>
+      <p className="task-command-note">{command.description}</p>
+      <div className="task-editor-fields">
+        {command.arguments.map((argument) => {
+          const inputId = `${idPrefix}-${command.command_id}-${argument.argument_id}`;
+
+          return (
+            <label className="task-editor-label" htmlFor={inputId} key={inputId}>
+              <span>{argument.label}</span>
+              <div className="task-editor-row">
+                {argument.value_type === "enum" || argument.value_type === "boolean" ? (
+                  <select
+                    className="task-editor-select"
+                    id={inputId}
+                    onChange={(event) => onUpdateDraftValue(argument.argument_id, event.target.value)}
+                    value={currentDraftValue(argument)}
+                  >
+                    {argument.options.map((option) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    className="task-editor-input"
+                    id={inputId}
+                    onChange={(event) => onUpdateDraftValue(argument.argument_id, event.target.value)}
+                    placeholder={argument.placeholder ?? undefined}
+                    required={argument.required}
+                    step={commandInputType(argument) === "number" ? "0.1" : undefined}
+                    type={commandInputType(argument)}
+                    value={currentDraftValue(argument)}
+                  />
+                )}
+                {argument.unit ? <span className="task-editor-unit">{argument.unit}</span> : null}
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      <button className="action-button action-button-primary" disabled={!command.enabled} type="submit">
+        {submitLabel}
+      </button>
+    </form>
+  );
+}
+
+export function ViewportHoverCard({
+  commandCatalog,
+  onPromotePreselectionCommand,
+  preselectionState
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  onPromotePreselectionCommand: (commandId: string) => void;
+  preselectionState: PreselectionStateResponse | null;
+}) {
+  if (!preselectionState?.object_id) {
+    return null;
+  }
+
+  const suggestedCommands = preselectionState.suggested_commands.slice(0, 2).map((commandId) => {
+    const command = commandCatalog?.commands.find((entry) => entry.command_id === commandId);
+    return command
+      ? {
+          command,
+          commandId,
+          disabled: command.enabled,
+          label: command.action_label ?? command.label,
+        }
+      : {
+          command: {
+            action_label: commandId,
+            group: "suggested",
+            icon: undefined,
+            label: commandId
+          },
+          commandId,
+          disabled: false,
+          label: commandId,
+        };
+  });
+
+  return (
+    <div className="viewport-hover-card">
+      <div className="viewport-hover-card-header">
+        <span className="selection-label">Hover Candidate</span>
+        <strong>{preselectionState.object_label ?? preselectionState.object_id}</strong>
+      </div>
+      <div className="viewport-hover-card-meta">
+        <span>{preselectionState.model_state}</span>
+        <span>{preselectionState.dependency_note}</span>
+      </div>
+      {suggestedCommands.length > 0 ? (
+        <div className="viewport-hover-card-actions">
+          {suggestedCommands.map((command) => (
+            <button
+              className="preselection-action-chip"
+              disabled={!command.disabled}
+              key={command.commandId}
+              onClick={() => onPromotePreselectionCommand(command.commandId)}
+              type="button"
+            >
+              <CommandSummaryContent command={command.command} label={command.label} showGroup={false} />
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ReportActivityFeed({
+  commandCatalog,
+  onFocusActivityObject,
+  onRunCommand,
+  onSelectActivityObject,
+  reportEvents
+}: {
+  commandCatalog?: CommandCatalogResponse | null;
+  onFocusActivityObject?: (objectId: string) => void;
+  onRunCommand?: (commandId: string, targetObjectId?: string) => void;
+  onSelectActivityObject?: (objectId: string) => void;
+  reportEvents: ActivityEvent[];
+}) {
+  const prioritizedEvents = prioritizeReportEvents(summarizeReportEvents(reportEvents));
+
+  return (
+    <section className="dock-panel">
+      <div className="panel-header">
+        <h2>Backend Activity</h2>
+        <span>{reportEvents.length} live backend events</span>
+      </div>
+      {reportEvents.length > 0 ? (
+        <div className="activity-list">
+          {prioritizedEvents.map((activity, index) => (
+            <div className="activity-item" key={`${activity.topic}-${index}`}>
+              <span className={`level level-${activity.level}`}>{activity.level}</span>
+              <div>
+                <div className="activity-topic">
+                  {activity.topic}
+                  {activity.object_id ? ` / ${activity.object_id}` : ""}
+                </div>
+                <div className="activity-message">{activity.message}</div>
+                <ActivityObjectActions
+                  activity={activity}
+                  commandCatalog={commandCatalog}
+                  onFocusActivityObject={onFocusActivityObject}
+                  onRunCommand={onRunCommand}
+                  onSelectActivityObject={onSelectActivityObject}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="selection-empty">
+          Structured STEP inspection is shown above. No additional backend activity is pending for
+          the current report view.
+        </p>
+      )}
+    </section>
+  );
+}
+
 function CommandCatalog({
   catalog,
   onRunCommand,
@@ -286,7 +1342,10 @@ function CommandCatalog({
               type="button"
             >
               <div className="command-card-top">
-                <strong>{command.label}</strong>
+                <div className="command-card-title">
+                  <ShellIcon icon={command.icon} title={command.label} />
+                  <strong>{command.label}</strong>
+                </div>
                 {command.shortcut ? <span>{command.shortcut}</span> : null}
               </div>
               <div className="command-card-meta">
@@ -334,6 +1393,10 @@ function QuickActionRail({
           disabled={!command.enabled}
           key={command.command_id}
           onClick={() => onRunCommand(command.command_id)}
+          style={getToolbarButtonStyle({
+            disabled: !command.enabled,
+            primary: command.command_id === "document.recompute"
+          })}
           type="button"
         >
           <span>{command.action_label ?? command.label}</span>
@@ -342,6 +1405,52 @@ function QuickActionRail({
       ))}
     </div>
   );
+}
+
+function getToolbarButtonStyle({ disabled, primary }: { disabled: boolean; primary: boolean }) {
+  const baseStyle = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 6,
+    minHeight: 24,
+    padding: "2px 8px",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+    borderRadius: 4,
+    fontSize: 11,
+    fontWeight: 600,
+    lineHeight: 1.1,
+    cursor: disabled ? "default" : "pointer"
+  } as const;
+
+  if (disabled) {
+    return {
+      ...baseStyle,
+      border: "1px solid rgba(120, 130, 142, 0.82)",
+      background: "linear-gradient(180deg, rgba(84, 91, 100, 0.94), rgba(63, 69, 76, 0.97))",
+      color: "rgba(206, 214, 223, 0.82)",
+      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.08)",
+      opacity: 1
+    } as const;
+  }
+
+  if (primary) {
+    return {
+      ...baseStyle,
+      border: "1px solid rgba(49, 70, 97, 0.96)",
+      background: "linear-gradient(180deg, rgba(87, 116, 150, 0.95), rgba(59, 84, 116, 0.98))",
+      color: "#f8fbff",
+      boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.2)"
+    } as const;
+  }
+
+  return {
+    ...baseStyle,
+    border: "1px solid var(--shell-frame-border)",
+    background: "linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(225, 231, 238, 0.96))",
+    color: "var(--shell-text-strong)",
+    boxShadow: "inset 0 1px 0 rgba(255, 255, 255, 0.7)"
+  } as const;
 }
 
 function ShellToolbarBands({
@@ -360,13 +1469,21 @@ function ShellToolbarBands({
   const commandById = new Map(catalog.commands.map((command) => [command.command_id, command]));
 
   return (
-    <div className="shell-toolbar-bands">
+    <div className="shell-toolbar-bands" style={{ display: "flex", flexWrap: "wrap", alignItems: "center" }}>
       {shellSnapshot.toolbar_bands.bands.map((band) => (
-        <div className="shell-toolbar-band" key={band.band_id}>
+        <div
+          className="shell-toolbar-band"
+          key={band.band_id}
+          style={{ display: "grid", gridTemplateColumns: "auto auto", alignItems: "center" }}
+        >
           <span className="dock-strip-label">{band.label}</span>
-          <div className="shell-toolbar-band-actions">
+          <div className="shell-toolbar-band-actions" style={{ display: "flex", flexWrap: "nowrap" }}>
             {band.toolbars.filter((toolbar) => toolbar.visible).map((toolbar) => (
-              <div className="shell-toolbar-group" key={toolbar.toolbar_id}>
+              <div
+                className="shell-toolbar-group"
+                key={toolbar.toolbar_id}
+                style={{ display: "flex", flexWrap: "nowrap", alignItems: "center" }}
+              >
                 {toolbar.items.map((item, index) => {
                   if (item.kind === "separator") {
                     return <span className="shell-toolbar-separator" key={`${toolbar.toolbar_id}-${index}`} />;
@@ -387,9 +1504,11 @@ function ShellToolbarBands({
                           onRunCommand(item.command_id);
                         }
                       }}
+                      style={getToolbarButtonStyle({ disabled: !enabled || !item.command_id, primary: isPrimary })}
                       title={toolbar.label}
                       type="button"
                     >
+                      <ShellIcon icon={item.icon} title={item.icon ?? undefined} />
                       <span>{label}</span>
                     </button>
                   );
@@ -509,6 +1628,7 @@ function SelectionModeToolbar({
             >
               <strong>{mode.label}</strong>
               <span>{mode.object_count} mapped</span>
+              <small>{mode.description}</small>
             </button>
           );
         })}
@@ -517,27 +1637,35 @@ function SelectionModeToolbar({
   );
 }
 
-function CommandPalette({
+export function CommandPalette({
   catalog,
   open,
   query,
   onQueryChange,
   onClose,
-  onRunCommand
+  onRunCommand,
+  targetOptions
 }: {
   catalog: CommandCatalogResponse | null;
   open: boolean;
   query: string;
   onQueryChange: (value: string) => void;
   onClose: () => void;
-  onRunCommand: (commandId: string, commandArguments?: Record<string, string>) => void;
+  onRunCommand: (
+    commandId: string,
+    commandArguments?: Record<string, string>,
+    targetObjectId?: string
+  ) => void;
+  targetOptions: CommandTargetOption[];
 }) {
   const [selectedCommandId, setSelectedCommandId] = useState<string | null>(null);
+  const [activeTargetObjectId, setActiveTargetObjectId] = useState<string | null>(null);
   const [draftArguments, setDraftArguments] = useState<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
     if (!open || !catalog) {
       setSelectedCommandId(null);
+      setActiveTargetObjectId(null);
       setDraftArguments({});
       return;
     }
@@ -561,23 +1689,21 @@ function CommandPalette({
         : nextCommand?.command_id ?? null
     );
 
-    setDraftArguments((current) => {
-      const next = { ...current };
-      for (const command of catalog.commands) {
-        if (command.arguments.length === 0 || next[command.command_id]) {
-          continue;
-        }
-
-        next[command.command_id] = Object.fromEntries(
-          command.arguments.map((argument) => [
-            argument.argument_id,
-            argument.default_value ?? ""
-          ])
-        );
-      }
-      return next;
-    });
+    setDraftArguments((current) => initializeCommandDrafts(current, catalog.commands));
   }, [catalog, open, query]);
+
+  useEffect(() => {
+    if (!open) {
+      setActiveTargetObjectId(null);
+      return;
+    }
+
+    setActiveTargetObjectId((current) =>
+      current && targetOptions.some((option) => option.objectId === current)
+        ? current
+        : targetOptions[0]?.objectId ?? null
+    );
+  }, [open, targetOptions]);
 
   if (!open || !catalog) {
     return null;
@@ -605,12 +1731,8 @@ function CommandPalette({
     filteredCommands.find((command) => command.command_id === selectedCommandId) ??
     filteredCommands[0] ??
     null;
-
-  function inputTypeFor(argument: CommandArgumentDefinition) {
-    return argument.value_type === "quantity" || argument.value_type === "float"
-      ? "number"
-      : "text";
-  }
+  const activeTarget = targetOptions.find((option) => option.objectId === activeTargetObjectId) ?? null;
+  const requiresTarget = Boolean(selectedCommand?.requires_selection);
 
   function currentDraftValue(commandId: string, argument: CommandArgumentDefinition) {
     return draftArguments[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
@@ -673,7 +1795,10 @@ function CommandPalette({
                 type="button"
               >
                 <div className="command-palette-main">
-                  <strong>{command.action_label ?? command.label}</strong>
+                  <div className="command-palette-title">
+                    <ShellIcon icon={command.icon} title={command.label} />
+                    <strong>{command.action_label ?? command.label}</strong>
+                  </div>
                   <span>{command.description}</span>
                 </div>
                 <div className="command-palette-meta">
@@ -690,7 +1815,10 @@ function CommandPalette({
             <div className="command-palette-detail">
               <div className="command-palette-detail-head">
                 <div>
-                  <strong>{selectedCommand.action_label ?? selectedCommand.label}</strong>
+                  <div className="command-palette-detail-title">
+                    <ShellIcon icon={selectedCommand.icon} title={selectedCommand.label} />
+                    <strong>{selectedCommand.action_label ?? selectedCommand.label}</strong>
+                  </div>
                   <p>{selectedCommand.description}</p>
                 </div>
                 <div className="command-palette-meta">
@@ -698,83 +1826,67 @@ function CommandPalette({
                   {selectedCommand.shortcut ? <span>{selectedCommand.shortcut}</span> : null}
                 </div>
               </div>
+              {requiresTarget ? (
+                <div className="command-palette-target-panel">
+                  <div className="command-palette-target-header">
+                    <span className="selection-label">Command Target</span>
+                    <strong>{activeTarget?.label ?? "No target selected"}</strong>
+                  </div>
+                  {targetOptions.length > 0 ? (
+                    <div className="command-palette-target-list">
+                      {targetOptions.map((option) => {
+                        const active = option.objectId === activeTargetObjectId;
+
+                        return (
+                          <button
+                            className={`command-palette-target-chip ${active ? "command-palette-target-chip-active" : ""}`}
+                            key={option.objectId}
+                            onClick={() => setActiveTargetObjectId(option.objectId)}
+                            type="button"
+                          >
+                            <strong>{option.label}</strong>
+                            <span>{option.detail}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="selection-empty">Selection-required commands need an active selected or hovered object.</p>
+                  )}
+                </div>
+              ) : null}
               {selectedCommand.arguments.length > 0 ? (
-                <form
+                <SuggestedCommandEditor
                   className="command-palette-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
+                  command={selectedCommand}
+                  currentDraftValue={(argument) =>
+                    currentDraftValue(selectedCommand.command_id, argument)
+                  }
+                  headerLabel={selectedCommand.action_label ?? selectedCommand.label}
+                  idPrefix="palette"
+                  onSubmitCommand={(commandArguments) =>
                     onRunCommand(
                       selectedCommand.command_id,
-                      draftArguments[selectedCommand.command_id] ?? {}
-                    );
-                  }}
-                >
-                  <div className="command-palette-fields">
-                    {selectedCommand.arguments.map((argument) => {
-                      const inputId = `palette-${selectedCommand.command_id}-${argument.argument_id}`;
-
-                      return (
-                        <label className="task-editor-label" htmlFor={inputId} key={inputId}>
-                          <span>{argument.label}</span>
-                          <div className="task-editor-row">
-                            {argument.value_type === "enum" || argument.value_type === "boolean" ? (
-                              <select
-                                className="task-editor-select"
-                                id={inputId}
-                                onChange={(event) =>
-                                  updateDraftValue(
-                                    selectedCommand.command_id,
-                                    argument.argument_id,
-                                    event.target.value
-                                  )
-                                }
-                                value={currentDraftValue(selectedCommand.command_id, argument)}
-                              >
-                                {argument.options.map((option) => (
-                                  <option key={option} value={option}>
-                                    {option}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <input
-                                className="task-editor-input"
-                                id={inputId}
-                                onChange={(event) =>
-                                  updateDraftValue(
-                                    selectedCommand.command_id,
-                                    argument.argument_id,
-                                    event.target.value
-                                  )
-                                }
-                                placeholder={argument.placeholder ?? undefined}
-                                required={argument.required}
-                                step={inputTypeFor(argument) === "number" ? "0.1" : undefined}
-                                type={inputTypeFor(argument)}
-                                value={currentDraftValue(selectedCommand.command_id, argument)}
-                              />
-                            )}
-                            {argument.unit ? (
-                              <span className="task-editor-unit">{argument.unit}</span>
-                            ) : null}
-                          </div>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  <button
-                    className="action-button action-button-primary"
-                    disabled={!selectedCommand.enabled}
-                    type="submit"
-                  >
-                    {selectedCommand.action_label ?? selectedCommand.label}
-                  </button>
-                </form>
+                      commandArguments,
+                      requiresTarget ? activeTargetObjectId ?? undefined : undefined
+                    )
+                  }
+                  onUpdateDraftValue={(argumentId, value) =>
+                    updateDraftValue(selectedCommand.command_id, argumentId, value)
+                  }
+                  submitLabel={selectedCommand.action_label ?? selectedCommand.label}
+                />
               ) : (
                 <button
                   className="action-button action-button-primary"
-                  disabled={!selectedCommand.enabled}
-                  onClick={() => onRunCommand(selectedCommand.command_id)}
+                  disabled={!selectedCommand.enabled || (requiresTarget && !activeTargetObjectId)}
+                  onClick={() =>
+                    onRunCommand(
+                      selectedCommand.command_id,
+                      undefined,
+                      requiresTarget ? activeTargetObjectId ?? undefined : undefined
+                    )
+                  }
                   type="button"
                 >
                   {selectedCommand.action_label ?? selectedCommand.label}
@@ -901,33 +2013,16 @@ function TaskPanel({
       return;
     }
 
-    setCommandDrafts((current) => {
-      const next: Record<string, Record<string, string>> = {};
-
-      for (const commandId of taskPanel.suggested_commands) {
-        const command = commandCatalog.commands.find((item) => item.command_id === commandId);
-        if (!command || command.arguments.length === 0) {
-          continue;
-        }
-
-        next[commandId] = {};
-        for (const argument of command.arguments) {
-          next[commandId][argument.argument_id] =
-            current[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
-        }
-      }
-
-      return next;
-    });
+    setCommandDrafts((current) =>
+      initializeSuggestedCommandDrafts(current, commandCatalog, taskPanel.suggested_commands)
+    );
   }, [taskPanel, commandCatalog]);
 
   if (!taskPanel) {
     return null;
   }
 
-  const suggestedCommands = taskPanel.suggested_commands
-    .map((commandId) => commandCatalog?.commands.find((item) => item.command_id === commandId))
-    .filter((command): command is CommandDefinition => Boolean(command));
+  const suggestedCommands = resolveSuggestedCommands(commandCatalog, taskPanel.suggested_commands);
 
   function updateDraftValue(
     commandId: string,
@@ -941,12 +2036,6 @@ function TaskPanel({
         [argumentId]: value
       }
     }));
-  }
-
-  function inputTypeFor(argument: CommandArgumentDefinition) {
-    return argument.value_type === "quantity" || argument.value_type === "float"
-      ? "number"
-      : "text";
   }
 
   function currentDraftValue(commandId: string, argument: CommandArgumentDefinition) {
@@ -979,83 +2068,23 @@ function TaskPanel({
         <div className="task-editor-grid">
           {suggestedCommands.map((command) =>
             command.arguments.length > 0 ? (
-              <form
+              <SuggestedCommandEditor
                 className="task-editor"
+                command={command}
+                currentDraftValue={(argument) => currentDraftValue(command.command_id, argument)}
+                headerLabel={command.label}
+                idPrefix="task"
                 key={command.command_id}
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  onRunCommand(command.command_id, commandDrafts[command.command_id] ?? {});
-                }}
-              >
-                <div className="task-editor-header">
-                  <strong>{command.label}</strong>
-                  <span>{command.group}</span>
-                </div>
-                <p className="task-command-note">{command.description}</p>
-                <div className="task-editor-fields">
-                  {command.arguments.map((argument) => {
-                    const inputId = `${command.command_id}-${argument.argument_id}`;
-
-                    return (
-                      <label className="task-editor-label" htmlFor={inputId} key={inputId}>
-                        <span>{argument.label}</span>
-                        <div className="task-editor-row">
-                          {argument.value_type === "enum" || argument.value_type === "boolean" ? (
-                            <select
-                              className="task-editor-select"
-                              id={inputId}
-                              onChange={(event) =>
-                                updateDraftValue(
-                                  command.command_id,
-                                  argument.argument_id,
-                                  event.target.value
-                                )
-                              }
-                              value={currentDraftValue(command.command_id, argument)}
-                            >
-                              {argument.options.map((option) => (
-                                <option key={option} value={option}>
-                                  {option}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              className="task-editor-input"
-                              id={inputId}
-                              onChange={(event) =>
-                                updateDraftValue(
-                                  command.command_id,
-                                  argument.argument_id,
-                                  event.target.value
-                                )
-                              }
-                              placeholder={argument.placeholder ?? undefined}
-                              required={argument.required}
-                              step={inputTypeFor(argument) === "number" ? "0.1" : undefined}
-                              type={inputTypeFor(argument)}
-                              value={currentDraftValue(command.command_id, argument)}
-                            />
-                          )}
-                          {argument.unit ? <span className="task-editor-unit">{argument.unit}</span> : null}
-                        </div>
-                      </label>
-                    );
-                  })}
-                </div>
-                <button
-                  className="action-button action-button-primary"
-                  disabled={!command.enabled}
-                  type="submit"
-                >
-                  {command.action_label ?? command.label}
-                </button>
-              </form>
+                onSubmitCommand={(commandArguments) => onRunCommand(command.command_id, commandArguments)}
+                onUpdateDraftValue={(argumentId, value) =>
+                  updateDraftValue(command.command_id, argumentId, value)
+                }
+                submitLabel={command.action_label ?? command.label}
+              />
             ) : (
               <div className="task-editor" key={command.command_id}>
                 <div className="task-editor-header">
-                  <strong>{command.label}</strong>
-                  <span>{command.group}</span>
+                  <CommandSummaryContent command={command} label={command.label} />
                 </div>
                 <p className="task-command-note">{command.description}</p>
                 <button
@@ -1075,9 +2104,17 @@ function TaskPanel({
   );
 }
 
-function NotificationCenter({
+export function NotificationCenter({
+  commandCatalog,
+  onFocusNoticeObject,
+  onRunNoticeCommand,
+  onSelectNoticeObject,
   notices
 }: {
+  commandCatalog?: CommandCatalogResponse | null;
+  onFocusNoticeObject?: (objectId: string) => void;
+  onRunNoticeCommand?: (commandId: string, targetObjectId?: string) => void;
+  onSelectNoticeObject?: (objectId: string) => void;
   notices: ShellNotice[];
 }) {
   if (notices.length === 0) {
@@ -1098,6 +2135,16 @@ function NotificationCenter({
               <strong>{notice.title}</strong>
             </div>
             <p>{notice.detail}</p>
+            {notice.objectId || notice.commandAction ? (
+              <ActivityObjectActions
+                activity={{ object_id: notice.objectId, topic: notice.title.replaceAll(" ", "_") }}
+                commandActionOverride={notice.commandAction}
+                commandCatalog={commandCatalog}
+                onFocusActivityObject={onFocusNoticeObject}
+                onRunCommand={onRunNoticeCommand}
+                onSelectActivityObject={onSelectNoticeObject}
+              />
+            ) : null}
           </div>
         ))}
       </div>
@@ -1105,13 +2152,14 @@ function NotificationCenter({
   );
 }
 
-function SelectionInspector({
+export function SelectionInspector({
   selectedObjectId,
   preselectionState,
   objectTree,
   properties,
   featureHistory,
   commandCatalog,
+  onRunSelectedCommand,
   onRunPreselectionCommand,
   onPromotePreselectionCommand,
   viewport
@@ -1122,10 +2170,12 @@ function SelectionInspector({
   properties: PropertyResponse | null;
   featureHistory: FeatureHistoryResponse | null;
   commandCatalog: CommandCatalogResponse | null;
+  onRunSelectedCommand: (commandId: string, commandArguments?: Record<string, string>) => void;
   onRunPreselectionCommand: (commandId: string, commandArguments?: Record<string, string>) => void;
   onPromotePreselectionCommand: (commandId: string) => void;
   viewport: ViewportResponse | null;
 }) {
+  const [selectedCommandDrafts, setSelectedCommandDrafts] = useState<Record<string, Record<string, string>>>({});
   const [preselectionDrafts, setPreselectionDrafts] = useState<Record<string, Record<string, string>>>({});
 
   useEffect(() => {
@@ -1134,24 +2184,9 @@ function SelectionInspector({
       return;
     }
 
-    setPreselectionDrafts((current) => {
-      const next: Record<string, Record<string, string>> = {};
-
-      for (const commandId of preselectionState.suggested_commands) {
-        const command = commandCatalog.commands.find((item) => item.command_id === commandId);
-        if (!command || command.arguments.length === 0) {
-          continue;
-        }
-
-        next[commandId] = {};
-        for (const argument of command.arguments) {
-          next[commandId][argument.argument_id] =
-            current[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
-        }
-      }
-
-      return next;
-    });
+    setPreselectionDrafts((current) =>
+      initializeSuggestedCommandDrafts(current, commandCatalog, preselectionState.suggested_commands)
+    );
   }, [commandCatalog, preselectionState]);
 
   const selectedNode = selectedObjectId
@@ -1169,11 +2204,50 @@ function SelectionInspector({
         command.enabled &&
         (!command.requires_selection || Boolean(selectedObjectId))
     ) ?? [];
-  const preselectionCommands =
-    commandCatalog?.commands.filter((command) =>
-      preselectionState?.suggested_commands.includes(command.command_id)
-    ) ?? [];
+  const visibleSelectedCommands = enabledCommands.slice(0, 6);
+  const visibleSelectedCommandIds = visibleSelectedCommands.map((command) => command.command_id);
+  const visibleSelectedCommandKey = visibleSelectedCommandIds.join("|");
+  const preselectionCommands = resolveSuggestedCommands(
+    commandCatalog,
+    preselectionState?.suggested_commands
+  );
   const topPropertyGroup = properties?.groups[0] ?? null;
+
+  useEffect(() => {
+    if (!commandCatalog || !selectedObjectId) {
+      setSelectedCommandDrafts({});
+      return;
+    }
+
+    setSelectedCommandDrafts((current) =>
+      initializeSuggestedCommandDrafts(
+        current,
+        commandCatalog,
+        visibleSelectedCommandIds
+      )
+    );
+  }, [commandCatalog, selectedObjectId, visibleSelectedCommandKey]);
+
+  function updateSelectedDraftValue(
+    commandId: string,
+    argumentId: string,
+    value: string
+  ) {
+    setSelectedCommandDrafts((current) => ({
+      ...current,
+      [commandId]: {
+        ...(current[commandId] ?? {}),
+        [argumentId]: value
+      }
+    }));
+  }
+
+  function currentSelectedDraftValue(
+    commandId: string,
+    argument: CommandArgumentDefinition
+  ) {
+    return selectedCommandDrafts[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
+  }
 
   function updatePreselectionDraftValue(
     commandId: string,
@@ -1187,12 +2261,6 @@ function SelectionInspector({
         [argumentId]: value
       }
     }));
-  }
-
-  function inputTypeFor(argument: CommandArgumentDefinition) {
-    return argument.value_type === "quantity" || argument.value_type === "float"
-      ? "number"
-      : "text";
   }
 
   function currentPreselectionDraftValue(
@@ -1262,12 +2330,37 @@ function SelectionInspector({
           <h3>Available Commands</h3>
           {enabledCommands.length > 0 ? (
             <div className="selection-command-list">
-              {enabledCommands.slice(0, 6).map((command) => (
-                <div className="selection-command-chip" key={command.command_id}>
-                  <strong>{command.action_label ?? command.label}</strong>
-                  <span>{command.group}</span>
-                </div>
-              ))}
+              {visibleSelectedCommands.map((command) => {
+                if (command.arguments.length > 0) {
+                  return (
+                    <SuggestedCommandEditor
+                      className="selection-action-editor"
+                      command={command}
+                      currentDraftValue={(argument) => currentSelectedDraftValue(command.command_id, argument)}
+                      idPrefix="selected"
+                      key={`selected-form-${command.command_id}`}
+                      onSubmitCommand={(commandArguments) =>
+                        onRunSelectedCommand(command.command_id, commandArguments)
+                      }
+                      onUpdateDraftValue={(argumentId, value) =>
+                        updateSelectedDraftValue(command.command_id, argumentId, value)
+                      }
+                      submitLabel={command.action_label ?? command.label}
+                    />
+                  );
+                }
+
+                return (
+                  <button
+                    className="selection-command-chip selection-command-chip-button"
+                    key={command.command_id}
+                    onClick={() => onRunSelectedCommand(command.command_id)}
+                    type="button"
+                  >
+                    <CommandSummaryContent command={command} />
+                  </button>
+                );
+              })}
             </div>
           ) : (
             <p className="selection-empty">No enabled commands are currently available.</p>
@@ -1292,77 +2385,20 @@ function SelectionInspector({
               <div className="selection-command-list">
                 {preselectionCommands.slice(0, 4).map((command) => (
                   command.arguments.length > 0 ? (
-                    <form
+                    <SuggestedCommandEditor
                       className="selection-action-editor"
+                      command={command}
+                      currentDraftValue={(argument) => currentPreselectionDraftValue(command.command_id, argument)}
+                      idPrefix="hover"
                       key={`hover-form-${command.command_id}`}
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        onRunPreselectionCommand(
-                          command.command_id,
-                          preselectionDrafts[command.command_id] ?? {}
-                        );
-                      }}
-                    >
-                      <div className="task-editor-header">
-                        <strong>{command.action_label ?? command.label}</strong>
-                        <span>{command.group}</span>
-                      </div>
-                      <p className="task-command-note">{command.description}</p>
-                      <div className="task-editor-fields">
-                        {command.arguments.map((argument) => {
-                          const inputId = `hover-${command.command_id}-${argument.argument_id}`;
-
-                          return (
-                            <label className="task-editor-label" htmlFor={inputId} key={inputId}>
-                              <span>{argument.label}</span>
-                              <div className="task-editor-row">
-                                {argument.value_type === "enum" || argument.value_type === "boolean" ? (
-                                  <select
-                                    className="task-editor-select"
-                                    id={inputId}
-                                    onChange={(event) =>
-                                      updatePreselectionDraftValue(
-                                        command.command_id,
-                                        argument.argument_id,
-                                        event.target.value
-                                      )
-                                    }
-                                    value={currentPreselectionDraftValue(command.command_id, argument)}
-                                  >
-                                    {argument.options.map((option) => (
-                                      <option key={option} value={option}>
-                                        {option}
-                                      </option>
-                                    ))}
-                                  </select>
-                                ) : (
-                                  <input
-                                    className="task-editor-input"
-                                    id={inputId}
-                                    onChange={(event) =>
-                                      updatePreselectionDraftValue(
-                                        command.command_id,
-                                        argument.argument_id,
-                                        event.target.value
-                                      )
-                                    }
-                                    placeholder={argument.placeholder ?? undefined}
-                                    required={argument.required}
-                                    step={inputTypeFor(argument) === "number" ? "0.1" : undefined}
-                                    type={inputTypeFor(argument)}
-                                    value={currentPreselectionDraftValue(command.command_id, argument)}
-                                  />
-                                )}
-                                {argument.unit ? <span className="task-editor-unit">{argument.unit}</span> : null}
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <button className="action-button action-button-primary" type="submit">
-                        Run On Hovered
-                      </button>
-                    </form>
+                      onSubmitCommand={(commandArguments) =>
+                        onRunPreselectionCommand(command.command_id, commandArguments)
+                      }
+                      onUpdateDraftValue={(argumentId, value) =>
+                        updatePreselectionDraftValue(command.command_id, argumentId, value)
+                      }
+                      submitLabel="Run On Hovered"
+                    />
                   ) : (
                     <button
                       className="selection-command-chip selection-command-chip-button"
@@ -1370,8 +2406,7 @@ function SelectionInspector({
                       onClick={() => onPromotePreselectionCommand(command.command_id)}
                       type="button"
                     >
-                      <strong>{command.action_label ?? command.label}</strong>
-                      <span>{command.group}</span>
+                      <CommandSummaryContent command={command} />
                     </button>
                   )
                 ))}
@@ -1566,6 +2601,10 @@ function applyViewportDiff(
   };
 }
 
+function isStepFilePath(filePath: string | null | undefined) {
+  return Boolean(filePath && /\.(stp|step|p21)$/i.test(filePath));
+}
+
 function flattenObjectTree(nodes: ObjectNode[]): ObjectNode[] {
   return nodes.flatMap((node) => [node, ...flattenObjectTree(node.children)]);
 }
@@ -1602,6 +2641,10 @@ export default function App() {
   const [jobs, setJobs] = useState<JobStatusResponse | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [commandStatus, setCommandStatus] = useState<CommandExecutionResponse | null>(null);
+  const [stepDocument, setStepDocument] = useState<StepDocumentIndex | null>(null);
+  const [stepScene, setStepScene] = useState<StepSceneBundle | null>(null);
+  const [stepViewportPreset, setStepViewportPreset] = useState<StepViewportPreset | null>(null);
+  const [stepStatus, setStepStatus] = useState<"idle" | "loading" | "ready" | "unavailable" | "error">("idle");
   const [openPath, setOpenPath] = useState(initialPath);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -1670,6 +2713,59 @@ export default function App() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadStepArtifacts() {
+      if (!document?.document_id || !isStepFilePath(document.file_path)) {
+        if (!active) {
+          return;
+        }
+        setStepDocument(null);
+        setStepScene(null);
+        setStepStatus("unavailable");
+        return;
+      }
+
+      try {
+        setStepStatus("loading");
+        const [nextStepDocument, nextStepScene] = await Promise.all([
+          fetchStepDocumentIndex(document.document_id),
+          fetchStepSceneBundle(document.document_id)
+        ]);
+        if (!active) {
+          return;
+        }
+
+        setStepDocument(nextStepDocument);
+        setStepScene(nextStepScene);
+        setStepStatus("ready");
+      } catch (reason) {
+        if (!active) {
+          return;
+        }
+
+        setStepDocument(null);
+        setStepScene(null);
+        if (reason instanceof Error && /404/.test(reason.message)) {
+          setStepStatus("unavailable");
+          return;
+        }
+
+        setStepStatus("error");
+      }
+    }
+
+    void loadStepArtifacts();
+    return () => {
+      active = false;
+    };
+  }, [document?.document_id, document?.file_path]);
+
+  useEffect(() => {
+    setStepViewportPreset(null);
+  }, [document?.document_id]);
 
   async function refreshDocumentSlices(
     documentId: string,
@@ -1832,7 +2928,8 @@ export default function App() {
 
   async function handleCommand(
     commandId: string,
-    extraArguments: Record<string, string> = {}
+    extraArguments: Record<string, string> = {},
+    targetObjectId?: string
   ) {
     if (!document) {
       return;
@@ -1852,10 +2949,11 @@ export default function App() {
     );
 
     try {
+      const effectiveTargetObjectId = targetObjectId ?? selectedObjectId ?? undefined;
       const response = await runCommand({
         command_id: commandId,
         document_id: document.document_id,
-        target_object_id: selectedObjectId,
+        target_object_id: effectiveTargetObjectId,
         arguments: {
           source: "react-shell",
           ...defaultArguments,
@@ -1863,6 +2961,14 @@ export default function App() {
         }
       });
       setCommandStatus(response);
+      if (response.accepted) {
+        const appliedPreset = stepViewportPresetFromCommand(commandId);
+        if (appliedPreset) {
+          setStepViewportPreset(appliedPreset);
+        } else if (commandId === "selection.focus" || isStepViewportResetCommand(commandId)) {
+          setStepViewportPreset(null);
+        }
+      }
       const nextDocument = {
         ...document,
         dirty: response.document_dirty
@@ -1875,13 +2981,14 @@ export default function App() {
         setViewport(patched);
         setSelectedObjectId(patched.selected_object_id);
         await refreshDocumentSlices(document.document_id, patched.selected_object_id, nextDocument);
-      } else if (selectedObjectId) {
+      } else if (selectedObjectId || effectiveTargetObjectId) {
         const nextViewport = await fetchViewport(document.document_id);
         setSelectedObjectId(nextViewport.selected_object_id);
         await refreshDocumentSlices(document.document_id, nextViewport.selected_object_id, nextDocument);
       } else {
         setEvents(await fetchEvents(document.document_id));
       }
+
       setError(null);
       setPaletteOpen(false);
       setPaletteQuery("");
@@ -1901,6 +3008,13 @@ export default function App() {
 
   async function handleWorkbenchChange(workbenchId: string) {
     if (!document) {
+      return;
+    }
+
+    const enabledWorkbenchCount = (shellSnapshot?.workbench_catalog.workbenches ?? []).filter(
+      (workbench) => workbench.enabled
+    ).length;
+    if (enabledWorkbenchCount <= 1) {
       return;
     }
 
@@ -2250,34 +3364,52 @@ export default function App() {
       case "shell.show_python_console":
         await handlePanelTabChange("report_dock", "python");
         return;
+      case "shell.show_extensions_manager":
+        await handlePanelTabChange("report_dock", "extensions");
+        return;
       default:
         await handleCommand(commandId);
     }
   }
 
-  const commandNotice: ShellNotice[] = commandStatus
-    ? [
-        {
-          id: `command-${commandStatus.command_id}-${commandStatus.accepted ? "ok" : "warn"}`,
-          level: commandStatus.accepted ? "info" : "warning",
-          title: commandStatus.command_id,
-          detail: commandStatus.status_message
-        }
-      ]
-    : [];
-  const eventNotices: ShellNotice[] = events.slice(0, 3).map((event, index) => ({
-    id: `${event.topic}-${index}`,
-    level: event.level,
-    title: event.topic.replaceAll("_", " "),
-    detail: event.message
-  }));
-  const shellNotices = [...commandNotice, ...eventNotices].slice(0, 4);
+  async function handleApplyStepViewportPreset(preset: StepViewportPreset) {
+    await handleCommand(STEP_VIEWPORT_COMMAND_BY_PRESET[preset]);
+  }
+
+  async function handleResetStepViewportPreset() {
+    setStepViewportPreset(null);
+    await handleCommand("step.view_reset");
+  }
+
+  async function handleFitAllStepViewport() {
+    setStepViewportPreset(null);
+    await handleCommand("step.view_fit_all");
+  }
+
+  const reportEvents = filteredReportEvents(events, shellSnapshot, selectedObjectId);
   const flattenedTree = flattenObjectTree(objectTree);
   const objectTypeById = new Map(flattenedTree.map((node) => [node.object_id, node.object_type]));
   const selectableObjectCount = flattenedTree.filter((node) =>
     objectMatchesSelectionMode(node.object_type, selectionState?.current_mode ?? "object")
   ).length;
-
+  const stepAvailable = stepStatus === "ready" && Boolean(stepDocument) && Boolean(stepScene);
+  const stepProtocolSummary = stepDocument?.header.application_protocols.join(", ") ?? "No STEP payload";
+  const paletteTargetOptions: CommandTargetOption[] = [
+    selectedObjectId && selectionState
+      ? {
+          objectId: selectedObjectId,
+          label: selectionState.selected_object_label,
+          detail: `Selected ${selectionState.selected_object_type}`
+        }
+      : null,
+    preselectionState?.selectable && preselectionState.object_id && preselectionState.object_id !== selectedObjectId
+      ? {
+          objectId: preselectionState.object_id,
+          label: preselectionState.object_label ?? preselectionState.object_id,
+          detail: `Hovered ${preselectionState.object_type ?? "object"}`
+        }
+      : null
+  ].filter((option): option is CommandTargetOption => Boolean(option));
   if (loading) {
     return <div className="splash">Connecting AsterForge shell to backend...</div>;
   }
@@ -2301,6 +3433,22 @@ export default function App() {
 
   const visibleMenus = shellSnapshot?.menu_bar.menus.filter((menu) => menu.visible) ?? [];
   const workbenchOptions = shellSnapshot?.workbench_catalog.workbenches ?? [];
+  const fallbackWorkbenchOption = {
+    workbench_id: document.workbench.toLowerCase(),
+    display_name: document.workbench,
+    enabled: true,
+    icon: undefined,
+    description: undefined,
+    category: "Current context",
+    migration_lane: "Bridge surfaced"
+  };
+  const selectableWorkbenchOptions =
+    workbenchOptions.length > 0 ? workbenchOptions : [fallbackWorkbenchOption];
+  const activeWorkbenchId = shellSnapshot?.workbench_catalog.active_workbench_id ?? document.workbench.toLowerCase();
+  const activeWorkbench = workbenchOptions.find(
+    (workbench) => workbench.workbench_id === activeWorkbenchId
+  ) ?? fallbackWorkbenchOption;
+  const workbenchLocked = selectableWorkbenchOptions.length <= 1;
   const visiblePanels = shellSnapshot?.layout.panels.filter((panel) => panel.visible).length ?? 0;
   const recentDocuments: RecentDocumentEntry[] = shellSnapshot?.recent_documents ?? [];
   const workspaceSessions: WorkspaceSession[] =
@@ -2321,6 +3469,31 @@ export default function App() {
   const bottomDockTab =
     shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "report_dock")?.active_tab ??
     "report";
+  const includeActivityNotices = bottomDockTab !== "report";
+  const extensionCompatibility = (
+    shellSnapshot as (ShellSnapshot & { extension_compatibility?: ExtensionCompatibilityState }) | null
+  )?.extension_compatibility;
+  const commandNotice: ShellNotice[] =
+    commandStatus &&
+    !shouldHideStructuredInspectionCommandNotice(commandStatus, shellSnapshot, selectedObjectId) &&
+    !shouldHideCommandNoticeForActivity(commandStatus, reportEvents)
+      ? [
+          {
+            id: `command-${commandStatus.command_id}-${commandStatus.accepted ? "ok" : "warn"}`,
+            level: commandStatus.accepted ? "info" : "warning",
+            title: commandNoticeTitle(commandCatalog, commandStatus.command_id),
+            detail: commandStatus.status_message,
+            objectId: commandNoticeObjectId(
+              commandCatalog,
+              commandStatus.command_id,
+              selectedObjectId
+            ),
+            commandAction: commandNoticeAction(commandCatalog, commandStatus.command_id)
+          }
+        ]
+      : [];
+  const eventNotices = buildEventNotices(reportEvents, includeActivityNotices, 4);
+  const shellNotices = buildShellNotices(commandNotice, eventNotices);
   const comboViewPanel = shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "combo_view");
   const reportDockPanel = shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "report_dock");
   const comboViewVisible = comboViewPanel?.visible ?? true;
@@ -2393,31 +3566,36 @@ export default function App() {
       <div className="freecad-toolbar-stack">
         <div className="freecad-toolbar-row">
           <div className="freecad-brand">
-            <div className="eyebrow">AsterForge / FreeCAD Layout Transplant</div>
+            <div className="freecad-frame-title">FreeCAD</div>
             <strong>{document.display_name}</strong>
           </div>
           <label className="workbench-picker">
             <span>Workbench</span>
-            <select
-              value={shellSnapshot?.workbench_catalog.active_workbench_id ?? document.workbench.toLowerCase()}
-              onChange={(event) => void handleWorkbenchChange(event.target.value)}
-            >
-              {(workbenchOptions.length > 0
-                ? workbenchOptions
-                : [
-                    {
-                      workbench_id: document.workbench.toLowerCase(),
-                      display_name: document.workbench,
-                      enabled: true,
-                      icon: undefined,
-                      description: undefined
-                    }
-                  ]).map((workbench) => (
-                <option key={workbench.workbench_id} value={workbench.workbench_id}>
-                  {workbench.display_name}
-                </option>
-              ))}
-            </select>
+            <div className="workbench-active-chip">
+              <ShellIcon icon={activeWorkbench.icon} title={activeWorkbench.display_name} />
+              <div>
+                <strong>{activeWorkbench.display_name}</strong>
+                <small className="workbench-active-chip-meta">
+                  {activeWorkbench.category} | {activeWorkbench.migration_lane}
+                </small>
+              </div>
+            </div>
+            {workbenchLocked ? (
+              <div className="workbench-lock-note">
+                {activeWorkbench.description ?? "Workbench is fixed by the active document context."}
+              </div>
+            ) : (
+              <select
+                value={activeWorkbenchId}
+                onChange={(event) => void handleWorkbenchChange(event.target.value)}
+              >
+                {selectableWorkbenchOptions.map((workbench) => (
+                  <option disabled={!workbench.enabled} key={workbench.workbench_id} value={workbench.workbench_id}>
+                    {workbench.display_name} ({workbench.category}, {workbench.migration_lane})
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <form className="open-form freecad-open-form" onSubmit={handleOpenDocument}>
             <input
@@ -2509,11 +3687,12 @@ export default function App() {
         catalog={commandCatalog}
         onClose={() => setPaletteOpen(false)}
         onQueryChange={setPaletteQuery}
-        onRunCommand={(commandId, commandArguments) =>
-          void handleCommand(commandId, commandArguments ?? {})
+        onRunCommand={(commandId, commandArguments, targetObjectId) =>
+          void handleCommand(commandId, commandArguments ?? {}, targetObjectId)
         }
         open={paletteOpen}
         query={paletteQuery}
+        targetOptions={paletteTargetOptions}
       />
 
       {error ? <div className="inline-alert">{error}</div> : null}
@@ -2624,6 +3803,9 @@ export default function App() {
                 commandCatalog={commandCatalog}
                 featureHistory={featureHistory}
                 objectTree={objectTree}
+                onRunSelectedCommand={(commandId, commandArguments) =>
+                  void handleCommand(commandId, commandArguments ?? {})
+                }
                 onPromotePreselectionCommand={(commandId) =>
                   void handlePromotePreselectionCommand(commandId)
                 }
@@ -2647,41 +3829,79 @@ export default function App() {
               <span>{document.file_path ?? "Unsaved document"}</span>
             </div>
             <div className="viewport-canvas">
-              <ViewportScene
-                objectTypeById={objectTypeById}
-                onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
-                onSelect={handleSelect}
-                preselectedObjectId={preselectionState?.object_id ?? null}
+              {stepAvailable && stepDocument && stepScene ? (
+                <StepViewportScene
+                  cameraEye={viewport?.scene.camera_eye}
+                  cameraTarget={viewport?.scene.camera_target}
+                  onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
+                  onSelect={handleSelect}
+                  preselectedObjectId={preselectionState?.object_id ?? null}
+                  selectedObjectId={selectedObjectId}
+                  shellSnapshot={shellSnapshot}
+                  stepDocument={stepDocument}
+                  stepScene={stepScene}
+                  visibleDrawables={viewport?.scene.drawables}
+                />
+              ) : (
+                <ViewportScene
+                  objectTypeById={objectTypeById}
+                  onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
+                  onSelect={handleSelect}
+                  preselectedObjectId={preselectionState?.object_id ?? null}
+                  selectedObjectId={selectedObjectId}
+                  selectionMode={selectionState?.current_mode ?? "object"}
+                  viewport={viewport}
+                />
+              )}
+              <ViewportHeadsUp
+                activePreset={stepViewportPreset}
+                cameraEye={viewport?.scene.camera_eye}
+                cameraTarget={viewport?.scene.camera_target}
+                comboViewVisible={comboViewVisible}
+                onChangeSelectionMode={(modeId) => void handleSelectionModeChange(modeId)}
+                onApplyPreset={(preset) => void handleApplyStepViewportPreset(preset)}
+                onFitAll={() => void handleFitAllStepViewport()}
+                onFocusSelection={() => void handleCommand("selection.focus")}
+                onOpenModel={() => void handlePanelTabChange("combo_view", "model")}
+                onOpenReport={() => void handlePanelTabChange("report_dock", "report")}
+                onOpenTasks={() => void handlePanelTabChange("combo_view", "tasks")}
+                onResetPreset={() => void handleResetStepViewportPreset()}
+                reportDockVisible={reportDockVisible}
+                selectionState={selectionState}
                 selectedObjectId={selectedObjectId}
-                selectionMode={selectionState?.current_mode ?? "object"}
-                viewport={viewport}
+                stepAvailable={stepAvailable}
               />
               <div className="viewport-overlay">
-                <span>Selection synchronized through backend state</span>
+                <span>
+                  {stepAvailable
+                    ? "STEP scene streaming from parser-backed gateway state"
+                    : "Selection synchronized through backend state"}
+                </span>
                 <strong>
-                  {selectedObjectId ? `Focused object: ${selectedObjectId}` : "No object selected"}
+                  {stepAvailable && stepDocument
+                    ? `${stepDocument.assemblies.length} root STEP assemblies`
+                    : selectedObjectId
+                      ? `Focused object: ${selectedObjectId}`
+                      : "No object selected"}
                 </strong>
                 <em>
-                  {preselectionState?.object_label
-                    ? `Hover candidate: ${preselectionState.object_label}`
-                    : "Hover candidate: none"}
+                  {stepAvailable
+                    ? `Protocols: ${stepProtocolSummary}`
+                    : preselectionState?.object_label
+                      ? `Hover candidate: ${preselectionState.object_label}`
+                      : "Hover candidate: none"}
                 </em>
-                {preselectionState?.object_id ? (
-                  <div className="preselection-hint-strip">
-                    <span>{preselectionState.model_state}</span>
-                    <span>{preselectionState.dependency_note}</span>
-                    {preselectionState.suggested_commands.slice(0, 2).map((commandId) => (
-                      <button
-                        className="preselection-action-chip"
-                        key={commandId}
-                        onClick={() => void handlePromotePreselectionCommand(commandId)}
-                        type="button"
-                      >
-                        {commandId}
-                      </button>
-                    ))}
-                  </div>
+                {stepAvailable && stepScene ? (
+                  <em>
+                    {stepScene.semantic_pmi.length} PMI notes, {stepScene.tessellated_representations.length} tessellated sets
+                  </em>
                 ) : null}
+                {stepStatus === "loading" ? <em>Loading STEP scene bundle...</em> : null}
+                <ViewportHoverCard
+                  commandCatalog={commandCatalog}
+                  onPromotePreselectionCommand={(commandId) => void handlePromotePreselectionCommand(commandId)}
+                  preselectionState={preselectionState}
+                />
               </div>
             </div>
             <SelectionModeToolbar
@@ -2743,6 +3963,13 @@ export default function App() {
                 Commands
               </button>
               <button
+                className={`dock-tab-button ${bottomDockTab === "extensions" ? "dock-tab-button-active" : ""}`}
+                onClick={() => void handlePanelTabChange("report_dock", "extensions")}
+                type="button"
+              >
+                Extensions
+              </button>
+              <button
                 className="dock-tab-button dock-tab-button-utility"
                 onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint - 0.03)}
                 type="button"
@@ -2768,27 +3995,35 @@ export default function App() {
             <div className="bottom-dock-content">
               {bottomDockTab === "report" ? (
                 <div className="bottom-dock-report">
-                  <NotificationCenter notices={shellNotices} />
-                  <section className="dock-panel">
-                    <div className="panel-header">
-                      <h2>Backend Activity</h2>
-                      <span>Live in-memory API events</span>
-                    </div>
-                    <div className="activity-list">
-                      {events.map((activity, index) => (
-                        <div className="activity-item" key={`${activity.topic}-${index}`}>
-                          <span className={`level level-${activity.level}`}>{activity.level}</span>
-                          <div>
-                            <div className="activity-topic">
-                              {activity.topic}
-                              {activity.object_id ? ` / ${activity.object_id}` : ""}
-                            </div>
-                            <div className="activity-message">{activity.message}</div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </section>
+                  <NotificationCenter
+                    commandCatalog={commandCatalog}
+                    notices={shellNotices}
+                    onFocusNoticeObject={(objectId) =>
+                      void handleSelectAndCommand(objectId, "selection.focus")
+                    }
+                    onRunNoticeCommand={(commandId, targetObjectId) =>
+                      void handleCommand(commandId, {}, targetObjectId)
+                    }
+                    onSelectNoticeObject={(objectId) => void handleSelect(objectId)}
+                  />
+                  <ReportInspectionSummary
+                    commandCatalog={commandCatalog}
+                    onRunCommand={(commandId, targetObjectId) =>
+                      void handleCommand(commandId, {}, targetObjectId)
+                    }
+                    shellSnapshot={shellSnapshot}
+                  />
+                  <ReportActivityFeed
+                    commandCatalog={commandCatalog}
+                    onFocusActivityObject={(objectId) =>
+                      void handleSelectAndCommand(objectId, "selection.focus")
+                    }
+                    onRunCommand={(commandId, targetObjectId) =>
+                      void handleCommand(commandId, {}, targetObjectId)
+                    }
+                    onSelectActivityObject={(objectId) => void handleSelect(objectId)}
+                    reportEvents={reportEvents}
+                  />
                 </div>
               ) : null}
 
@@ -2844,6 +4079,15 @@ export default function App() {
                   catalog={commandCatalog}
                   onRunCommand={(id) => void handleCommand(id)}
                   taskPanel={taskPanel}
+                />
+              ) : null}
+              {bottomDockTab === "extensions" ? (
+                <ExtensionCompatibilityPanel
+                  commandCatalog={commandCatalog}
+                  extensionCompatibility={extensionCompatibility}
+                  onRunCommand={(commandId, commandArguments) =>
+                    void handleCommand(commandId, commandArguments ?? {})
+                  }
                 />
               ) : null}
             </div>

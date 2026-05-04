@@ -196,8 +196,22 @@ set "FC_LAUNCH_DIAGNOSTIC_STARTUP=1"
 goto :eof
 
 :prepare_python_launcher
+for %%I in ("!LAUNCH_SCRIPT!") do set "LAUNCH_SCRIPT_EXT=%%~xI"
+if /i "!LAUNCH_SCRIPT_EXT!"==".py" (
+    if not exist "%TEMP%\FreeCAD\launcher-scripts" mkdir "%TEMP%\FreeCAD\launcher-scripts" >nul 2>&1
+    set "FC_LAUNCH_TOKEN=%RANDOM%%RANDOM%%RANDOM%"
+    set "LAUNCH_WRAPPER=%TEMP%\FreeCAD\launcher-scripts\run_python_script-!FC_LAUNCH_TOKEN!.py"
+    powershell -NoProfile -Command "$content = @('import runpy','runpy.run_path(r''!LAUNCH_SCRIPT!'', run_name=''__main__'')'); Set-Content -LiteralPath '!LAUNCH_WRAPPER!' -Value $content -Encoding ASCII"
+    if errorlevel 1 (
+        echo [ERROR] Failed to prepare Python launcher wrapper.
+        exit /b 1
+    )
+    set "FC_ARGS=!FC_ARGS! ^"!LAUNCH_WRAPPER!^""
+    goto :eof
+)
 if not exist "%TEMP%\FreeCAD\launcher-scripts" mkdir "%TEMP%\FreeCAD\launcher-scripts" >nul 2>&1
-set "LAUNCH_WRAPPER=%TEMP%\FreeCAD\launcher-scripts\run_python_script.FCMacro"
+set "FC_LAUNCH_TOKEN=%RANDOM%%RANDOM%%RANDOM%"
+set "LAUNCH_WRAPPER=%TEMP%\FreeCAD\launcher-scripts\run_python_script-!FC_LAUNCH_TOKEN!.FCMacro"
 powershell -NoProfile -Command "$content = @('import os','import runpy','import sys','','script = os.environ.get(''FREECAD_LAUNCH_SCRIPT'', '''')','if not script:','    raise RuntimeError(''FREECAD_LAUNCH_SCRIPT not set'')','','sys.argv = [script]','runpy.run_path(script, run_name=''__main__'')'); Set-Content -LiteralPath '!LAUNCH_WRAPPER!' -Value $content -Encoding ASCII"
 if errorlevel 1 (
     echo [ERROR] Failed to prepare Python launcher wrapper.

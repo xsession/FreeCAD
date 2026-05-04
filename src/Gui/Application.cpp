@@ -2615,38 +2615,30 @@ void runEventLoop(GUISingleApplication& mainApp)
         throw;
     }
 }
-}  // namespace
 
-void Application::runApplication()
+void configureDefaultSurfaceFormat()
 {
-    StartupProcess::setupApplication();
+    QSurfaceFormat defaultFormat;
+    defaultFormat.setRenderableType(QSurfaceFormat::OpenGL);
+    defaultFormat.setProfile(QSurfaceFormat::CompatibilityProfile);
+    defaultFormat.setOption(QSurfaceFormat::DeprecatedFunctions, true);
 
-    {
-        QSurfaceFormat defaultFormat;
-        defaultFormat.setRenderableType(QSurfaceFormat::OpenGL);
-        defaultFormat.setProfile(QSurfaceFormat::CompatibilityProfile);
-        defaultFormat.setOption(QSurfaceFormat::DeprecatedFunctions, true);
+    // Request a high-quality framebuffer on all platforms:
+    // 24-bit depth, 8-bit stencil, MSAA 4x, proper color depth.
+    // This eliminates z-fighting and gives clean anti-aliased edges.
+    defaultFormat.setDepthBufferSize(24);
+    defaultFormat.setStencilBufferSize(8);
+    defaultFormat.setSamples(4);
+    defaultFormat.setRedBufferSize(8);
+    defaultFormat.setGreenBufferSize(8);
+    defaultFormat.setBlueBufferSize(8);
+    defaultFormat.setAlphaBufferSize(8);
 
-        // Request a high-quality framebuffer on all platforms:
-        // 24-bit depth, 8-bit stencil, MSAA 4x, proper color depth.
-        // This eliminates z-fighting and gives clean anti-aliased edges.
-        defaultFormat.setDepthBufferSize(24);
-        defaultFormat.setStencilBufferSize(8);
-        defaultFormat.setSamples(4);
-        defaultFormat.setRedBufferSize(8);
-        defaultFormat.setGreenBufferSize(8);
-        defaultFormat.setBlueBufferSize(8);
-        defaultFormat.setAlphaBufferSize(8);
+    QSurfaceFormat::setDefaultFormat(defaultFormat);
+}
 
-        QSurfaceFormat::setDefaultFormat(defaultFormat);
-    }
-
-    // A new QApplication
-    Base::Console().log("Init: Creating Gui::Application and QApplication\n");
-
-    int argc = App::Application::GetARGC();
-    GUISingleApplication mainApp(argc, App::Application::GetARGV());
-
+bool prepareGuiShellRuntime(GUISingleApplication& mainApp)
+{
 #if (COIN_MAJOR_VERSION * 100 + COIN_MINOR_VERSION * 10 + COIN_MICRO_VERSION < 406) \
     && (defined(FC_OS_LINUX) || defined(FC_OS_BSD))
     // If QT is running with native Wayland then inform Coin to use EGL
@@ -2663,13 +2655,76 @@ void Application::runApplication()
 
     // check if a single or multiple instances can run
     if (onlySingleInstance(mainApp)) {
-        return;
+        return false;
     }
 
     setAppNameAndIcon();
 
     StartupProcess process;
     process.execute();
+    return true;
+}
+}  // namespace
+
+void Application::runRuntimeOnlyApplication()
+{
+    StartupProcess::setupApplication();
+    configureDefaultSurfaceFormat();
+
+    Base::Console().log("Init: Creating Gui::Application runtime without Qt main window\n");
+
+    int argc = App::Application::GetARGC();
+    GUISingleApplication mainApp(argc, App::Application::GetARGV());
+    if (!prepareGuiShellRuntime(mainApp)) {
+        return;
+    }
+
+    Application app(true);
+    Instance->d->startingUp = false;
+    Base::Interpreter().runString("import FreeCAD as App\nApp.GuiUp = 1\n");
+
+    QTimer::singleShot(0, &mainApp, [] {
+        int exitCode = 0;
+        try {
+            App::Application::processCmdLineFiles();
+        }
+        catch (const Base::SystemExitException& e) {
+            exitCode = e.getExitCode();
+        }
+        catch (const Base::Exception& e) {
+            e.reportException();
+            exitCode = 1;
+        }
+        catch (const std::exception& e) {
+            Base::Console().error("Runtime-only command processing failed: %s\n", e.what());
+            exitCode = 1;
+        }
+        catch (...) {
+            Base::Console().error("Runtime-only command processing failed\n");
+            exitCode = 1;
+        }
+
+        QApplication::exit(exitCode);
+    });
+
+    runEventLoop(mainApp);
+
+    Base::Console().log("Finish: Gui runtime bootstrap completed without Qt main window\n");
+}
+
+void Application::runApplication()
+{
+    StartupProcess::setupApplication();
+    configureDefaultSurfaceFormat();
+
+    // A new QApplication
+    Base::Console().log("Init: Creating Gui::Application and QApplication\n");
+
+    int argc = App::Application::GetARGC();
+    GUISingleApplication mainApp(argc, App::Application::GetARGV());
+    if (!prepareGuiShellRuntime(mainApp)) {
+        return;
+    }
 
     Application app(true);
     MainWindow mw;

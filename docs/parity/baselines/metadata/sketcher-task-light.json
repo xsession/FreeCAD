@@ -1,0 +1,35 @@
+{
+  "$schema": "./metadata-schema.json",
+  "baseline_id": "sketcher-task-light",
+  "theme": "light",
+  "workbench": "SketcherWorkbench",
+  "fixture_document": "sketcher-constraint-example",
+  "visible_toolbars": [
+    "B-Spline Tools",
+    "Constraints",
+    "Edit",
+    "Edit Mode",
+    "File",
+    "Geometries",
+    "Help",
+    "Sketcher",
+    "Sketcher Tools",
+    "Structure",
+    "View",
+    "Visual Helpers",
+    "Workbench"
+  ],
+  "visible_panels": [
+    "Model",
+    "Tasks"
+  ],
+  "active_task": "Sketch",
+  "artifacts": {
+    "full_window": "docs/parity/baselines/screenshots/sketcher-task-light.png",
+    "viewport_crop": null,
+    "tree_property_crop": null,
+    "task_panel_crop": "docs/parity/baselines/screenshots/sketcher-task-light-task-panel.png",
+    "recording": null
+  },
+  "notes": "Captured from Qt shell baseline helper."
+}

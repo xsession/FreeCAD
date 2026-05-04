@@ -1,0 +1,11 @@
+[package]
+name = "asterforge-step-core"
+version = "0.1.0"
+edition = "2021"
+license = "LGPL-2.1-or-later"
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+memmap2.workspace = true
+serde.workspace = true

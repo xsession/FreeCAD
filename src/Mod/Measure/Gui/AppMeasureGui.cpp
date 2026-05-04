@@ -22,6 +22,7 @@
  **************************************************************************/
 
 #include <QApplication>
+#include <QByteArray>
 
 #include <Base/Console.h>
 #include <Base/Interpreter.h>
@@ -86,6 +87,11 @@ PyMOD_INIT_FUNC(MeasureGui)
 
     PyObject* mod = MeasureGui::initModule();
     Base::Console().log("Loading GUI of Measure module… done\n");
+
+    if (!qEnvironmentVariableIsEmpty("PARITY_BASELINE_ID")) {
+        Base::Console().log("Skipping MeasureGui startup registration for parity capture\n");
+        PyMOD_Return(mod);
+    }
 
     // instantiating the commands
     CreateMeasureCommands();

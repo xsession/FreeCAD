@@ -46,11 +46,14 @@ extern "C" {
 
 #include <Build/Version.h>  // For FCCopyrightYear
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <map>
 #include <stdexcept>
 
 #include <QApplication>
+#include <QByteArray>
 #include <QLocale>
 #include <QMessageBox>
 
@@ -113,6 +116,35 @@ static bool inGuiMode()
     }
     return App::Application::Config()["RunMode"] == "Gui"
         || App::Application::Config()["RunMode"] == "Internal";
+}
+
+enum class GuiShellStartupMode {
+    QtMainWindow,
+    RuntimeOnly,
+};
+
+static GuiShellStartupMode guiShellStartupMode()
+{
+    const QByteArray shellMode = qgetenv("FREECAD_SHELL_MODE");
+    if (!shellMode.isEmpty()) {
+        std::string normalized(shellMode.constData());
+        normalized.erase(normalized.begin(), std::find_if(normalized.begin(), normalized.end(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }));
+        normalized.erase(std::find_if(normalized.rbegin(), normalized.rend(), [](unsigned char ch) {
+            return !std::isspace(ch);
+        }).base(), normalized.end());
+        std::transform(normalized.begin(), normalized.end(), normalized.begin(), [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        });
+
+        if (normalized == "runtime-only" || normalized == "runtime_only"
+            || normalized == "headless-gui-runtime") {
+            return GuiShellStartupMode::RuntimeOnly;
+        }
+    }
+
+    return GuiShellStartupMode::QtMainWindow;
 }
 
 static void displayInfo(const std::string& msg, bool preformatted = true)
@@ -352,7 +384,14 @@ int main(int argc, char** argv)
 
     try {
         if (inGuiMode()) {
-            Gui::Application::runApplication();
+            const GuiShellStartupMode shellStartupMode = guiShellStartupMode();
+            if (shellStartupMode == GuiShellStartupMode::RuntimeOnly) {
+                Base::Console().log("Init: FREECAD_SHELL_MODE requests GUI runtime without Qt main window\n");
+                Gui::Application::runRuntimeOnlyApplication();
+            }
+            else {
+                Gui::Application::runApplication();
+            }
         }
         else {
             App::Application::runApplication();

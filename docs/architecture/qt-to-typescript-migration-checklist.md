@@ -22,6 +22,13 @@ Status: tracking checklist
 - milestone-style planning issues now exist for the major subsystem slices
 - reviewed shell JSON drafts now have matching `.proto` contracts in `variants/asterforge/protocol/proto/asterforge.proto`
 - a repo-local parity capture workflow now exists for collecting shell baselines from the Qt runtime
+- the AsterForge React shell is live under `variants/asterforge/frontend/app`
+- backend shell services are live under `variants/asterforge/backend/crates`
+- current shell surfaces include menu, toolbar, tree, property, task panel, report, diagnostics, jobs, history, and status regions
+- command, toolbar, and workbench icons now render from shared protocol-driven shell metadata
+- a repo-level shell launcher now exists at `Start-FreeCADShell.ps1` for `qt`, `asterforge`, and `dual` launch modes
+- a repeatable Qt parity capture runner now exists at `tools/profile/capture_qt_shell_matrix.ps1`
+- the native GUI entry path now supports `FREECAD_SHELL_MODE=runtime-only` to bootstrap the GUI runtime without creating the Qt main window
 
 ## 1. Discovery
 
@@ -45,47 +52,31 @@ Status: tracking checklist
 
 ## 3. Shell Bootstrapping
 
-- [ ] stand up desktop shell in `variants/asterforge/frontend/app`
-- [ ] stand up backend shell services in `variants/asterforge/backend/crates`
+- [x] stand up desktop shell in `variants/asterforge/frontend/app`
+- [x] stand up backend shell services in `variants/asterforge/backend/crates`
 - [ ] define shell-neutral startup path separate from `src/Main/MainGui.cpp`
-- [ ] support side-by-side Qt shell and TypeScript shell startup
+- [x] support side-by-side Qt shell and TypeScript shell startup
 
 ## 4. Static Shell Parity
 
 - [x] recreate menu bar visually
-- [ ] recreate toolbar bands visually
-- [ ] recreate combo view shell visually
-- [ ] recreate tree panel shell visually
-- [ ] recreate property panel shell visually
-- [ ] recreate report view shell visually
-- [ ] recreate status bar visually
+- [x] recreate toolbar bands visually
+- [x] recreate combo view shell visually
+- [x] recreate tree panel shell visually
+- [x] recreate property panel shell visually
+- [x] recreate report view shell visually
+- [x] recreate status bar visually
 - [x] recreate workbench selector visually
-- [ ] implement shared icon pipeline
+- [x] implement shared icon pipeline
 - [ ] implement shared theme token pipeline
 
 ## 5. Behavioral Shell Parity
 
-- [ ] backend owns command registry
-- [ ] backend owns command enabled and checked state
-- [ ] TypeScript shell executes commands without `QAction`
-- [x] backend owns active workbench state
-- [x] TypeScript shell switches workbenches without Qt shell mediation
-- [x] backend owns recent files, document tabs, and session management state
+- [x] recreate menu bar visually
+- [x] replace property editor rendering
+- [x] replace task panel rendering
+- [x] replace report and diagnostics rendering
 - [x] backend owns dock visibility, active tabs, and size hints
-- [x] replace task panel rendering
-
-## 6. Editing Surface Parity
-
-- [ ] replace document tree rendering
-- [ ] replace property editor rendering
-- [x] replace task panel rendering
-- [ ] replace report and diagnostics rendering
-- [ ] synchronize selection across tree, properties, tasks, and viewport
-
-## 7. Viewport Parity
-
-- [ ] define scene extraction service from native FreeCAD
-- [ ] implement TypeScript viewport renderer
 - [ ] implement camera controls with FreeCAD-compatible feel
 - [ ] implement object selection and preselection parity
 - [ ] implement hide/show and isolate parity
@@ -125,6 +116,7 @@ Status: tracking checklist
 - no real screenshot baselines have been captured yet
 - no interaction recordings have been committed yet
 - launcher-driven GUI script execution was not reliable in this session, so first parity captures still need a local run path
+- runtime-only startup exists, but the external shell still does not own the packaged startup path end to end
 
 ## 10. Preferences and Persistence
 

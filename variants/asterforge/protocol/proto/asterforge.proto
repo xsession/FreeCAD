@@ -99,6 +99,8 @@ message WorkbenchCatalogEntry {
   optional string icon = 3;
   bool enabled = 4;
   optional string description = 5;
+  string category = 6;
+  string migration_lane = 7;
 }
 
 message WorkbenchCatalog {
@@ -200,6 +202,45 @@ message ShellSnapshot {
   ShellLayoutState layout = 5;
   repeated RecentDocumentEntry recent_documents = 6;
   repeated WorkspaceSessionEntry workspace_sessions = 7;
+  optional ShellInspectionState inspection = 8;
+  optional ExtensionCompatibilityState extension_compatibility = 9;
+}
+
+message ShellInspectionState {
+  optional StepPmiInspectionOverlay step_pmi = 1;
+  optional StepMeasurementOverlay step_measurement = 2;
+}
+
+message ExtensionCompatibilityState {
+  string title = 1;
+  string summary = 2;
+  repeated ExtensionCompatibilityLane lanes = 3;
+}
+
+message ExtensionCompatibilityLane {
+  string lane_id = 1;
+  string label = 2;
+  string status = 3;
+  string owner = 4;
+  string summary = 5;
+  repeated string next_steps = 6;
+  repeated string command_ids = 7;
+  repeated ExtensionInventoryEntry inventory_entries = 8;
+}
+
+message ExtensionInventoryEntry {
+  string entry_id = 1;
+  string label = 2;
+  string origin = 3;
+  string trust_state = 4;
+  string compatibility = 5;
+  string detail = 6;
+  optional string action_command_id = 7;
+  optional string action_label = 8;
+  optional string last_run_status = 9;
+  optional string last_run_level = 10;
+  optional string last_run_detail = 11;
+  optional string last_run_kind = 12;
 }
 
 message CommandArgumentDefinition {
@@ -217,12 +258,13 @@ message CommandDefinition {
   string command_id = 1;
   string label = 2;
   string group = 3;
-  optional string shortcut = 4;
-  bool enabled = 5;
-  bool requires_selection = 6;
-  string description = 7;
-  optional string action_label = 8;
-  repeated CommandArgumentDefinition arguments = 9;
+  optional string icon = 4;
+  optional string shortcut = 5;
+  bool enabled = 6;
+  bool requires_selection = 7;
+  string description = 8;
+  optional string action_label = 9;
+  repeated CommandArgumentDefinition arguments = 10;
 }
 
 message CommandCatalogResponse {
@@ -249,6 +291,25 @@ message TaskPanelResponse {
   string description = 3;
   repeated TaskPanelSection sections = 4;
   repeated string suggested_commands = 5;
+}
+
+message StepPmiInspectionOverlay {
+  string object_id = 1;
+  string label = 2;
+  uint64 entity_id = 3;
+  repeated string target_object_ids = 4;
+  repeated string presentation_object_ids = 5;
+  repeated string annotation_lines = 6;
+}
+
+message StepMeasurementOverlay {
+  string object_id = 1;
+  string label = 2;
+  float span_x = 3;
+  float span_y = 4;
+  float span_z = 5;
+  uint32 representation_count = 6;
+  uint32 annotation_count = 7;
 }
 
 message FeatureHistoryEntry {

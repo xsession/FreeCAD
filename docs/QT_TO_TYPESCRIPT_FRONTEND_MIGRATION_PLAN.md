@@ -1,6 +1,28 @@
 # FreeCAD Qt Removal and TypeScript Frontend Migration Plan
 
-Status: active implementation plan
+Status: active implementation plan with AsterForge shell in progress
+
+## Progress Snapshot
+
+Estimated overall progress against the milestone plan: `████░░░░░░ 42%`
+
+| Milestone | Status | Notes |
+| --- | --- | --- |
+| A. Discovery and Baselines | In progress | Inventory and ownership artifacts exist, the Qt screenshot baseline set is captured, and the manual interaction recording lane is scaffolded; final recording review remains open. |
+| B. Static TS Shell Parity | Largely complete | The TypeScript shell, chrome, and shell scaffolding are present and actively used. |
+| C. Command and Layout Parity | In progress | Menus, toolbars, workbench-specific chrome, and in-canvas command access exist; persistence and broader layout parity are still incomplete. |
+| D. Editing Surface Parity | In progress | Tree, property, task, report, diagnostics, history, and jobs surfaces are functional, but full editing parity is not done. |
+| E. Viewport Parity | In progress | STEP focus, fit-all, reset, standard views, selection linkage, and shell-local wheel zoom are working; full navigation-feel parity is still missing. |
+| F. Standards Foundation | In progress | AP242 and early EXPRESS groundwork are implemented, but broader standards transport and downstream workflows remain partial. |
+| G. Core Workbench Parity | Not started | Start, Part, PartDesign, Sketcher, and Assembly are not yet usable end to end in the TS shell, and no downstream workbench family has reached TS-shell parity yet. |
+| H. Cutover Readiness | Not started | The TS shell is not yet the daily-driver default for bundled workflows. |
+| I. Qt Removal | Not started | Production runtime still depends on Qt. |
+
+Interpretation:
+
+- `Largely complete` means the milestone has substantial implemented coverage in the current tree, but may still have cleanup or parity gaps.
+- `In progress` means there is verified implementation in the repo, but the milestone exit criteria are not yet met.
+- `Not started` means the milestone goal is still mostly future work.
 
 ## Related Documents
 
@@ -15,19 +37,71 @@ Status: active implementation plan
 - `docs/architecture/qt-to-typescript-migration-checklist.md`
 - `docs/architecture/qt-to-typescript-milestone-issues.md`
 
-## Current Implementation State
+## Current Repository State
 
-The repository is no longer at planning-only status for shell migration. The AsterForge variant already implements a backend-owned TypeScript shell slice with these verified capabilities:
+The repository is already beyond pure planning for the shell migration. The active implementation anchor is the AsterForge variant under `variants/asterforge`.
 
-- protocol-owned shell snapshot hydration through Rust and TypeScript generated types
-- backend-owned active workbench state and shell-driven workbench switching
-- backend-owned recent documents, workspace sessions, and shell session management actions
-- backend-owned combo view and bottom dock tabs, visibility, and size hints
-- persisted shell workspace state restored on gateway startup
-- session restore that reapplies workbench, selection mode, selection, dock tabs, dock visibility, and dock size hints
-- React-rendered task panel with differentiated PartDesign, Sketcher, and Part workspace behavior
+Implemented slices in the current tree:
 
-The main remaining gap is not shell-state ownership but deeper workflow parity: command extraction, editing surfaces, viewport behavior, plugin compatibility, and dual-shell validation still remain unfinished.
+- React plus TypeScript shell scaffold exists in `variants/asterforge/frontend/app`
+- Rust backend shell services exist in `variants/asterforge/backend/crates`
+- protocol schemas and generated bindings exist in `variants/asterforge/protocol`
+- the current shell renders menu bar, toolbar bands, combo view, tree, property, task panel, report, diagnostics, history, jobs, and status surfaces from backend payloads
+- command, toolbar, and workbench icon metadata now flow through the shell via a shared TypeScript icon renderer instead of frontend-only placeholders
+- a repo-level launcher now exists at `Start-FreeCADShell.ps1` so Qt, AsterForge, or dual-shell startup can be invoked from one shell-neutral entry point
+- a repeatable Qt parity capture runner now exists at `tools/profile/capture_qt_shell_matrix.ps1` with a repo-owned starter manifest under `docs/parity/fixtures`
+- the Qt parity lane now includes committed screenshot baselines, acceptance thresholds, a dated screenshot review log, and a scaffolded recording-review lane under `docs/parity`
+- the native GUI bootstrap now has a runtime-only branch so `FREECAD_SHELL_MODE=runtime-only` can initialize the GUI runtime without constructing the Qt `MainWindow`
+- an initial STEP foundation now exists in `variants/asterforge/backend/crates/step-core` with memory-mapped file access, parallel entity indexing, lazy entity loading, and early-bound Rust structs for representative EXPRESS entities
+- `asterforge-api-gateway` now exposes parser-backed STEP document and scene endpoints and binds them to the active document path instead of a global fixture-only response
+- STEP documents now project a backend-owned synthetic model tree, property groups, selection state, diagnostics summary, task panel summary, and viewport drawables so the shell can inspect imported topology through the same panel surfaces used by FCStd-backed documents
+- the React shell now conditionally loads STEP scene payloads for `.stp`, `.step`, and `.p21` documents and renders a selectable STEP viewport that uses the same object identifiers as the backend selection and property model
+- the React shell now includes in-canvas viewport heads-up controls, backend-owned STEP focus, fit-all framing, reset-to-home, and standard view-direction commands including mirrored left, back, and bottom inspection views, a live orientation readout, viewport-level selection mode controls, shell-local wheel zoom for the STEP renderer, and hover-candidate action cards that resolve shared shell command metadata, while task, hover, selection, command-palette, structured-report, and Shell Notice surfaces now share the same metadata-resolved command presentation path and parameterized command editor implementation, and task, hover, and selection suggestion surfaces also share suggested-command state orchestration, so model, task, report, focus, low-travel selection changes, target-aware palette execution against selected or hovered objects, actionable structured inspection refresh/focus workflows, backend activity select/focus plus topic-aware reinspection and remeasurement actions, and remaining selection-scoped plus global command-status notices are available inside the graphics area through the same actionable notice surface instead of splitting into separate event-only and command-only affordance paths, without duplicating the same live backend activity across notice and report surfaces, surfacing low-signal progress, viewport-sync chatter, worker-lifecycle open progress, shell-local selection, workbench, and dock-layout status chatter, or repeated background job-update bursts in those user-facing report channels, emitting a second command-status notice for the same PMI or measurement activity already represented by matching backend activity in either the Shell Notice stack or the report feed, emitting a second failed-command warning when the same rejection is already represented by a backend warning event, falling back to raw command ids in command-status notice titles when shared command metadata is already available, spending two notice slots on the same open-document change burst, spending the capped Shell Notice stack on low-value document-change, background job-update chatter, or informational command-status noise ahead of higher-severity or more actionable inspection notices, spending the report-dock backend activity feed on that same low-value document and job chatter ahead of warnings or actionable inspection updates, spending the report-dock backend activity feed on repeated document-change, job-update, or same-object PMI annotation bursts that could be summarized into one row, or spending the Shell Notice stack on repeated PMI annotation rows for the same inspected object
+- the frontend app now includes a focused Vitest regression harness for shell view helpers and rendered shell surfaces so structured report filtering, structured inspection command-notice suppression, command-status deduplication against matching backend activity notices, report-feed activity, and backend warning events, open-document change-burst summarization, job-update burst summarization, priority ordering of actionable inspection notices over generic document and job status chatter when the event-notice list is capped, severity-first ranking across the combined Shell Notice stack so stronger backend warnings and event notices can displace low-value informational command notices instead of reserving a fixed command slot, report-dock ordering that surfaces warnings and actionable STEP inspection activity ahead of generic document-open and job-update chatter while preserving those rows in the feed, report-feed burst summarization for repeated document-change, job-update, and same-object PMI annotation rows, metadata-resolved command-status notice titles and selection-scoped plus global notice actions, the report-dock activity empty state, actionable backend activity rows, Shell Notice action cards, report-tab backend activity notice deduplication, low-signal backend progress filtering, shell-local event filtering for selection, preselection, workbench, layout, and worker-lifecycle chatter, PMI annotation burst summarization, backend activity topic-to-command mapping for PMI and measurement workflows, expanded STEP viewport preset projection for mirrored left, back, and bottom navigation views, the viewport HUD, structured inspection panels, and command-palette parameter submission are covered by executable tests instead of build-only checks
+- STEP documents now expose a STEP-specific read-only command deck in the backend catalog, including fit-all plus reset and preset viewport commands, parent-child topology navigation, PMI inspection, measurement, and visibility controls that drive task-panel drill-down, structured report-dock inspection, command-palette discovery, and viewport emphasis for inspected STEP targets through a dedicated shell inspection state carried by the shell snapshot
+- STEP inspection now includes backend-owned visibility controls for imported topology, including isolate, hide-selection, and show-all commands that update the tree, task panel, diagnostics, viewport, and STEP shell chrome from one shared state model, and the STEP frontend renderer now filters its static scene bundle through the backend viewport-visible drawable set so hidden geometry no longer remains visible client-side
+- STEP inspection now includes backend-owned measurement for imported topology, with a measure-selection command that computes tessellated extents and surfaces them through the task panel, structured report-dock inspection, command deck, and STEP shell chrome
+- STEP documents now switch the shell snapshot to a STEP-specific workbench identity, menu bar, and toolbar band layout so imported Part 21 sessions no longer inherit PartDesign-oriented chrome, and that chrome now exposes the same backend-owned fit-all, reset, and standard view commands used by the in-canvas viewport HUD
+- the AsterForge shell now has a first backend-owned plugin and macro compatibility surface: backend menus route into a dedicated Extensions dock tab, the shared shell snapshot carries an extension-compatibility inventory for macros, AddonManager flows, and external workbench registration, each compatibility lane now advertises its own backend action ids through that shared payload, refreshed lanes can publish concrete inventory entries with provenance, compatibility, and trust metadata through the normal shell refresh path, and reviewed shell-safe entries can now expose backend-owned run actions that cover launcher-backed fixture execution plus dock-visible categorized run results for success, trust-policy rejection, and launcher or fixture failures instead of frontend-only placeholders
+
+Still incomplete in the current tree:
+
+- screenshot baselines are captured from the Qt runtime, but the manual interaction recording set still awaits reviewer execution and acceptance sign-off
+- desktop-host startup handoff is still script-driven rather than integrated into a packaged product path, even though the native runtime can now start without the Qt main window
+- viewport navigation and workbench workflow parity are still partial, while selection feel now includes in-canvas mode switching, backend-owned reset, standard-view, focus camera state, shell-local wheel zoom, and hover-action affordances but still lacks broader gesture and navigation parity
+- no bundled production workbench family has completed end-to-end TypeScript-shell migration yet, including Start, Part, PartDesign, Sketcher, Assembly, Draft, TechDraw, BIM, CAM, FEM, Spreadsheet, Material, Mesh, Surface, ReverseEngineering, Robot, and addon or macro-driven plugin flows
+- plugin, macro, AddonManager, and external workbench compatibility still depend on Qt or PySide-era assumptions; the new Extensions dock, shell-snapshot inventory, lane-owned action ids, inventory entries, trust metadata, reviewed-entry run actions, launcher-backed reviewed fixture execution, backend execution events with launcher-output excerpts, dock-visible categorized run results plus detail, and initial backend state mutations are only the first TS-shell staging surface, not a shipped compatibility solution
+
+## Complete Feature Stack Coverage
+
+The migration plan must explicitly cover the full bundled feature stack, not only the shell and STEP inspection slices. The following families are in scope for parity and de-Qt work.
+
+| Feature family | Representative modules or surfaces | Migration lane | Current plan status |
+| --- | --- | --- | --- |
+| Shell and workbench platform | `src/Gui`, workbench selector, command routing, docks, layout persistence, status surfaces | P0 foundation | In progress in AsterForge; not complete |
+| Plugin and extension system | `src/Mod/AddonManager`, macros, `InitGui.py`, PySide dialogs, external workbench registration, addon installation and updates | P0 compatibility foundation | Planned, not implemented end to end |
+| Core modeling | Start, Part, PartDesign, Sketcher | P0 primary workflow | Planned, not migrated |
+| Mechanical assembly | Assembly, BOM, joint task panels, assembly view creation | P0 or P1 depending on product priority | Planned, not migrated |
+| Drafting and documentation | Draft, TechDraw, annotation and drawing task flows | P1 | Planned, not migrated |
+| BIM and built environment | BIM, IFC-facing property and project flows | P1 compatibility-heavy | Planned, not migrated |
+| Manufacturing | CAM, operation editors, tool libraries, setup and simulator flows | P1 | Planned, not migrated |
+| Simulation and analysis | FEM, Material, solver setup, post-processing | P1 or P2 | Planned, not migrated |
+| Supporting data tools | Spreadsheet, Import, Material, Start-page onboarding, preferences-heavy support flows | P1 or P2 depending on workflow criticality | Planned, not migrated |
+| Specialist geometry workbenches | Mesh, Surface, ReverseEngineering, Robot, other specialist modules | P2 | Planned, not migrated |
+
+Coverage rule:
+
+- the migration is not considered complete unless the plan tracks a supported path for every bundled workbench family and for addon, macro, and external plugin compatibility
+- if a workbench is not targeted for first-wave migration, the plan must still assign it either a migration lane or an explicit compatibility lane
+
+Continuation order after the current STEP-focused shell work:
+
+1. plugin and extension compatibility foundation
+2. Start, Part, PartDesign, and Sketcher workflow surfaces
+3. Assembly shell and task-panel flows
+4. Draft and TechDraw workflow parity
+5. BIM and CAM compatibility-heavy migrations
+6. FEM, Spreadsheet, Material, and remaining specialist workbenches
 
 ## 1. Goal
 
@@ -53,7 +127,153 @@ The target desktop product should look and behave like FreeCAD, but the UI stack
 - native CAD bridge: C++ FreeCAD and OCCT retained behind explicit APIs
 - rendering: web-native viewport stack hosted by the TypeScript shell, with native services for scene extraction, picking data, and heavy geometry tasks
 
+The target data platform should also absorb industrial CAD exchange workloads that are currently spread across ad hoc import and export paths. In practice that means the Rust application layer needs a dedicated STEP and EXPRESS subsystem that can:
+
+- decode and generate Part 21 STEP payloads for AP203, AP214, and AP242
+- treat AP242 as the primary modern target for semantic PMI, graphical PMI, GD&T, exact B-Rep, and tessellated representations
+- expose lazy, backend-owned assembly, tessellation, and PMI payloads to the TypeScript shell without leaking parser internals
+
 Qt should be fully absent from the runtime UI shell in the final state.
+
+## 2.1 Competitive Standards Baseline
+
+If the TypeScript and Rust migration is meant to remain globally competitive with Inventor and SolidWorks, the plan must treat standards support as a first-class product requirement rather than a later interoperability add-on.
+
+The migrated product should explicitly plan for compliance and interoperability across the following standards domains.
+
+### Technical Documentation and Presentation
+
+- ISO 128, including ISO 128-1:2020, for technical drawing conventions such as line types, line weights, projections, and scales
+- ISO 13567 for CAD layer naming and hierarchical organization in multidisciplinary projects
+- DIN 1356 and the ASME Y14 drawing series where regional drafting conventions still matter for text sizing, tolerance presentation, and arrowhead conventions
+
+Planning implication:
+
+- the future document and drawing surfaces cannot hardcode one drafting dialect
+- drawing, annotation, and export services need standards-aware presentation profiles
+
+### Geometric Dimensioning and Tolerancing
+
+- ASME Y14.5 for North American GD&T workflows
+- ISO 1101 and ISO 2768 for international geometric and general tolerancing workflows
+
+Planning implication:
+
+- AP242 and MBD work cannot stop at geometry transport
+- backend-owned PMI and tolerance semantics need explicit support for both ASME and ISO interpretation modes
+
+### Model-Based Definition
+
+- ASME Y14.41 and ISO 16792 for semantic PMI embedded directly in the 3D model
+- MIL-STD-31000A and GB/T 24734 where defense and regional MBD deliverables are required
+
+Planning implication:
+
+- the viewport and document protocols must reserve space for semantic PMI, graphical PMI, surface finish, datum systems, and inspection-facing annotations
+- the Rust backend should become the authoritative owner of MBD payloads, not the TypeScript renderer
+
+### Data Exchange and Advanced Manufacturing
+
+- ISO 10303 STEP with AP203, AP214, and especially AP242
+- ISO 10303-238 STEP-NC as an emerging path for CNC-oriented downstream manufacturing exchange beyond legacy G-code workflows
+
+Planning implication:
+
+- `step-core` should evolve toward both AP242 model exchange and a future STEP-NC-adjacent manufacturing handoff path
+- import/export services should be designed as standards adapters, not as one-off file translators
+
+### BIM and Built-Environment Interoperability
+
+- IFC 2x3 and IFC 4 for current building-information workflows
+- IFC 4x3 for infrastructure and modern asset-placement interoperability
+
+Planning implication:
+
+- the backend data model should leave room for IFC-facing property and placement export
+- mechanical equipment placement and facility-integration workflows should not be treated as out-of-scope edge cases
+
+### Regulated Traceability and Process Compliance
+
+- ISO 13485 for medical device design controls
+- AS9100 Rev D for aerospace traceability and controlled engineering change
+- FDA 21 CFR Part 11 for secure electronic records and signatures where regulated auditability matters
+
+Planning implication:
+
+- document history, command execution, approval state, and audit metadata need to be designed into the backend event model early
+- future PDM, Vault, or repository integrations should preserve accountable design history rather than treating traceability as an external concern
+
+### AI Governance
+
+- ISO 42001 as the baseline governance model for future generative design and AI-assisted engineering features
+
+Planning implication:
+
+- any future AI assistant, design recommendation, or automated repair workflow must be backed by auditable prompts, model versioning, traceability, and opt-in governance boundaries
+
+## 2.2 Standards-Driven Product Direction
+
+The migration plan should assume that competitive parity is not just visual parity with current FreeCAD. It is also standards parity with incumbent commercial systems in the workflows that matter most to industrial teams.
+
+That means the Rust and TypeScript platform should converge toward:
+
+- standards-aware drawing and annotation presentation
+- dual-path GD&T support for ISO and ASME conventions
+- AP242-first MBD and PMI transport
+- a growth path toward STEP-NC manufacturing exchange
+- IFC-capable equipment and facility interoperability
+- traceable, auditable document and workflow history
+- governance hooks for future AI-assisted features
+
+## 2.3 Incumbent CAD UX Benchmark Baseline
+
+The migration plan should also track competitor UX baselines from incumbent mechanical CAD systems, because industrial users judge parity not only against current FreeCAD but against Inventor and SolidWorks interaction expectations.
+
+### Autodesk Inventor Benchmark
+
+Based on the Autodesk Human Interface Guidelines and public Inventor help surfaces, Inventor should be treated as the reference point for:
+
+- high-density professional desktop layout, where ribbon chrome, properties, and model state are visible simultaneously without excessive whitespace
+- strict tokenized spacing and typography rules, including compact panel spacing, small-label discipline, and deterministic visual rhythm rather than consumer-style responsive looseness
+- contextual ribbon behavior, where command availability and grouping follow the active task rather than exposing one static command field for every mode
+- in-canvas navigation patterns centered around ViewCube and marking-menu style interaction to reduce pointer travel and keep attention inside the modeling canvas
+- semantic color use for attention and state, where selection, expression state, warnings, and surface targeting are visually distinguishable without over-styling the shell
+
+Planning implication:
+
+- the TypeScript shell should support a high-density token set as a first-class mode, not as a late compact-theme afterthought
+- toolbar bands, task panels, and properties should be measurable against compact spacing rules and not drift toward padded web-dashboard layouts
+- viewport-adjacent controls should preserve in-canvas workflows such as radial or marking-menu style command invocation and persistent orientation affordances
+
+### SolidWorks Benchmark
+
+Based on SOLIDWORKS public help, the benchmark surface includes:
+
+- a stable left-side manager-pane pattern where the FeatureManager design tree, PropertyManager, and related manager tabs are dynamically linked to the graphics area
+- a CommandManager-centered command surface rather than fragmented floating tool palettes
+- a Heads-Up View toolbar directly inside the graphics area for common view manipulation tasks
+- graphics-area interaction accelerators such as mouse gestures, the S-key shortcut bar, and selection breadcrumbs that keep command access close to the active modeling context
+- a tree-to-graphics linkage where selecting in either pane should reveal corresponding state in the other pane, including parent-child and history relationships
+
+Planning implication:
+
+- the AsterForge shell should preserve a manager-pane architecture for tree, property, and contextual task editing rather than scattering those surfaces across unrelated docks
+- in-canvas command affordances should be treated as core workflow requirements, not optional polish
+- tree, property, and graphics selection must remain tightly synchronized by contract for both native FreeCAD documents and imported STEP documents
+
+### Accessibility, Internationalization, and Procurement Baseline
+
+Public vendor accessibility materials also establish a procurement baseline that the migration plan should explicitly track.
+
+- Autodesk and Dassault both publish accessibility commitments and conformance materials oriented toward WCAG and VPAT-style review by enterprise and government buyers
+- Dassault publicly states partial accessibility conformance for its web estate and provides a VPAT-format conformance report, which is a useful reminder that accessibility must be measured continuously rather than assumed from design-system intent alone
+- internationalized CAD shells must externalize user-facing strings and reserve layout space for translated text expansion so dense engineering UI does not break in German, Japanese, or other high-expansion locales
+
+Planning implication:
+
+- all user-facing shell strings should live in resource catalogs rather than inline React literals
+- parity testing should include keyboard-only traversal, focus order, contrast review, and screen-reader-auditable landmarks for shell chrome and major panels
+- layout acceptance should include text expansion and locale stress cases so compact toolbars, tabs, and property panes remain usable after translation
 
 ## 3. Non-Negotiable Constraints
 
@@ -79,6 +299,9 @@ The TypeScript shell must preserve:
 - typography scale, spacing rhythm, icon sizes, and density
 - light and dark theme appearance
 - command discoverability, shortcut behavior, and workbench switching patterns
+- high-density desktop information packing comparable to incumbent CAD manager-pane and ribbon layouts
+- in-canvas accelerators such as orientation widgets, heads-up controls, radial or gesture-friendly command access, and low-travel selection workflows
+- robust keyboard, accessibility-tree, and localization behavior for shell chrome and contextual panels
 
 Visual parity should be validated through:
 
@@ -86,6 +309,7 @@ Visual parity should be validated through:
 - layout metric baselines such as panel widths, toolbar heights, padding, and font sizes
 - interaction recordings for core workflows
 - user acceptance review against the current Qt shell
+- benchmark review against representative Inventor and SolidWorks shell patterns for density, command proximity, and manager-pane behavior
 
 ## 5. Recommended Repository Shape
 
@@ -101,16 +325,119 @@ backend/
   api-gateway/
   command-service/
   document-service/
+  step-service/
   session-service/
   ui-layout-service/
 native/
   freecad-bridge/
 protocol/
   ui.proto or schema definitions
+  step.schema definitions
   generated types
 src/
   legacy native FreeCAD core and remaining bridge code
 ```
+
+For the current repository shape under `variants/asterforge`, the next backend expansion should converge toward:
+
+```text
+variants/asterforge/
+  backend/
+    crates/
+      api-gateway/
+      command-core/
+      document-core/
+      protocol-types/
+      step-core/
+  frontend/
+    app/
+      src/
+        stepTypes.ts
+        stepClient.ts
+  native/
+    freecad-bridge/
+```
+
+## 5.1 STEP and EXPRESS Foundation Workstream
+
+The shell migration should explicitly include a production-grade CAD exchange workstream instead of treating STEP as a later import detail. AsterForge needs a backend-owned subsystem that can parse, validate, index, and later emit STEP data fast enough for large industrial assemblies.
+
+### Scope
+
+- support AP203 and AP214 for legacy compatibility
+- prioritize AP242 for model-based definition, PMI, tessellated payloads, and exact geometry interchange
+- generate early-bound Rust types from EXPRESS schemas rather than performing runtime schema discovery in hot paths
+- use memory-mapped I/O and lazy entity materialization for gigabyte-to-terabyte scale files
+- expose assembly hierarchy, tessellated scene data, and PMI payloads to the TypeScript frontend through typed backend APIs
+
+### Architecture
+
+```text
+TypeScript React shell
+    |
+    | HTTP/JSON now, streaming scene transport later
+    v
+asterforge-api-gateway
+    |
+    +--> document-core
+    |
+    +--> step-core
+            |
+            +--> mmap Part 21 reader
+            +--> map-reduce entity indexer
+            +--> lazy entity loader
+            +--> EXPRESS early-bound Rust structs
+            +--> AP203/AP214/AP242 protocol classification
+    |
+    +--> freecad-bridge / OCCT import-export adapters
+```
+
+### Binding Strategy
+
+Use early binding for EXPRESS schemas. The repository should eventually generate Rust structs and enums directly from selected EXPRESS definitions at build time, with generated TypeScript mirrors for frontend-facing DTOs. This is the correct tradeoff for the AsterForge target because:
+
+- compile-time binding gives strict type safety for AP242 entity relationships
+- Rust object layouts remain smaller and faster than runtime dictionary-based late binding
+- frontend contracts can be versioned from backend-owned DTOs instead of reverse-engineered from parser output
+
+### Large-File Methodology
+
+For very large STEP documents, the backend should not eagerly hydrate every geometric entity into memory.
+
+Required strategy:
+
+- memory-map the source file so ASCII entity records can be traversed without copying the whole file into heap buffers
+- parse the HEADER and assembly-facing entity index first
+- defer exact geometry, tessellation, and PMI body expansion until the frontend requests them
+- batch geometry decoding for visible or selected subtrees rather than decoding the whole DATA section at open time
+
+### Parallel Parsing Strategy
+
+The parser should follow a map-reduce shape:
+
+1. build stable entity record boundaries from the memory-mapped DATA section
+2. map chunks of those records across worker threads
+3. produce thread-local entity spans, references, and lightweight descriptors
+4. reduce the local results into a global STEP reference graph
+5. resolve cross-chunk references after merge rather than forcing a global lock during parsing
+
+Rust ownership and borrowing rules are the reason to build this subsystem in Rust rather than TypeScript or Python. The parser, lazy loaders, and later geometry healing pipeline can remain concurrent without data races.
+
+### Frontend Contract
+
+The TypeScript frontend should not receive raw STEP text. It should receive typed payloads such as:
+
+- document header and protocol summary
+- assembly tree nodes
+- tessellated scene packets for rendering
+- semantic PMI and graphical PMI annotations
+- exact-geometry lookup handles for advanced inspection workflows
+
+Recommended transport sequence:
+
+- phase 1: HTTP and JSON for document index, assembly tree, and PMI metadata
+- phase 2: chunked or streaming transport for tessellated meshes and large scene updates
+- phase 3: binary scene transport when viewport scale requires it
 
 ## 6. Migration Strategy Summary
 
@@ -256,6 +583,12 @@ Exit criteria:
 
 Replicate the current FreeCAD chrome exactly before wiring complex behavior.
 
+Sequencing rule for the shell workstream:
+
+- first clone the current FreeCAD frontend layout as closely as possible, including frame proportions, menu height, toolbar density, dock geometry, spacing rhythm, and status-bar packing
+- require screenshot-diff and proportion review against the Qt shell before introducing any standards-driven upgrades, benchmark embellishments, or shell-specific visual cleanup
+- only after the FreeCAD clone is visually credible should the standards backlog from this plan be layered in for accessibility, localization, standards-aware drafting, MBD, interoperability, and incumbent-CAD benchmark improvements
+
 Rebuild in TypeScript:
 
 - menu bar
@@ -275,6 +608,8 @@ Use the captured baseline to tune:
 - border and divider styling
 - panel spacing
 - hover and pressed states
+- window-frame and dock proportions
+- manager-pane density before any standards-driven polish pass
 
 Deliverables:
 
@@ -380,16 +715,22 @@ Suggested order:
 2. Part
 3. PartDesign
 4. Sketcher
-5. Draft
-6. TechDraw
-7. FEM and specialist workbenches
-8. addon and plugin compatibility surfaces
+5. Assembly
+6. Draft
+7. TechDraw
+8. BIM
+9. CAM
+10. FEM, Material, Spreadsheet, and support workbenches
+11. Mesh, Surface, ReverseEngineering, Robot, and other specialist workbenches
+12. addon, macro, and plugin compatibility surfaces
 
 For each workbench:
 
 - convert commands to backend descriptors
 - convert task panels to protocol-driven forms
 - replace PySide widgets with TS components
+- inventory `InitGui.py`, PySide, macro, and plugin entry points that touch the workbench
+- map workbench-specific tree, property, task, report, and viewport contracts before UI replacement
 - preserve labels, icons, ordering, and flow structure unless a deliberate redesign is approved
 
 Deliverables:
@@ -412,6 +753,14 @@ Introduce three compatibility modes:
 2. TS frontend contribution API for UI extensions
 3. temporary legacy adapter for PySide-heavy plugins during transition
 
+The plugin lane must explicitly include:
+
+- AddonManager installation, update, enable, disable, and trust flows
+- macro discovery, execution, and packaging flows
+- external workbench registration and workbench-selector integration
+- PySide-heavy bundled or third-party dialogs that cannot move immediately
+- deprecation guidance for Qt-bound extension APIs
+
 Rules:
 
 - no new plugin should depend on Qt after the migration midpoint
@@ -423,6 +772,8 @@ Deliverables:
 - plugin migration guide
 - deprecation schedule for PySide GUI plugins
 - compatibility adapter design
+- addon and macro capability matrix
+- extension contribution manifest for backend and TS shell surfaces
 
 Exit criteria:
 
@@ -525,6 +876,13 @@ Extract and codify:
 - colors
 - shadows
 - hover and selected states
+- compact and high-density variants for ribbon chrome, manager panes, and property rows
+- accessibility tokens for focus indication, minimum contrast, and keyboard-visible state
+
+Order of operations:
+
+- phase 1 tokens mirror current FreeCAD chrome as closely as possible for pixel-precise shell cloning
+- phase 2 tokens add standards-driven refinement from this plan after the clone has passed screenshot review
 
 Store these as explicit TS design tokens, not informal CSS values.
 
@@ -537,6 +895,8 @@ Add screenshot baselines for:
 - dialogs and task flows
 - light and dark themes
 - high-DPI layouts
+- compact versus high-density shell density profiles
+- translated or text-expanded shell states for major toolbars, panels, and tabs
 
 ### 8.3 Interaction Parity Testing
 
@@ -548,6 +908,10 @@ Test:
 - property editing sequences
 - sketch workflow and task completion flows
 - docking and panel resizing behavior
+- manager-pane linkage between tree, properties, and graphics area
+- in-canvas command access patterns such as heads-up controls, context surfaces, and orientation widgets
+- keyboard-only traversal and focus visibility for shell chrome, docks, menus, and task panels
+- locale expansion behavior for long labels and translated command strings
 
 ### 8.4 User Review Gates
 
@@ -557,6 +921,8 @@ Require sign-off from users familiar with current FreeCAD before declaring parit
 - modeling workflow surfaces
 - viewport feel
 - preferences and customization
+- density, command proximity, and manager-pane ergonomics against incumbent CAD expectations
+- accessibility and localization readiness for enterprise deployment
 
 ## 9. Technical Risks and Mitigations
 
@@ -595,6 +961,30 @@ Mitigation:
 - publish extension APIs early
 - document migration paths and deprecation windows
 
+### Risk 6. Standards coverage falls behind competitive CAD expectations
+
+Mitigation:
+
+- track ISO, ASME, DIN, IFC, MBD, and regulated-traceability requirements as named work items rather than generic future enhancements
+- make AP242, GD&T, PMI, and auditability visible in milestones and acceptance reviews
+- avoid shipping a TypeScript shell that looks modern but regresses standards interoperability
+
+### Risk 7. Shell parity regresses against incumbent CAD ergonomics
+
+Mitigation:
+
+- treat Inventor high-density ribbon workflows and SolidWorks manager-pane workflows as explicit benchmark inputs during shell review
+- measure in-canvas command distance, tree-to-graphics synchronization, and panel density instead of relying on subjective visual approval
+- avoid web-style spacing inflation that reduces visible engineering context on typical workstation monitors
+
+### Risk 8. Accessibility and localization remain procurement blockers
+
+Mitigation:
+
+- externalize shell strings early and run text-expansion review before cutover milestones
+- add keyboard and focus-order checks to parity gates, not only screen captures
+- maintain a VPAT and WCAG-oriented conformance workstream for the TypeScript shell rather than deferring accessibility until packaging time
+
 ## 10. Milestone Sequence
 
 ### Milestone A. Discovery and Baselines
@@ -607,12 +997,14 @@ Mitigation:
 
 - TS shell launches
 - shell chrome visually matches FreeCAD
+- density tokens and manager-pane geometry benchmarked against incumbent CAD baselines
 - no core workflow behavior yet required
 
 ### Milestone C. Command and Layout Parity
 
 - menus, toolbars, and workbench switching functional
 - preferences and layout persistence functional
+- in-canvas command access and orientation affordances defined for benchmark workflows
 
 ### Milestone D. Editing Surface Parity
 
@@ -621,17 +1013,27 @@ Mitigation:
 ### Milestone E. Viewport Parity
 
 - open, inspect, select, and navigate models in TS shell
+- tree, property, and graphics linkage proven for both native documents and imported STEP sessions
 
-### Milestone F. Core Workbench Parity
+### Milestone F. Standards Foundation
 
-- Start, Part, PartDesign, and Sketcher usable in TS shell
+- AP242 foundation and early-bound EXPRESS infrastructure operational in Rust
+- PMI and GD&T transport contracts defined for frontend consumption
+- standards backlog established for ISO 128, ISO 1101, ASME Y14.5, ISO 16792, IFC, and traceability workflows
+- accessibility, VPAT, and localization backlog established for shell procurement readiness
 
-### Milestone G. Cutover Readiness
+### Milestone G. Core Workbench Parity
+
+- Start, Part, PartDesign, Sketcher, and Assembly usable in TS shell
+- plugin and workbench selector metadata can route users into the migrated workflow family without falling back to Qt-only shell behavior
+
+### Milestone H. Cutover Readiness
 
 - TS shell is stable for daily use
 - Qt shell is no longer required for bundled primary workflows
+- Draft, TechDraw, BIM, CAM, FEM, addon, macro, and specialist workbench families have either a migrated TS implementation or an explicit supported compatibility lane
 
-### Milestone H. Qt Removal
+### Milestone I. Qt Removal
 
 - production runtime no longer depends on Qt
 
@@ -673,7 +1075,14 @@ Mitigation:
 - no mandatory Qt widget dependency for migrated shell surfaces
 - startup and open-document flows complete in the TS shell
 - no regression in primary workflow completion for Part, PartDesign, and Sketcher pilot users
+- no regression in primary workflow completion for Assembly pilot users once Assembly enters the migrated lane
 - all bundled primary workflows pass parity review before Qt runtime removal
+- every bundled workbench family is accounted for by either a migration checklist or a supported compatibility checklist before production cutover
+- AP242 document indexing, lazy entity loading, and PMI transport validated against representative exchange samples
+- standards backlog exists for ISO and ASME drawing plus GD&T behaviors, IFC interoperability, and regulated auditability before production cutover
+- benchmark shell reviews confirm acceptable density, manager-pane behavior, and in-canvas command proximity against representative Inventor and SolidWorks workflows
+- keyboard traversal, focus visibility, and contrast checks pass for shell chrome and primary panels before production cutover
+- localization review demonstrates that translated or text-expanded command labels do not break major menu, toolbar, tab, and property layouts
 
 ## 13. Final Recommendation
 

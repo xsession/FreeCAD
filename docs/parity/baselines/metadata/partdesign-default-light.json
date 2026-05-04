@@ -1,0 +1,31 @@
+{
+  "$schema": "./metadata-schema.json",
+  "baseline_id": "partdesign-default-light",
+  "theme": "light",
+  "workbench": "PartDesignWorkbench",
+  "fixture_document": "partdesign-pad-example",
+  "visible_toolbars": [
+    "Edit",
+    "File",
+    "Help",
+    "Part Design Dress-Up Features",
+    "Part Design Helper Features",
+    "Part Design Modeling Features",
+    "Part Design Transformation Features",
+    "Structure",
+    "View",
+    "Workbench"
+  ],
+  "visible_panels": [
+    "Model",
+    "Tasks"
+  ],
+  "active_task": null,
+  "artifacts": {
+    "full_window": "docs/parity/baselines/screenshots/partdesign-default-light.png",
+    "viewport_crop": "docs/parity/baselines/screenshots/partdesign-default-light-viewport.png",
+    "tree_property_crop": "docs/parity/baselines/screenshots/partdesign-default-light-tree-property.png",
+    "recording": null
+  },
+  "notes": "Captured from Qt shell baseline helper."
+}

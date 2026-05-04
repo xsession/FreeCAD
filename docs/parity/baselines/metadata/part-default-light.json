@@ -1,0 +1,30 @@
+{
+  "$schema": "./metadata-schema.json",
+  "baseline_id": "part-default-light",
+  "theme": "light",
+  "workbench": "PartWorkbench",
+  "fixture_document": "primitive-document",
+  "visible_toolbars": [
+    "Boolean Tools",
+    "Edit",
+    "File",
+    "Help",
+    "Part Tools",
+    "Solids",
+    "Structure",
+    "View",
+    "Workbench"
+  ],
+  "visible_panels": [
+    "Model",
+    "Tasks"
+  ],
+  "active_task": null,
+  "artifacts": {
+    "full_window": "docs/parity/baselines/screenshots/part-default-light.png",
+    "viewport_crop": "docs/parity/baselines/screenshots/part-default-light-viewport.png",
+    "tree_property_crop": "docs/parity/baselines/screenshots/part-default-light-tree-property.png",
+    "recording": null
+  },
+  "notes": "Captured from Qt shell baseline helper."
+}

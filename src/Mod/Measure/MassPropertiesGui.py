@@ -19,4 +19,15 @@
 #                                                                              #
 ################################################################################
 
-import MeasureGui
+import FreeCAD
+from PySide import QtCore
+
+
+def _load_measure_gui():
+	try:
+		import MeasureGui  # noqa: F401
+	except Exception as exc:
+		FreeCAD.Console.PrintWarning(f"MassPropertiesGui deferred MeasureGui import failed: {exc}\n")
+
+
+QtCore.QTimer.singleShot(0, _load_measure_gui)

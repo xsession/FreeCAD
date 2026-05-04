@@ -285,6 +285,7 @@ public:
     static void initTypes();
     static void initOpenInventor();
     static void runInitGuiScript();
+    static void runRuntimeOnlyApplication();
     static void runApplication();
     void tryClose(QCloseEvent* e);
     //@}
@@ -357,7 +358,7 @@ private:
     struct ApplicationP* d;
     /// workbench python dictionary
     PyObject* _pcWorkbenchDictionary;
-    NavlibInterface* pNavlibInterface;
+    NavlibInterface* pNavlibInterface {nullptr};
     static void init3DMouse(MainWindow* mainWindow, QApplication* qtApp);
 
     friend class ApplicationPy;

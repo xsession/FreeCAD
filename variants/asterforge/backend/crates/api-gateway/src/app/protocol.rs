@@ -32,11 +32,12 @@ use asterforge_protocol_types::asterforge::protocol::v1::{
 
 use crate::domain::{
     sample_bridge_status, BackendEvent, BootReport, CommandCatalogResponse, DiagnosticsResponse,
+    ExtensionCompatibilityLane, ExtensionCompatibilityState, ExtensionInventoryEntry,
     FeatureHistoryResponse, JobStageEntry, JobStatusEntry, JobStatusResponse, Menu,
     MenuBarState, MenuItem, ObjectNode, PreselectionStateResponse, PropertyGroup,
     PropertyResponse, RecentDocumentEntry, SelectionModeOption, SelectionStateResponse,
-    ShellLayoutState, ShellPanelState, ShellSnapshot, TaskPanelResponse, Toolbar, ToolbarBand,
-    ToolbarBandState, ToolbarItem, ViewportDiffResponse, ViewportResponse,
+    ShellLayoutState, ShellPanelState, ShellSnapshot, TaskPanelResponse, Toolbar,
+    ToolbarBand, ToolbarBandState, ToolbarItem, ViewportDiffResponse, ViewportResponse,
     WorkbenchCatalog, WorkbenchCatalogEntry, WorkspaceSessionEntry,
 };
 
@@ -236,6 +237,10 @@ pub fn proto_shell_snapshot_from_http(response: ShellSnapshot) -> ProtoShellSnap
         menu_bar: Some(proto_menu_bar_from_http(response.menu_bar)),
         toolbar_bands: Some(proto_toolbar_band_state_from_http(response.toolbar_bands)),
         layout: Some(proto_shell_layout_from_http(response.layout)),
+        inspection: response.inspection.map(proto_shell_inspection_state_from_http),
+        extension_compatibility: Some(proto_extension_compatibility_state_from_http(
+            response.extension_compatibility,
+        )),
         recent_documents: response
             .recent_documents
             .into_iter()
@@ -301,6 +306,11 @@ pub fn http_shell_snapshot_from_proto(response: ProtoShellSnapshot) -> ShellSnap
             .into_iter()
             .map(http_workspace_session_from_proto)
             .collect(),
+        inspection: response.inspection.map(http_shell_inspection_state_from_proto),
+        extension_compatibility: response
+            .extension_compatibility
+            .map(http_extension_compatibility_state_from_proto)
+            .unwrap_or_else(default_extension_compatibility_state),
     }
 }
 
@@ -324,7 +334,143 @@ fn default_shell_snapshot(document: DocumentSummary) -> ShellSnapshot {
         },
         recent_documents: vec![],
         workspace_sessions: vec![],
+        inspection: None,
+        extension_compatibility: default_extension_compatibility_state(),
         document,
+    }
+}
+
+fn proto_extension_compatibility_state_from_http(
+    response: ExtensionCompatibilityState,
+) -> asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityState {
+    asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityState {
+        title: response.title,
+        summary: response.summary,
+        lanes: response
+            .lanes
+            .into_iter()
+            .map(proto_extension_compatibility_lane_from_http)
+            .collect(),
+    }
+}
+
+fn proto_extension_compatibility_lane_from_http(
+    response: ExtensionCompatibilityLane,
+) -> asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityLane {
+    asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityLane {
+        lane_id: response.lane_id,
+        label: response.label,
+        status: response.status,
+        owner: response.owner,
+        summary: response.summary,
+        next_steps: response.next_steps,
+        command_ids: response.command_ids,
+        inventory_entries: response
+            .inventory_entries
+            .into_iter()
+            .map(proto_extension_inventory_entry_from_http)
+            .collect(),
+    }
+}
+
+fn proto_extension_inventory_entry_from_http(
+    response: ExtensionInventoryEntry,
+) -> asterforge_protocol_types::asterforge::protocol::v1::ExtensionInventoryEntry {
+    asterforge_protocol_types::asterforge::protocol::v1::ExtensionInventoryEntry {
+        entry_id: response.entry_id,
+        label: response.label,
+        origin: response.origin,
+        trust_state: response.trust_state,
+        compatibility: response.compatibility,
+        detail: response.detail,
+        action_command_id: response.action_command_id,
+        action_label: response.action_label,
+        last_run_status: response.last_run_status,
+        last_run_level: response.last_run_level,
+        last_run_detail: response.last_run_detail,
+        last_run_kind: response.last_run_kind,
+    }
+}
+
+fn http_extension_compatibility_state_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityState,
+) -> ExtensionCompatibilityState {
+    ExtensionCompatibilityState {
+        title: response.title,
+        summary: response.summary,
+        lanes: response
+            .lanes
+            .into_iter()
+            .map(http_extension_compatibility_lane_from_proto)
+            .collect(),
+    }
+}
+
+fn http_extension_compatibility_lane_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::ExtensionCompatibilityLane,
+) -> ExtensionCompatibilityLane {
+    ExtensionCompatibilityLane {
+        lane_id: response.lane_id,
+        label: response.label,
+        status: response.status,
+        owner: response.owner,
+        summary: response.summary,
+        next_steps: response.next_steps,
+        command_ids: response.command_ids,
+        inventory_entries: response
+            .inventory_entries
+            .into_iter()
+            .map(http_extension_inventory_entry_from_proto)
+            .collect(),
+    }
+}
+
+fn http_extension_inventory_entry_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::ExtensionInventoryEntry,
+) -> ExtensionInventoryEntry {
+    ExtensionInventoryEntry {
+        entry_id: response.entry_id,
+        label: response.label,
+        origin: response.origin,
+        trust_state: response.trust_state,
+        compatibility: response.compatibility,
+        detail: response.detail,
+        action_command_id: response.action_command_id,
+        action_label: response.action_label,
+        last_run_status: response.last_run_status,
+        last_run_level: response.last_run_level,
+        last_run_detail: response.last_run_detail,
+        last_run_kind: response.last_run_kind,
+    }
+}
+
+fn default_extension_compatibility_state() -> ExtensionCompatibilityState {
+    ExtensionCompatibilityState {
+        title: "Extension Compatibility".into(),
+        summary: "Extension compatibility state is not available yet.".into(),
+        lanes: vec![],
+    }
+}
+
+fn proto_shell_inspection_state_from_http(
+    response: crate::domain::ShellInspectionState,
+) -> asterforge_protocol_types::asterforge::protocol::v1::ShellInspectionState {
+    asterforge_protocol_types::asterforge::protocol::v1::ShellInspectionState {
+        step_pmi: response.step_pmi.map(proto_step_pmi_inspection_overlay_from_http),
+        step_measurement: response
+            .step_measurement
+            .map(proto_step_measurement_overlay_from_http),
+    }
+}
+
+fn http_shell_inspection_state_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::ShellInspectionState,
+) -> crate::domain::ShellInspectionState {
+    crate::domain::ShellInspectionState {
+        step_pmi: response.step_pmi.map(http_step_pmi_inspection_overlay_from_proto),
+        step_measurement: response
+            .step_measurement
+            .map(http_step_measurement_overlay_from_proto),
     }
 }
 
@@ -396,6 +542,8 @@ fn proto_workbench_catalog_from_http(response: WorkbenchCatalog) -> ProtoWorkben
                 icon: entry.icon,
                 enabled: entry.enabled,
                 description: entry.description,
+                category: entry.category,
+                migration_lane: entry.migration_lane,
             })
             .collect(),
     }
@@ -413,6 +561,8 @@ fn http_workbench_catalog_from_proto(response: ProtoWorkbenchCatalog) -> Workben
                 icon: entry.icon,
                 enabled: entry.enabled,
                 description: entry.description,
+                category: entry.category,
+                migration_lane: entry.migration_lane,
             })
             .collect(),
     }
@@ -859,6 +1009,7 @@ pub fn proto_command_catalog_from_http(response: CommandCatalogResponse) -> Prot
                 command_id: command.command_id,
                 label: command.label,
                 group: command.group,
+                icon: command.icon,
                 shortcut: command.shortcut,
                 enabled: command.enabled,
                 requires_selection: command.requires_selection,
@@ -903,6 +1054,7 @@ pub fn http_command_catalog_from_proto(response: ProtoCommandCatalogResponse) ->
                 command_id: command.command_id,
                 label: command.label,
                 group: command.group,
+                icon: command.icon,
                 shortcut: command.shortcut,
                 enabled: command.enabled,
                 requires_selection: command.requires_selection,
@@ -944,6 +1096,60 @@ pub fn http_task_panel_from_proto(response: ProtoTaskPanelResponse) -> TaskPanel
         description: response.description,
         sections: response.sections.into_iter().map(http_task_panel_section_from_proto).collect(),
         suggested_commands: response.suggested_commands,
+    }
+}
+
+fn proto_step_pmi_inspection_overlay_from_http(
+    response: crate::domain::StepPmiInspectionOverlay,
+) -> asterforge_protocol_types::asterforge::protocol::v1::StepPmiInspectionOverlay {
+    asterforge_protocol_types::asterforge::protocol::v1::StepPmiInspectionOverlay {
+        object_id: response.object_id,
+        label: response.label,
+        entity_id: response.entity_id,
+        target_object_ids: response.target_object_ids,
+        presentation_object_ids: response.presentation_object_ids,
+        annotation_lines: response.annotation_lines,
+    }
+}
+
+fn http_step_pmi_inspection_overlay_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::StepPmiInspectionOverlay,
+) -> crate::domain::StepPmiInspectionOverlay {
+    crate::domain::StepPmiInspectionOverlay {
+        object_id: response.object_id,
+        label: response.label,
+        entity_id: response.entity_id,
+        target_object_ids: response.target_object_ids,
+        presentation_object_ids: response.presentation_object_ids,
+        annotation_lines: response.annotation_lines,
+    }
+}
+
+fn proto_step_measurement_overlay_from_http(
+    response: crate::domain::StepMeasurementOverlay,
+) -> asterforge_protocol_types::asterforge::protocol::v1::StepMeasurementOverlay {
+    asterforge_protocol_types::asterforge::protocol::v1::StepMeasurementOverlay {
+        object_id: response.object_id,
+        label: response.label,
+        span_x: response.span_x,
+        span_y: response.span_y,
+        span_z: response.span_z,
+        representation_count: response.representation_count as u32,
+        annotation_count: response.annotation_count as u32,
+    }
+}
+
+fn http_step_measurement_overlay_from_proto(
+    response: asterforge_protocol_types::asterforge::protocol::v1::StepMeasurementOverlay,
+) -> crate::domain::StepMeasurementOverlay {
+    crate::domain::StepMeasurementOverlay {
+        object_id: response.object_id,
+        label: response.label,
+        span_x: response.span_x,
+        span_y: response.span_y,
+        span_z: response.span_z,
+        representation_count: response.representation_count as usize,
+        annotation_count: response.annotation_count as usize,
     }
 }
 

@@ -7,6 +7,12 @@ use asterforge_freecad_bridge::{
     ViewportSnapshot,
 };
 use asterforge_command_core::command_spec;
+use asterforge_step_core::{
+    ClosedShell as ParsedClosedShell, ManifoldSolidBrep as ParsedManifoldSolidBrep,
+    StepApplicationProtocol as ParsedStepApplicationProtocol,
+    StepChunkSummary as ParsedStepChunkSummary, StepDocumentIndexDto as ParsedStepDocumentIndexDto,
+    StepEntitySpan as ParsedStepEntitySpan, StepHeaderSection as ParsedStepHeaderSection,
+};
 pub use asterforge_command_core::{CommandArgumentDefinition, CommandDefinition};
 pub use asterforge_document_core::{
     DocumentDependencyEdge, DocumentEvaluationState, DocumentGraph, DocumentObjectRecord,
@@ -29,7 +35,7 @@ pub struct ObjectNode {
     pub children: Vec<ObjectNode>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VisibilityState {
     Visible,
@@ -213,6 +219,83 @@ pub struct ViewportDiffResponse {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepByteRange {
+    pub start: usize,
+    pub end: usize,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepHeaderSection {
+    pub source_path: Option<String>,
+    pub implementation_level: Option<String>,
+    pub file_name: Option<String>,
+    pub file_descriptions: Vec<String>,
+    pub schema_identifiers: Vec<String>,
+    pub application_protocols: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepEntitySpan {
+    pub entity_id: u64,
+    pub keyword: String,
+    pub byte_range: StepByteRange,
+    pub references: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepChunkSummary {
+    pub chunk_id: usize,
+    pub byte_range: StepByteRange,
+    pub entity_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepPmiAnnotation {
+    pub annotation_id: String,
+    pub semantic_type: String,
+    pub text: String,
+    pub target_entity_ids: Vec<u64>,
+    pub presentation_entity_ids: Vec<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepTessellatedFaceSet {
+    pub representation_id: String,
+    pub entity_id: u64,
+    pub positions: Vec<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub normals: Option<Vec<f32>>,
+    pub indices: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepAssemblyNode {
+    pub entity_id: u64,
+    pub label: String,
+    pub children: Vec<StepAssemblyNode>,
+    pub brep_ids: Vec<u64>,
+    pub tessellated_representation_ids: Vec<String>,
+    pub pmi_annotation_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepDocumentIndex {
+    pub header: StepHeaderSection,
+    pub chunks: Vec<StepChunkSummary>,
+    pub entities: Vec<StepEntitySpan>,
+    pub assemblies: Vec<StepAssemblyNode>,
+    pub semantic_pmi: Vec<StepPmiAnnotation>,
+    pub tessellated_representations: Vec<StepTessellatedFaceSet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepSceneBundle {
+    pub assemblies: Vec<StepAssemblyNode>,
+    pub semantic_pmi: Vec<StepPmiAnnotation>,
+    pub tessellated_representations: Vec<StepTessellatedFaceSet>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkbenchState {
     pub workbench_id: String,
     pub display_name: String,
@@ -226,6 +309,8 @@ pub struct WorkbenchCatalogEntry {
     pub icon: Option<String>,
     pub enabled: bool,
     pub description: Option<String>,
+    pub category: String,
+    pub migration_lane: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -340,6 +425,52 @@ pub struct ShellSnapshot {
     pub layout: ShellLayoutState,
     pub recent_documents: Vec<RecentDocumentEntry>,
     pub workspace_sessions: Vec<WorkspaceSessionEntry>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inspection: Option<ShellInspectionState>,
+    pub extension_compatibility: ExtensionCompatibilityState,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellInspectionState {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_pmi: Option<StepPmiInspectionOverlay>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub step_measurement: Option<StepMeasurementOverlay>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionCompatibilityState {
+    pub title: String,
+    pub summary: String,
+    pub lanes: Vec<ExtensionCompatibilityLane>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionCompatibilityLane {
+    pub lane_id: String,
+    pub label: String,
+    pub status: String,
+    pub owner: String,
+    pub summary: String,
+    pub next_steps: Vec<String>,
+    pub command_ids: Vec<String>,
+    pub inventory_entries: Vec<ExtensionInventoryEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtensionInventoryEntry {
+    pub entry_id: String,
+    pub label: String,
+    pub origin: String,
+    pub trust_state: String,
+    pub compatibility: String,
+    pub detail: String,
+    pub action_command_id: Option<String>,
+    pub action_label: Option<String>,
+    pub last_run_status: Option<String>,
+    pub last_run_level: Option<String>,
+    pub last_run_detail: Option<String>,
+    pub last_run_kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -356,6 +487,27 @@ pub struct TaskPanelResponse {
     pub description: String,
     pub sections: Vec<TaskPanelSection>,
     pub suggested_commands: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepPmiInspectionOverlay {
+    pub object_id: String,
+    pub label: String,
+    pub entity_id: u64,
+    pub target_object_ids: Vec<String>,
+    pub presentation_object_ids: Vec<String>,
+    pub annotation_lines: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StepMeasurementOverlay {
+    pub object_id: String,
+    pub label: String,
+    pub span_x: f32,
+    pub span_y: f32,
+    pub span_z: f32,
+    pub representation_count: usize,
+    pub annotation_count: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -407,6 +559,205 @@ pub fn workbench_state_from_bridge(snapshot: &BridgeDocumentSnapshot) -> Workben
     }
 }
 
+pub fn step_document_index_from_parsed(
+    index: &ParsedStepDocumentIndexDto,
+    breps: &[ParsedManifoldSolidBrep],
+    shells: &[ParsedClosedShell],
+) -> StepDocumentIndex {
+    let assemblies = step_assemblies_from_parsed(breps, shells);
+    let semantic_pmi = step_semantic_pmi_from_parsed(index, breps, shells);
+    let tessellated_representations = step_tessellations_from_parsed(breps);
+
+    StepDocumentIndex {
+        header: step_header_from_parsed(&index.header),
+        chunks: index.chunks.iter().map(step_chunk_from_parsed).collect(),
+        entities: index.entities.iter().map(step_entity_span_from_parsed).collect(),
+        assemblies,
+        semantic_pmi,
+        tessellated_representations,
+    }
+}
+
+pub fn step_scene_bundle_from_parsed(
+    index: &ParsedStepDocumentIndexDto,
+    breps: &[ParsedManifoldSolidBrep],
+    shells: &[ParsedClosedShell],
+) -> StepSceneBundle {
+    StepSceneBundle {
+        assemblies: step_assemblies_from_parsed(breps, shells),
+        semantic_pmi: step_semantic_pmi_from_parsed(index, breps, shells),
+        tessellated_representations: step_tessellations_from_parsed(breps),
+    }
+}
+
+fn step_header_from_parsed(header: &ParsedStepHeaderSection) -> StepHeaderSection {
+    StepHeaderSection {
+        source_path: header.source_path.clone(),
+        implementation_level: header.implementation_level.clone(),
+        file_name: header.file_name.clone(),
+        file_descriptions: header.file_descriptions.clone(),
+        schema_identifiers: header.schema_identifiers.clone(),
+        application_protocols: header
+            .application_protocols
+            .iter()
+            .map(step_protocol_label)
+            .collect(),
+    }
+}
+
+fn step_protocol_label(protocol: &ParsedStepApplicationProtocol) -> String {
+    match protocol {
+        ParsedStepApplicationProtocol::Ap203 => "AP203".into(),
+        ParsedStepApplicationProtocol::Ap214 => "AP214".into(),
+        ParsedStepApplicationProtocol::Ap242 => "AP242".into(),
+        ParsedStepApplicationProtocol::Unknown(value) => value.clone(),
+    }
+}
+
+fn step_chunk_from_parsed(chunk: &ParsedStepChunkSummary) -> StepChunkSummary {
+    StepChunkSummary {
+        chunk_id: chunk.chunk_id,
+        byte_range: step_byte_range(chunk.byte_range.start, chunk.byte_range.end),
+        entity_ids: chunk.entity_ids.clone(),
+    }
+}
+
+fn step_entity_span_from_parsed(entity: &ParsedStepEntitySpan) -> StepEntitySpan {
+    StepEntitySpan {
+        entity_id: entity.entity_id,
+        keyword: entity.keyword.clone(),
+        byte_range: step_byte_range(entity.byte_range.start, entity.byte_range.end),
+        references: entity.references.clone(),
+    }
+}
+
+fn step_byte_range(start: usize, end: usize) -> StepByteRange {
+    StepByteRange { start, end }
+}
+
+fn step_assemblies_from_parsed(
+    breps: &[ParsedManifoldSolidBrep],
+    shells: &[ParsedClosedShell],
+) -> Vec<StepAssemblyNode> {
+    breps
+        .iter()
+        .map(|brep| {
+            let shell = shells.iter().find(|candidate| candidate.entity_id == brep.outer_shell_id);
+            let representation_id = format!("brep-{}-mesh", brep.entity_id);
+            let mut pmi_annotation_ids = vec![format!("brep-{}-summary", brep.entity_id)];
+            let children = shell
+                .map(|shell| {
+                    pmi_annotation_ids.push(format!("shell-{}-faces", shell.entity_id));
+                    StepAssemblyNode {
+                        entity_id: shell.entity_id,
+                        label: shell
+                            .name
+                            .clone()
+                            .unwrap_or_else(|| format!("Closed shell #{}", shell.entity_id)),
+                        children: vec![],
+                        brep_ids: vec![brep.entity_id],
+                        tessellated_representation_ids: vec![representation_id.clone()],
+                        pmi_annotation_ids: vec![format!("shell-{}-faces", shell.entity_id)],
+                    }
+                })
+                .into_iter()
+                .collect();
+
+            StepAssemblyNode {
+                entity_id: brep.entity_id,
+                label: brep
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("Solid BREP #{}", brep.entity_id)),
+                children,
+                brep_ids: vec![brep.entity_id],
+                tessellated_representation_ids: vec![representation_id],
+                pmi_annotation_ids,
+            }
+        })
+        .collect()
+}
+
+fn step_semantic_pmi_from_parsed(
+    index: &ParsedStepDocumentIndexDto,
+    breps: &[ParsedManifoldSolidBrep],
+    shells: &[ParsedClosedShell],
+) -> Vec<StepPmiAnnotation> {
+    let protocol_summary = StepPmiAnnotation {
+        annotation_id: "protocol-summary".into(),
+        semantic_type: "protocol_summary".into(),
+        text: format!(
+            "Protocols: {}",
+            index
+                .header
+                .application_protocols
+                .iter()
+                .map(step_protocol_label)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        target_entity_ids: breps.iter().map(|brep| brep.entity_id).collect(),
+        presentation_entity_ids: vec![],
+    };
+
+    let mut annotations = vec![protocol_summary];
+    annotations.extend(breps.iter().map(|brep| StepPmiAnnotation {
+        annotation_id: format!("brep-{}-summary", brep.entity_id),
+        semantic_type: "solid_brep".into(),
+        text: format!(
+            "{} references outer shell #{}",
+            brep.name
+                .clone()
+                .unwrap_or_else(|| format!("BREP #{}", brep.entity_id)),
+            brep.outer_shell_id
+        ),
+        target_entity_ids: vec![brep.entity_id, brep.outer_shell_id],
+        presentation_entity_ids: vec![brep.entity_id],
+    }));
+    annotations.extend(shells.iter().map(|shell| StepPmiAnnotation {
+        annotation_id: format!("shell-{}-faces", shell.entity_id),
+        semantic_type: "closed_shell_face_count".into(),
+        text: format!(
+            "{} contains {} advanced faces",
+            shell
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("Shell #{}", shell.entity_id)),
+            shell.face_ids.len()
+        ),
+        target_entity_ids: std::iter::once(shell.entity_id)
+            .chain(shell.face_ids.iter().copied())
+            .collect(),
+        presentation_entity_ids: shell.face_ids.clone(),
+    }));
+    annotations
+}
+
+fn step_tessellations_from_parsed(
+    breps: &[ParsedManifoldSolidBrep],
+) -> Vec<StepTessellatedFaceSet> {
+    breps
+        .iter()
+        .enumerate()
+        .map(|(index, brep)| {
+            let offset = index as f32 * 1.5;
+            StepTessellatedFaceSet {
+                representation_id: format!("brep-{}-mesh", brep.entity_id),
+                entity_id: brep.entity_id,
+                positions: vec![
+                    0.0 + offset, 0.0, 0.0,
+                    1.0 + offset, 0.0, 0.0,
+                    1.0 + offset, 1.0, 0.0,
+                    0.0 + offset, 1.0, 0.0,
+                    0.5 + offset, 0.5, 1.0,
+                ],
+                normals: None,
+                indices: vec![0, 1, 4, 1, 2, 4, 2, 3, 4, 3, 0, 4, 0, 1, 2, 0, 2, 3],
+            }
+        })
+        .collect()
+}
+
 pub fn normalize_workbench_id(value: &str) -> String {
     let collapsed = value
         .chars()
@@ -425,18 +776,138 @@ pub fn normalize_workbench_id(value: &str) -> String {
 
 pub fn workbench_display_name(value: &str) -> String {
     match normalize_workbench_id(value).as_str() {
+        "step" => "STEP Inspection".into(),
+        "start" => "Start".into(),
         "partdesign" => "PartDesign".into(),
         "part" => "Part".into(),
         "sketcher" => "Sketcher".into(),
+        "assembly" => "Assembly".into(),
+        "draft" => "Draft".into(),
+        "techdraw" => "TechDraw".into(),
+        "bim" => "BIM".into(),
+        "cam" => "CAM".into(),
+        "fem" => "FEM".into(),
+        "spreadsheet" => "Spreadsheet".into(),
+        "material" => "Material".into(),
+        "import" => "Import".into(),
         "mesh" => "Mesh".into(),
+        "surface" => "Surface".into(),
+        "reverseengineering" => "ReverseEngineering".into(),
+        "robot" => "Robot".into(),
         _ if value.is_empty() => "PartDesign".into(),
         _ => value.to_string(),
     }
 }
 
+fn workbench_category(value: &str) -> String {
+    match normalize_workbench_id(value).as_str() {
+        "step" => "Inspection".into(),
+        "start" => "Onboarding".into(),
+        "partdesign" | "part" | "sketcher" => "Core modeling".into(),
+        "assembly" => "Mechanical assembly".into(),
+        "draft" | "techdraw" => "Drafting".into(),
+        "bim" => "Built environment".into(),
+        "cam" => "Manufacturing".into(),
+        "fem" | "material" | "spreadsheet" | "import" => "Support and analysis".into(),
+        "mesh" | "surface" | "reverseengineering" | "robot" => "Specialist geometry".into(),
+        _ => "Current context".into(),
+    }
+}
+
+fn workbench_migration_lane(value: &str) -> String {
+    match normalize_workbench_id(value).as_str() {
+        "step" => "In progress".into(),
+        "partdesign" | "part" | "sketcher" | "assembly" => "Queued primary".into(),
+        "draft" | "techdraw" | "cam" | "fem" | "spreadsheet" | "material" | "import" => {
+            "Queued secondary".into()
+        }
+        "bim" => "Compatibility-heavy".into(),
+        "mesh" | "surface" | "reverseengineering" | "robot" => "Specialist".into(),
+        "start" => "Foundation".into(),
+        _ => "Bridge surfaced".into(),
+    }
+}
+
+fn workbench_description(value: &str) -> String {
+    match normalize_workbench_id(value).as_str() {
+        "step" => "Read-only STEP inspection and interchange review.".into(),
+        "start" => "Startup, onboarding, templates, and entry workflows.".into(),
+        "partdesign" => "Parametric feature modeling for bodies and sketches.".into(),
+        "part" => "Direct solid modeling and Boolean operations.".into(),
+        "sketcher" => "Constraint-driven 2D profile editing.".into(),
+        "assembly" => "Joint, placement, BOM, and assembly context workflows.".into(),
+        "draft" => "2D drafting, construction geometry, and annotation helpers.".into(),
+        "techdraw" => "Drawing-sheet generation, dimensions, and production documentation.".into(),
+        "bim" => "IFC-driven building and facility modeling workflows.".into(),
+        "cam" => "Manufacturing setup, operations, tool libraries, and simulation.".into(),
+        "fem" => "Meshing, solver setup, constraints, and simulation review.".into(),
+        "spreadsheet" => "Parametric tabular data, expressions, and linked model values.".into(),
+        "material" => "Material assignment, lookup, and property editing flows.".into(),
+        "import" => "Import preferences and format-specific conversion helpers.".into(),
+        "mesh" => "Mesh inspection and repair tools.".into(),
+        "surface" => "Surface modeling helpers and repair-oriented geometry tools.".into(),
+        "reverseengineering" => "Scanned-geometry cleanup and reverse-engineering helpers.".into(),
+        "robot" => "Robot trajectory, kinematics, and cell-oriented workflows.".into(),
+        _ => "Workbench surfaced from the current bridge snapshot.".into(),
+    }
+}
+
+fn workbench_icon(value: &str) -> Option<String> {
+    match normalize_workbench_id(value).as_str() {
+        "step" | "mesh" => Some("mesh".into()),
+        "partdesign" => Some("partdesign".into()),
+        "part" | "assembly" => Some("part".into()),
+        "sketcher" | "draft" | "techdraw" => Some("sketcher".into()),
+        _ => None,
+    }
+}
+
+fn make_workbench_catalog_entry(value: &str, enabled: bool) -> WorkbenchCatalogEntry {
+    WorkbenchCatalogEntry {
+        workbench_id: normalize_workbench_id(value),
+        display_name: workbench_display_name(value),
+        icon: workbench_icon(value),
+        enabled,
+        description: Some(workbench_description(value)),
+        category: workbench_category(value),
+        migration_lane: workbench_migration_lane(value),
+    }
+}
+
+fn default_workbench_catalog_entries() -> Vec<WorkbenchCatalogEntry> {
+    [
+        "start",
+        "partdesign",
+        "part",
+        "sketcher",
+        "assembly",
+        "draft",
+        "techdraw",
+        "bim",
+        "cam",
+        "fem",
+        "spreadsheet",
+        "material",
+        "import",
+        "mesh",
+        "surface",
+        "reverseengineering",
+        "robot",
+    ]
+    .into_iter()
+    .map(|workbench_id| {
+        make_workbench_catalog_entry(
+            workbench_id,
+            matches!(workbench_id, "partdesign" | "part" | "sketcher" | "mesh"),
+        )
+    })
+    .collect()
+}
+
 pub fn shell_snapshot_from_bridge(
     snapshot: &BridgeDocumentSnapshot,
     document: &DocumentSummary,
+    extension_compatibility: &ExtensionCompatibilityState,
     selected_object_id: Option<&str>,
     can_undo: bool,
     can_redo: bool,
@@ -480,55 +951,331 @@ pub fn shell_snapshot_from_bridge(
         ),
         recent_documents: recent_documents.to_vec(),
         workspace_sessions: workspace_sessions.to_vec(),
+        inspection: None,
+        extension_compatibility: extension_compatibility.clone(),
     }
+}
+
+pub fn step_shell_snapshot(
+    document: &DocumentSummary,
+    extension_compatibility: &ExtensionCompatibilityState,
+    selected_object_id: Option<&str>,
+    recent_documents: &[RecentDocumentEntry],
+    workspace_sessions: &[WorkspaceSessionEntry],
+    combo_view_tab: &str,
+    bottom_dock_tab: &str,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    combo_view_size_hint: f32,
+    report_dock_size_hint: f32,
+    scene: &StepSceneBundle,
+    can_hide_selection: bool,
+    can_isolate_selection: bool,
+    can_show_all: bool,
+    can_measure_selection: bool,
+    inspection: Option<ShellInspectionState>,
+) -> ShellSnapshot {
+    ShellSnapshot {
+        document: document.clone(),
+        workbench_catalog: step_workbench_catalog(),
+        menu_bar: step_menu_bar_state(
+            selected_object_id,
+            bottom_dock_tab,
+            combo_view_visible,
+            report_dock_visible,
+            scene,
+            can_hide_selection,
+            can_isolate_selection,
+            can_show_all,
+            can_measure_selection,
+        ),
+        toolbar_bands: step_toolbar_band_state(
+            selected_object_id,
+            scene,
+            can_hide_selection,
+            can_isolate_selection,
+            can_show_all,
+            can_measure_selection,
+        ),
+        layout: shell_layout_state_from_bridge(
+            document,
+            combo_view_tab,
+            bottom_dock_tab,
+            combo_view_visible,
+            report_dock_visible,
+            combo_view_size_hint,
+            report_dock_size_hint,
+        ),
+        recent_documents: recent_documents.to_vec(),
+        workspace_sessions: workspace_sessions.to_vec(),
+        inspection,
+        extension_compatibility: extension_compatibility.clone(),
+    }
+}
+
+    pub fn extension_compatibility_state() -> ExtensionCompatibilityState {
+    ExtensionCompatibilityState {
+        title: "Extension Compatibility".into(),
+        summary: "Backend-owned staging lane for macros, AddonManager flows, and external workbench compatibility while Qt-era assumptions are retired incrementally.".into(),
+        lanes: vec![
+            ExtensionCompatibilityLane {
+                lane_id: "macros".into(),
+                label: "Macro execution and management".into(),
+                status: "staging".into(),
+                owner: "Shell and command runtime".into(),
+                summary: "The Macro menu now routes into the TypeScript shell so macro discovery, execution, and review can move behind backend-owned state instead of a disabled placeholder.".into(),
+                next_steps: vec![
+                    "Add backend macro inventory and command metadata.".into(),
+                    "Expose execution and trust boundaries without reviving Qt dialogs.".into(),
+                ],
+                command_ids: vec!["extensions.refresh_inventory".into()],
+                inventory_entries: vec![],
+            },
+            ExtensionCompatibilityLane {
+                lane_id: "addon-manager".into(),
+                label: "AddonManager and package flows".into(),
+                status: "planned".into(),
+                owner: "Extension services".into(),
+                summary: "Addon installation, update, and compatibility review still depend on Qt and PySide-era assumptions, but this shell snapshot now reserves an API-backed landing surface for that work.".into(),
+                next_steps: vec![
+                    "Publish addon inventory, provenance, and compatibility diagnostics.".into(),
+                    "Add install, update, and disable workflows through backend services.".into(),
+                ],
+                command_ids: vec!["extensions.refresh_inventory".into()],
+                inventory_entries: vec![],
+            },
+            ExtensionCompatibilityLane {
+                lane_id: "external-workbenches".into(),
+                label: "External workbench registration".into(),
+                status: "planned".into(),
+                owner: "Workbench platform".into(),
+                summary: "InitGui.py discovery and external workbench registration need an explicit compatibility lane so plugins can surface commands, chrome, and onboarding without assuming Qt widgets.".into(),
+                next_steps: vec![
+                    "Model external workbench manifests and command registration contracts.".into(),
+                    "Define shell-safe fallbacks for Qt-bound task panels and dialogs.".into(),
+                ],
+                command_ids: vec!["extensions.review_external_workbenches".into()],
+                inventory_entries: vec![],
+            },
+        ],
+    }
+}
+
+fn step_workbench_catalog() -> WorkbenchCatalog {
+    let mut workbenches = vec![make_workbench_catalog_entry("step", true)];
+    workbenches.extend(default_workbench_catalog_entries());
+
+    WorkbenchCatalog {
+        active_workbench_id: "step".into(),
+        workbenches,
+    }
+}
+
+fn step_menu_bar_state(
+    selected_object_id: Option<&str>,
+    bottom_dock_tab: &str,
+    combo_view_visible: bool,
+    report_dock_visible: bool,
+    scene: &StepSceneBundle,
+    can_hide_selection: bool,
+    can_isolate_selection: bool,
+    can_show_all: bool,
+    can_measure_selection: bool,
+) -> MenuBarState {
+    let has_parent = selected_object_id
+        .and_then(|object_id| step_parent_entity_id(selected_step_entity_id(object_id)?, &scene.assemblies))
+        .is_some();
+    let has_child = selected_object_id
+        .and_then(|object_id| step_first_child_entity_id(selected_step_entity_id(object_id)?, &scene.assemblies))
+        .is_some();
+    let has_pmi = selected_object_id
+        .and_then(selected_step_entity_id)
+        .map(|entity_id| scene.semantic_pmi.iter().any(|annotation| annotation.target_entity_ids.contains(&entity_id)))
+        .unwrap_or(false);
+
+    MenuBarState {
+        workbench_id: "step".into(),
+        menus: vec![
+            Menu {
+                menu_id: "file".into(),
+                label: "File".into(),
+                visible: true,
+                items: vec![
+                    command_menu_item("Open...", "document.open", true),
+                    command_menu_item("Save", "document.save", true),
+                ],
+            },
+            Menu {
+                menu_id: "edit".into(),
+                label: "Edit".into(),
+                visible: true,
+                items: vec![command_menu_item("Focus Selection", "selection.focus", selected_object_id.is_some())],
+            },
+            Menu {
+                menu_id: "view".into(),
+                label: "View".into(),
+                visible: true,
+                items: vec![
+                    command_menu_item("Live", "step.view_reset", true),
+                    command_menu_item("Fit All", "step.view_fit_all", true),
+                    command_menu_item("Isometric", "step.view_iso", true),
+                    command_menu_item("Front", "step.view_front", true),
+                    command_menu_item("Back", "step.view_back", true),
+                    command_menu_item("Right", "step.view_right", true),
+                    command_menu_item("Left", "step.view_left", true),
+                    command_menu_item("Top", "step.view_top", true),
+                    command_menu_item("Bottom", "step.view_bottom", true),
+                    toggle_menu_item("Combo View", combo_view_visible, Some("shell.toggle_combo_view")),
+                    toggle_menu_item(
+                        "Report View",
+                        report_dock_visible && bottom_dock_tab == "report",
+                        Some("shell.show_report_view"),
+                    ),
+                ],
+            },
+            Menu {
+                menu_id: "step".into(),
+                label: "STEP".into(),
+                visible: true,
+                items: vec![
+                    command_menu_item("Select Parent", "step.select_parent", has_parent),
+                    command_menu_item("Select Child", "step.select_first_child", has_child),
+                    command_menu_item("Inspect PMI", "step.inspect_pmi", has_pmi),
+                    command_menu_item("Measure Selection", "step.measure_selection", can_measure_selection),
+                    command_menu_item("Hide Selection", "step.hide_selection", can_hide_selection),
+                    command_menu_item("Isolate Selection", "step.isolate_selection", can_isolate_selection),
+                    command_menu_item("Show All", "step.show_all", can_show_all),
+                ],
+            },
+            Menu {
+                menu_id: "window".into(),
+                label: "Window".into(),
+                visible: true,
+                items: vec![
+                    toggle_menu_item("Model tree", combo_view_visible, Some("shell.show_model_stack")),
+                    toggle_menu_item("Bottom dock", report_dock_visible, Some("shell.toggle_bottom_dock")),
+                ],
+            },
+        ],
+    }
+}
+
+fn step_toolbar_band_state(
+    selected_object_id: Option<&str>,
+    scene: &StepSceneBundle,
+    can_hide_selection: bool,
+    can_isolate_selection: bool,
+    can_show_all: bool,
+    can_measure_selection: bool,
+) -> ToolbarBandState {
+    let has_parent = selected_object_id
+        .and_then(|object_id| step_parent_entity_id(selected_step_entity_id(object_id)?, &scene.assemblies))
+        .is_some();
+    let has_child = selected_object_id
+        .and_then(|object_id| step_first_child_entity_id(selected_step_entity_id(object_id)?, &scene.assemblies))
+        .is_some();
+    let has_pmi = selected_object_id
+        .and_then(selected_step_entity_id)
+        .map(|entity_id| scene.semantic_pmi.iter().any(|annotation| annotation.target_entity_ids.contains(&entity_id)))
+        .unwrap_or(false);
+
+    ToolbarBandState {
+        workbench_id: "step".into(),
+        bands: vec![
+            ToolbarBand {
+                band_id: "document".into(),
+                label: "Document".into(),
+                toolbars: vec![Toolbar {
+                    toolbar_id: "document-standard".into(),
+                    label: "Standard".into(),
+                    visible: true,
+                    items: vec![
+                        command_toolbar_item("document.save", "Save", Some("save".into()), true),
+                        command_toolbar_item("selection.focus", "Focus", Some("focus".into()), selected_object_id.is_some()),
+                    ],
+                }],
+            },
+            ToolbarBand {
+                band_id: "step".into(),
+                label: "STEP".into(),
+                toolbars: vec![
+                    Toolbar {
+                        toolbar_id: "step-view".into(),
+                        label: "View".into(),
+                        visible: true,
+                        items: vec![
+                            command_toolbar_item("step.view_reset", "Live", Some("focus".into()), true),
+                            command_toolbar_item("step.view_fit_all", "Fit", Some("focus".into()), true),
+                            command_toolbar_item("step.view_iso", "Iso", Some("focus".into()), true),
+                            command_toolbar_item("step.view_front", "Front", Some("focus".into()), true),
+                            command_toolbar_item("step.view_back", "Back", Some("focus".into()), true),
+                            command_toolbar_item("step.view_right", "Right", Some("focus".into()), true),
+                            command_toolbar_item("step.view_left", "Left", Some("focus".into()), true),
+                            command_toolbar_item("step.view_top", "Top", Some("focus".into()), true),
+                            command_toolbar_item("step.view_bottom", "Bottom", Some("focus".into()), true),
+                        ],
+                    },
+                    Toolbar {
+                        toolbar_id: "step-inspection".into(),
+                        label: "Inspection".into(),
+                        visible: true,
+                        items: vec![
+                            command_toolbar_item("step.select_parent", "Parent", Some("history".into()), has_parent),
+                            command_toolbar_item("step.select_first_child", "Child", Some("focus".into()), has_child),
+                            command_toolbar_item("step.inspect_pmi", "PMI", Some("focus".into()), has_pmi),
+                            command_toolbar_item("step.measure_selection", "Measure", Some("measure".into()), can_measure_selection),
+                            command_toolbar_item("step.hide_selection", "Hide", Some("hide".into()), can_hide_selection),
+                            command_toolbar_item("step.isolate_selection", "Isolate", Some("isolate".into()), can_isolate_selection),
+                            command_toolbar_item("step.show_all", "Show All", Some("show".into()), can_show_all),
+                        ],
+                    },
+                ],
+            },
+        ],
+    }
+}
+
+fn selected_step_entity_id(object_id: &str) -> Option<u64> {
+    object_id.strip_prefix("step-entity-")?.parse::<u64>().ok()
+}
+
+fn step_parent_entity_id(entity_id: u64, assemblies: &[StepAssemblyNode]) -> Option<u64> {
+    for assembly in assemblies {
+        if assembly.children.iter().any(|child| child.entity_id == entity_id) {
+            return Some(assembly.entity_id);
+        }
+        if let Some(found) = step_parent_entity_id(entity_id, &assembly.children) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+fn step_first_child_entity_id(entity_id: u64, assemblies: &[StepAssemblyNode]) -> Option<u64> {
+    for assembly in assemblies {
+        if assembly.entity_id == entity_id {
+            return assembly.children.first().map(|child| child.entity_id);
+        }
+        if let Some(found) = step_first_child_entity_id(entity_id, &assembly.children) {
+            return Some(found);
+        }
+    }
+    None
 }
 
 fn workbench_catalog_from_bridge(snapshot: &BridgeDocumentSnapshot) -> WorkbenchCatalog {
     let active_workbench_id = normalize_workbench_id(&snapshot.workbench);
-    let mut workbenches = vec![
-        WorkbenchCatalogEntry {
-            workbench_id: "partdesign".into(),
-            display_name: "PartDesign".into(),
-            icon: Some("partdesign".into()),
-            enabled: true,
-            description: Some("Parametric feature modeling for bodies and sketches.".into()),
-        },
-        WorkbenchCatalogEntry {
-            workbench_id: "part".into(),
-            display_name: "Part".into(),
-            icon: Some("part".into()),
-            enabled: true,
-            description: Some("Direct solid modeling and Boolean operations.".into()),
-        },
-        WorkbenchCatalogEntry {
-            workbench_id: "sketcher".into(),
-            display_name: "Sketcher".into(),
-            icon: Some("sketcher".into()),
-            enabled: true,
-            description: Some("Constraint-driven 2D profile editing.".into()),
-        },
-        WorkbenchCatalogEntry {
-            workbench_id: "mesh".into(),
-            display_name: "Mesh".into(),
-            icon: Some("mesh".into()),
-            enabled: true,
-            description: Some("Mesh inspection and repair tools.".into()),
-        },
-    ];
+    let mut workbenches = default_workbench_catalog_entries();
 
-    if !workbenches
-        .iter()
-        .any(|entry| entry.workbench_id == active_workbench_id)
+    if let Some(entry) = workbenches
+        .iter_mut()
+        .find(|entry| entry.workbench_id == active_workbench_id)
     {
+        entry.enabled = true;
+    } else {
         workbenches.insert(
             0,
-            WorkbenchCatalogEntry {
-                workbench_id: active_workbench_id.clone(),
-                display_name: workbench_display_name(&snapshot.workbench),
-                icon: Some(active_workbench_id.clone()),
-                enabled: true,
-                description: Some("Workbench surfaced from the current bridge snapshot.".into()),
-            },
+            make_workbench_catalog_entry(&snapshot.workbench, true),
         );
     }
 
@@ -613,6 +1360,11 @@ fn menu_bar_state_from_bridge(
                         report_dock_visible && bottom_dock_tab == "python",
                         Some("shell.show_python_console"),
                     ),
+                    toggle_menu_item(
+                        "Extensions",
+                        report_dock_visible && bottom_dock_tab == "extensions",
+                        Some("shell.show_extensions_manager"),
+                    ),
                 ],
             },
             Menu {
@@ -625,14 +1377,11 @@ fn menu_bar_state_from_bridge(
                 menu_id: "macro".into(),
                 label: "Macro".into(),
                 visible: true,
-                items: vec![MenuItem {
-                    kind: "action".into(),
-                    label: Some("Macro manager pending backend wiring".into()),
-                    command_id: None,
-                    enabled: Some(false),
-                    checked: None,
-                    submenu: None,
-                }],
+                items: vec![toggle_menu_item(
+                    "Macro and Addon Compatibility",
+                    report_dock_visible && bottom_dock_tab == "extensions",
+                    Some("shell.show_extensions_manager"),
+                )],
             },
             Menu {
                 menu_id: "window".into(),
@@ -903,6 +1652,7 @@ fn command_definition(
         command_id: spec.command_id.into(),
         label: spec.label.into(),
         group: spec.group.into(),
+        icon: spec.icon.map(str::to_string),
         shortcut: spec.shortcut.map(str::to_string),
         enabled,
         requires_selection: spec.requires_selection,
@@ -956,6 +1706,22 @@ pub fn command_catalog_from_bridge(
         command_definition("document.recompute", true, vec![]),
         command_definition("document.save", true, vec![]),
         command_definition("selection.focus", selected_object_id.is_some(), vec![]),
+        command_definition("extensions.refresh_inventory", true, vec![]),
+        command_definition("extensions.review_external_workbenches", true, vec![]),
+        command_definition(
+            "extensions.run_inventory_entry",
+            true,
+            vec![CommandArgumentDefinition {
+                argument_id: "entry_id".into(),
+                label: "Inventory entry".into(),
+                value_type: "string".into(),
+                required: true,
+                default_value: None,
+                placeholder: Some("macro:auto_dimensioning".into()),
+                unit: None,
+                options: vec![],
+            }],
+        ),
     ];
 
     if workbench_id == "partdesign" {
@@ -2213,7 +2979,7 @@ fn find_bridge_object<'a>(
 mod tests {
     use asterforge_freecad_bridge::open_document_snapshot;
 
-    use super::document_graph_from_bridge;
+    use super::{document_graph_from_bridge, step_workbench_catalog, workbench_catalog_from_bridge};
 
     #[test]
     fn projects_bridge_snapshot_into_document_graph() {
@@ -2233,6 +2999,50 @@ mod tests {
                 && edge.to_object_id == "pad-001"
                 && edge.relationship == "depends_on"
         }));
+    }
+
+    #[test]
+    fn workbench_catalog_exposes_full_family_metadata() {
+        let snapshot = open_document_snapshot(None);
+        let catalog = workbench_catalog_from_bridge(&snapshot);
+
+        let assembly = catalog
+            .workbenches
+            .iter()
+            .find(|entry| entry.workbench_id == "assembly")
+            .expect("assembly catalog entry should exist");
+        assert_eq!(assembly.category, "Mechanical assembly");
+        assert_eq!(assembly.migration_lane, "Queued primary");
+        assert!(!assembly.enabled);
+
+        let part_design = catalog
+            .workbenches
+            .iter()
+            .find(|entry| entry.workbench_id == "partdesign")
+            .expect("partdesign catalog entry should exist");
+        assert_eq!(part_design.category, "Core modeling");
+        assert_eq!(part_design.migration_lane, "Queued primary");
+        assert!(part_design.enabled);
+    }
+
+    #[test]
+    fn step_workbench_catalog_keeps_step_active_and_tracks_other_families() {
+        let catalog = step_workbench_catalog();
+        assert_eq!(catalog.active_workbench_id, "step");
+
+        let step = catalog
+            .workbenches
+            .iter()
+            .find(|entry| entry.workbench_id == "step")
+            .expect("step catalog entry should exist");
+        assert_eq!(step.category, "Inspection");
+        assert_eq!(step.migration_lane, "In progress");
+        assert!(step.enabled);
+
+        assert!(catalog
+            .workbenches
+            .iter()
+            .any(|entry| entry.workbench_id == "cam" && entry.category == "Manufacturing"));
     }
 }
 

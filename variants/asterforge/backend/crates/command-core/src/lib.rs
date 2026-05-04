@@ -15,12 +15,32 @@ pub const COMMAND_HISTORY_RESUME_FULL: &str = "history.resume_full";
 pub const COMMAND_MODEL_TOGGLE_SUPPRESSION: &str = "model.toggle_suppression";
 pub const COMMAND_DOCUMENT_UNDO: &str = "document.undo";
 pub const COMMAND_DOCUMENT_REDO: &str = "document.redo";
+pub const COMMAND_STEP_SELECT_PARENT: &str = "step.select_parent";
+pub const COMMAND_STEP_SELECT_FIRST_CHILD: &str = "step.select_first_child";
+pub const COMMAND_STEP_INSPECT_PMI: &str = "step.inspect_pmi";
+pub const COMMAND_STEP_HIDE_SELECTION: &str = "step.hide_selection";
+pub const COMMAND_STEP_ISOLATE_SELECTION: &str = "step.isolate_selection";
+pub const COMMAND_STEP_SHOW_ALL: &str = "step.show_all";
+pub const COMMAND_STEP_MEASURE_SELECTION: &str = "step.measure_selection";
+pub const COMMAND_STEP_VIEW_ISO: &str = "step.view_iso";
+pub const COMMAND_STEP_VIEW_FIT_ALL: &str = "step.view_fit_all";
+pub const COMMAND_STEP_VIEW_RESET: &str = "step.view_reset";
+pub const COMMAND_STEP_VIEW_FRONT: &str = "step.view_front";
+pub const COMMAND_STEP_VIEW_BACK: &str = "step.view_back";
+pub const COMMAND_STEP_VIEW_RIGHT: &str = "step.view_right";
+pub const COMMAND_STEP_VIEW_LEFT: &str = "step.view_left";
+pub const COMMAND_STEP_VIEW_TOP: &str = "step.view_top";
+pub const COMMAND_STEP_VIEW_BOTTOM: &str = "step.view_bottom";
+pub const COMMAND_EXTENSIONS_REFRESH_INVENTORY: &str = "extensions.refresh_inventory";
+pub const COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES: &str = "extensions.review_external_workbenches";
+pub const COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY: &str = "extensions.run_inventory_entry";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CommandSpec {
     pub command_id: &'static str,
     pub label: &'static str,
     pub group: &'static str,
+    pub icon: Option<&'static str>,
     pub shortcut: Option<&'static str>,
     pub requires_selection: bool,
     pub description: &'static str,
@@ -44,6 +64,7 @@ pub struct CommandDefinition {
     pub command_id: String,
     pub label: String,
     pub group: String,
+    pub icon: Option<String>,
     pub shortcut: Option<String>,
     pub enabled: bool,
     pub requires_selection: bool,
@@ -124,6 +145,30 @@ pub fn command_behavior(command_id: &str) -> CommandBehavior {
             transaction_mode: CommandTransactionMode::ReadOnly,
             job_kind: CommandJobKind::BackendDispatch,
         },
+        COMMAND_STEP_SELECT_PARENT
+        | COMMAND_STEP_SELECT_FIRST_CHILD
+        | COMMAND_STEP_INSPECT_PMI
+        | COMMAND_STEP_HIDE_SELECTION
+        | COMMAND_STEP_ISOLATE_SELECTION
+        | COMMAND_STEP_SHOW_ALL
+        | COMMAND_STEP_MEASURE_SELECTION
+        | COMMAND_STEP_VIEW_ISO
+        | COMMAND_STEP_VIEW_FIT_ALL
+        | COMMAND_STEP_VIEW_RESET
+        | COMMAND_STEP_VIEW_FRONT
+        | COMMAND_STEP_VIEW_BACK
+        | COMMAND_STEP_VIEW_RIGHT
+        | COMMAND_STEP_VIEW_LEFT
+        | COMMAND_STEP_VIEW_TOP
+        | COMMAND_STEP_VIEW_BOTTOM
+        | COMMAND_EXTENSIONS_REFRESH_INVENTORY
+        | COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES
+        | COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY => {
+            CommandBehavior {
+                transaction_mode: CommandTransactionMode::ReadOnly,
+                job_kind: CommandJobKind::BackendDispatch,
+            }
+        }
         _ => CommandBehavior {
             transaction_mode: CommandTransactionMode::ReadOnly,
             job_kind: CommandJobKind::BackendDispatch,
@@ -137,6 +182,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_DOCUMENT_RECOMPUTE,
             label: "Recompute",
             group: "Document",
+            icon: Some("recompute"),
             shortcut: Some("Ctrl+R"),
             requires_selection: false,
             description: "Rebuild the dependency graph and refresh the active model.",
@@ -146,6 +192,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_DOCUMENT_SAVE,
             label: "Save",
             group: "Document",
+            icon: Some("save"),
             shortcut: Some("Ctrl+S"),
             requires_selection: false,
             description: "Persist the current document state through the backend pipeline.",
@@ -155,6 +202,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_SELECTION_FOCUS,
             label: "Focus Selection",
             group: "View",
+            icon: Some("focus"),
             shortcut: Some("F"),
             requires_selection: true,
             description: "Center the viewport workflow around the currently selected object.",
@@ -164,6 +212,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_PARTDESIGN_NEW_SKETCH,
             label: "Create Sketch",
             group: "PartDesign",
+            icon: Some("sketch"),
             shortcut: None,
             requires_selection: true,
             description: "Create a new sketch inside the selected body.",
@@ -173,6 +222,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_PARTDESIGN_PAD,
             label: "Create Pad",
             group: "PartDesign",
+            icon: Some("pad"),
             shortcut: None,
             requires_selection: true,
             description: "Extrude the active sketch into a solid PartDesign feature.",
@@ -182,6 +232,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_PARTDESIGN_POCKET,
             label: "Create Pocket",
             group: "PartDesign",
+            icon: Some("pocket"),
             shortcut: None,
             requires_selection: true,
             description: "Cut material from the active sketch profile into the body.",
@@ -191,6 +242,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_PARTDESIGN_EDIT_PAD,
             label: "Edit Pad",
             group: "PartDesign",
+            icon: Some("pad"),
             shortcut: None,
             requires_selection: true,
             description: "Open the selected pad feature for parameter editing.",
@@ -200,6 +252,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_PARTDESIGN_EDIT_POCKET,
             label: "Edit Pocket",
             group: "PartDesign",
+            icon: Some("pocket"),
             shortcut: None,
             requires_selection: true,
             description: "Open the selected pocket feature for parameter editing.",
@@ -209,6 +262,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_HISTORY_ROLLBACK_HERE,
             label: "Rollback Here",
             group: "History",
+            icon: Some("history"),
             shortcut: None,
             requires_selection: true,
             description: "Rebuild the model using history only up to the selected feature.",
@@ -218,6 +272,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_HISTORY_RESUME_FULL,
             label: "Resume Full History",
             group: "History",
+            icon: Some("history"),
             shortcut: None,
             requires_selection: false,
             description: "Restore every feature after a rollback marker and rebuild the full result.",
@@ -227,6 +282,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_MODEL_TOGGLE_SUPPRESSION,
             label: "Toggle Suppression",
             group: "Model",
+            icon: Some("suppression"),
             shortcut: None,
             requires_selection: true,
             description: "Suppress or unsuppress the selected feature or sketch in the model history.",
@@ -236,6 +292,7 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_DOCUMENT_UNDO,
             label: "Undo",
             group: "Document",
+            icon: Some("undo"),
             shortcut: Some("Ctrl+Z"),
             requires_selection: false,
             description: "Undo the last modeling operation.",
@@ -245,10 +302,201 @@ pub fn command_spec(command_id: &str) -> Option<CommandSpec> {
             command_id: COMMAND_DOCUMENT_REDO,
             label: "Redo",
             group: "Document",
+            icon: Some("redo"),
             shortcut: Some("Ctrl+Y"),
             requires_selection: false,
             description: "Redo the last undone modeling operation.",
             action_label: Some("Redo"),
+        }),
+        COMMAND_STEP_SELECT_PARENT => Some(CommandSpec {
+            command_id: COMMAND_STEP_SELECT_PARENT,
+            label: "Select Parent",
+            group: "STEP",
+            icon: Some("history"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Move selection to the parent STEP assembly node when one exists.",
+            action_label: Some("Select Parent"),
+        }),
+        COMMAND_STEP_SELECT_FIRST_CHILD => Some(CommandSpec {
+            command_id: COMMAND_STEP_SELECT_FIRST_CHILD,
+            label: "Select Child",
+            group: "STEP",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Move selection to the first child node below the current STEP assembly node.",
+            action_label: Some("Select Child"),
+        }),
+        COMMAND_STEP_INSPECT_PMI => Some(CommandSpec {
+            command_id: COMMAND_STEP_INSPECT_PMI,
+            label: "Inspect PMI",
+            group: "STEP",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Open the report dock for semantic PMI attached to the selected STEP entity.",
+            action_label: Some("Inspect PMI"),
+        }),
+        COMMAND_STEP_HIDE_SELECTION => Some(CommandSpec {
+            command_id: COMMAND_STEP_HIDE_SELECTION,
+            label: "Hide Selection",
+            group: "STEP",
+            icon: Some("hide"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Hide the selected STEP node from the inspection viewport.",
+            action_label: Some("Hide"),
+        }),
+        COMMAND_STEP_ISOLATE_SELECTION => Some(CommandSpec {
+            command_id: COMMAND_STEP_ISOLATE_SELECTION,
+            label: "Isolate Selection",
+            group: "STEP",
+            icon: Some("isolate"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Hide every other STEP node so the current selection is isolated.",
+            action_label: Some("Isolate"),
+        }),
+        COMMAND_STEP_SHOW_ALL => Some(CommandSpec {
+            command_id: COMMAND_STEP_SHOW_ALL,
+            label: "Show All",
+            group: "STEP",
+            icon: Some("show"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Restore every hidden STEP node to the inspection viewport.",
+            action_label: Some("Show All"),
+        }),
+        COMMAND_STEP_MEASURE_SELECTION => Some(CommandSpec {
+            command_id: COMMAND_STEP_MEASURE_SELECTION,
+            label: "Measure Selection",
+            group: "STEP",
+            icon: Some("measure"),
+            shortcut: None,
+            requires_selection: true,
+            description: "Compute the extents of the selected STEP subtree from its tessellated payload.",
+            action_label: Some("Measure"),
+        }),
+        COMMAND_STEP_VIEW_ISO => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_ISO,
+            label: "Isometric View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the standard isometric inspection view.",
+            action_label: Some("Iso"),
+        }),
+        COMMAND_STEP_VIEW_FIT_ALL => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_FIT_ALL,
+            label: "Fit All",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Frame all visible STEP geometry in the inspection viewport.",
+            action_label: Some("Fit"),
+        }),
+        COMMAND_STEP_VIEW_RESET => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_RESET,
+            label: "Reset View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Restore the STEP camera to the default inspection view.",
+            action_label: Some("Live"),
+        }),
+        COMMAND_STEP_VIEW_FRONT => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_FRONT,
+            label: "Front View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the front inspection view.",
+            action_label: Some("Front"),
+        }),
+        COMMAND_STEP_VIEW_BACK => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_BACK,
+            label: "Back View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the back inspection view.",
+            action_label: Some("Back"),
+        }),
+        COMMAND_STEP_VIEW_RIGHT => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_RIGHT,
+            label: "Right View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the right inspection view.",
+            action_label: Some("Right"),
+        }),
+        COMMAND_STEP_VIEW_LEFT => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_LEFT,
+            label: "Left View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the left inspection view.",
+            action_label: Some("Left"),
+        }),
+        COMMAND_STEP_VIEW_TOP => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_TOP,
+            label: "Top View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the top inspection view.",
+            action_label: Some("Top"),
+        }),
+        COMMAND_STEP_VIEW_BOTTOM => Some(CommandSpec {
+            command_id: COMMAND_STEP_VIEW_BOTTOM,
+            label: "Bottom View",
+            group: "View",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Orient the STEP camera to the bottom inspection view.",
+            action_label: Some("Bottom"),
+        }),
+        COMMAND_EXTENSIONS_REFRESH_INVENTORY => Some(CommandSpec {
+            command_id: COMMAND_EXTENSIONS_REFRESH_INVENTORY,
+            label: "Refresh Extension Inventory",
+            group: "Extensions",
+            icon: Some("recompute"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Refresh backend-owned macro, addon, and external workbench compatibility inventory.",
+            action_label: Some("Refresh Inventory"),
+        }),
+        COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES => Some(CommandSpec {
+            command_id: COMMAND_EXTENSIONS_REVIEW_EXTERNAL_WORKBENCHES,
+            label: "Review External Workbenches",
+            group: "Extensions",
+            icon: Some("focus"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Inspect the compatibility lane for external workbench registration and Qt-bound UI fallbacks.",
+            action_label: Some("Review Workbenches"),
+        }),
+        COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY => Some(CommandSpec {
+            command_id: COMMAND_EXTENSIONS_RUN_INVENTORY_ENTRY,
+            label: "Run Reviewed Inventory Entry",
+            group: "Extensions",
+            icon: Some("play"),
+            shortcut: None,
+            requires_selection: false,
+            description: "Execute a reviewed extension inventory entry through backend-owned trust gates.",
+            action_label: Some("Run Reviewed Entry"),
         }),
         _ => None,
     }
@@ -408,7 +656,7 @@ mod tests {
         plan_command_events, plan_job_stages, stage_event_topic, viewport_invalidated_event,
         CommandJobKind, CommandTransactionMode, COMMAND_DOCUMENT_REDO,
         COMMAND_DOCUMENT_RECOMPUTE, COMMAND_DOCUMENT_SAVE, COMMAND_HISTORY_ROLLBACK_HERE,
-        COMMAND_SELECTION_FOCUS,
+        COMMAND_EXTENSIONS_REFRESH_INVENTORY, COMMAND_SELECTION_FOCUS,
     };
 
     #[test]
@@ -448,7 +696,17 @@ mod tests {
 
         assert_eq!(spec.label, "Save");
         assert_eq!(spec.group, "Document");
+        assert_eq!(spec.icon, Some("save"));
         assert_eq!(spec.shortcut, Some("Ctrl+S"));
+    }
+
+    #[test]
+    fn exposes_extension_command_specs() {
+        let spec = command_spec(COMMAND_EXTENSIONS_REFRESH_INVENTORY)
+            .expect("extension spec should exist");
+
+        assert_eq!(spec.group, "Extensions");
+        assert_eq!(spec.action_label, Some("Refresh Inventory"));
     }
 
     #[test]
