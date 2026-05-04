@@ -1,0 +1,32 @@
+{
+  "$schema": "./metadata-schema.json",
+  "baseline_id": "task-panel-modeling-light",
+  "theme": "light",
+  "workbench": "PartDesignWorkbench",
+  "fixture_document": "partdesign-taskpanel-example",
+  "visible_toolbars": [
+    "Edit",
+    "File",
+    "Help",
+    "Part Design Dress-Up Features",
+    "Part Design Helper Features",
+    "Part Design Modeling Features",
+    "Part Design Transformation Features",
+    "Structure",
+    "View",
+    "Workbench"
+  ],
+  "visible_panels": [
+    "Model",
+    "Tasks"
+  ],
+  "active_task": null,
+  "artifacts": {
+    "full_window": "docs/parity/baselines/screenshots/task-panel-modeling-light.png",
+    "viewport_crop": null,
+    "tree_property_crop": null,
+    "task_panel_crop": "docs/parity/baselines/screenshots/task-panel-modeling-light-task-panel.png",
+    "recording": null
+  },
+  "notes": "Captured from Qt shell baseline helper."
+}

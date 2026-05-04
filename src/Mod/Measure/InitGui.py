@@ -28,19 +28,27 @@
 # python which could complicate things further.
 
 import Measure
-import MeasureGui
+import FreeCAD
 from MeasureCOM import makeMeasureCOM, MeasureCOM
+from PySide import QtCore
+from PySide.QtCore import QT_TRANSLATE_NOOP
+
+
+def _load_measure_gui():
+    try:
+        import MeasureGui  # noqa: F401
+    except Exception as exc:
+        FreeCAD.Console.PrintWarning(f"MeasureGui deferred startup import failed: {exc}\n")
 
 # Expose create functions
 Measure.makeMeasureCOM = makeMeasureCOM
 
 
 # Register python measure types
-import FreeCAD
-from PySide.QtCore import QT_TRANSLATE_NOOP
-
 FreeCAD.MeasureManager.addMeasureType(
     "CENTEROFMASS",
     QT_TRANSLATE_NOOP("TaskMeasure", "Center of mass"),
     MeasureCOM,
 )
+
+QtCore.QTimer.singleShot(0, _load_measure_gui)

@@ -1,0 +1,5 @@
+import FreeCAD as App
+
+params = App.ParamGet("User parameter:BaseApp/Preferences/AsterForge")
+params.SetString("LastReviewedMacro", "auto_dimensioning")
+print("ASTERFORGE_MACRO_OK:auto_dimensioning")

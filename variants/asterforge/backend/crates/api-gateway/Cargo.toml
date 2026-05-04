@@ -12,6 +12,7 @@ axum.workspace = true
 asterforge-document-core = { path = "../document-core" }
 asterforge-freecad-bridge = { path = "../../../native/freecad-bridge" }
 asterforge-protocol-types = { path = "../protocol-types" }
+asterforge-step-core = { path = "../step-core" }
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

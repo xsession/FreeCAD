@@ -1,0 +1,136 @@
+[
+  {
+    "baseline_id": "shell-startup-light",
+    "workbench": "",
+    "theme": "light",
+    "fixture_document": "startup-shell",
+    "capture_viewport": false,
+    "capture_tree_property": false,
+    "notes": "Starter Qt shell frame before document-specific workflow capture.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "shell-empty-light",
+    "workbench": "",
+    "theme": "light",
+    "fixture_document": "empty-document",
+    "capture_viewport": false,
+    "capture_tree_property": true,
+    "notes": "Primary empty-document shell baseline with tree/property crop.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "shell-empty-dark",
+    "workbench": "",
+    "theme": "dark",
+    "fixture_document": "empty-document",
+    "capture_viewport": false,
+    "capture_tree_property": true,
+    "notes": "Primary empty-document dark-shell baseline with tree/property crop.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "part-default-light",
+    "workbench": "PartWorkbench",
+    "theme": "light",
+    "fixture_document": "primitive-document",
+    "capture_viewport": true,
+    "capture_tree_property": true,
+    "notes": "Part workbench shell on a deterministic primitive-document fixture.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "partdesign-default-light",
+    "workbench": "PartDesignWorkbench",
+    "theme": "light",
+    "fixture_document": "partdesign-pad-example",
+    "capture_viewport": true,
+    "capture_tree_property": true,
+    "notes": "PartDesign workbench shell on a deterministic body/sketch/pad fixture.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "sketcher-task-light",
+    "workbench": "SketcherWorkbench",
+    "theme": "light",
+    "fixture_document": "sketcher-constraint-example",
+    "edit_object": "Sketch",
+    "capture_viewport": false,
+    "capture_tree_property": false,
+    "capture_task_panel": true,
+    "notes": "Sketcher workbench shell in active sketch edit mode with task-panel crop.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "techdraw-default-light",
+    "workbench": "TechDrawWorkbench",
+    "theme": "light",
+    "fixture_document": "techdraw-example",
+    "capture_viewport": false,
+    "capture_tree_property": false,
+    "notes": "TechDraw workbench shell on a deterministic page/template/view fixture.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "import-step-large-light",
+    "workbench": "",
+    "theme": "light",
+    "fixture_document": "step-large-assembly",
+    "step_file": "tests/models/cn-06-13-00_asm.stp",
+    "capture_viewport": true,
+    "capture_tree_property": false,
+    "notes": "Captures the startup shell and viewport after importing the committed in-repo large STEP assembly.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "tree-expanded-light",
+    "workbench": "PartWorkbench",
+    "theme": "light",
+    "fixture_document": "multi-body-tree",
+    "capture_viewport": false,
+    "capture_tree_property": true,
+    "capture_dock_target": "model",
+    "expand_tree": true,
+    "notes": "Expanded multi-body model tree crop in the Part workbench.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "property-grouped-light",
+    "workbench": "PartDesignWorkbench",
+    "theme": "light",
+    "fixture_document": "partdesign-editable-feature",
+    "select_object": "Pad",
+    "capture_viewport": false,
+    "capture_tree_property": true,
+    "capture_dock_target": "property",
+    "notes": "Grouped property editor crop for a selected editable PartDesign feature.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "task-panel-modeling-light",
+    "workbench": "PartDesignWorkbench",
+    "theme": "light",
+    "fixture_document": "partdesign-taskpanel-example",
+    "select_object": "Body",
+    "run_command": "PartDesign_CompSketches",
+    "capture_viewport": false,
+    "capture_tree_property": false,
+    "capture_task_panel": true,
+    "auto_accept_modal": true,
+    "notes": "PartDesign modeling task panel opened through CompSketches after auto-accepting the exemption dialog.",
+    "enabled": true
+  },
+  {
+    "baseline_id": "viewport-selection-light",
+    "workbench": "PartWorkbench",
+    "theme": "light",
+    "fixture_document": "primitive-document",
+    "select_object": "Box",
+    "select_subelement": "Face1",
+    "selection_emphasis": true,
+    "capture_viewport": true,
+    "capture_tree_property": false,
+    "notes": "Selected-object viewport crop using persisted emphasis because offscreen viewport captures omit transient selection overlays.",
+    "enabled": true
+  }
+]

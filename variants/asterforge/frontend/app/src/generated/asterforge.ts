@@ -97,6 +97,8 @@ export interface WorkbenchCatalogEntry {
   icon: string | undefined;
   enabled: boolean;
   description: string | undefined;
+  category: string;
+  migration_lane: string;
 }
 
 export interface WorkbenchCatalog {
@@ -191,6 +193,45 @@ export interface ShellSnapshot {
   layout: ShellLayoutState;
   recent_documents: RecentDocumentEntry[];
   workspace_sessions: WorkspaceSessionEntry[];
+  inspection: ShellInspectionState | undefined;
+  extension_compatibility: ExtensionCompatibilityState | undefined;
+}
+
+export interface ShellInspectionState {
+  step_pmi: StepPmiInspectionOverlay | undefined;
+  step_measurement: StepMeasurementOverlay | undefined;
+}
+
+export interface ExtensionCompatibilityState {
+  title: string;
+  summary: string;
+  lanes: ExtensionCompatibilityLane[];
+}
+
+export interface ExtensionCompatibilityLane {
+  lane_id: string;
+  label: string;
+  status: string;
+  owner: string;
+  summary: string;
+  next_steps: string[];
+  command_ids: string[];
+  inventory_entries: ExtensionInventoryEntry[];
+}
+
+export interface ExtensionInventoryEntry {
+  entry_id: string;
+  label: string;
+  origin: string;
+  trust_state: string;
+  compatibility: string;
+  detail: string;
+  action_command_id: string | undefined;
+  action_label: string | undefined;
+  last_run_status: string | undefined;
+  last_run_level: string | undefined;
+  last_run_detail: string | undefined;
+  last_run_kind: string | undefined;
 }
 
 export interface CommandArgumentDefinition {
@@ -208,6 +249,7 @@ export interface CommandDefinition {
   command_id: string;
   label: string;
   group: string;
+  icon: string | undefined;
   shortcut: string | undefined;
   enabled: boolean;
   requires_selection: boolean;
@@ -240,6 +282,25 @@ export interface TaskPanelResponse {
   description: string;
   sections: TaskPanelSection[];
   suggested_commands: string[];
+}
+
+export interface StepPmiInspectionOverlay {
+  object_id: string;
+  label: string;
+  entity_id: number;
+  target_object_ids: string[];
+  presentation_object_ids: string[];
+  annotation_lines: string[];
+}
+
+export interface StepMeasurementOverlay {
+  object_id: string;
+  label: string;
+  span_x: number;
+  span_y: number;
+  span_z: number;
+  representation_count: number;
+  annotation_count: number;
 }
 
 export interface FeatureHistoryEntry {

@@ -1,0 +1,30 @@
+{
+  "$schema": "./metadata-schema.json",
+  "baseline_id": "tree-expanded-light",
+  "theme": "light",
+  "workbench": "PartWorkbench",
+  "fixture_document": "multi-body-tree",
+  "visible_toolbars": [
+    "Boolean Tools",
+    "Edit",
+    "File",
+    "Help",
+    "Part Tools",
+    "Solids",
+    "Structure",
+    "View",
+    "Workbench"
+  ],
+  "visible_panels": [
+    "Model"
+  ],
+  "active_task": null,
+  "artifacts": {
+    "full_window": "docs/parity/baselines/screenshots/tree-expanded-light.png",
+    "viewport_crop": null,
+    "tree_property_crop": "docs/parity/baselines/screenshots/tree-expanded-light-tree-property.png",
+    "task_panel_crop": null,
+    "recording": null
+  },
+  "notes": "Captured from Qt shell baseline helper."
+}

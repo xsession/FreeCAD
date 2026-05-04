@@ -55,6 +55,7 @@
         "full_window",
         "viewport_crop",
         "tree_property_crop",
+        "task_panel_crop",
         "recording"
       ],
       "properties": {
@@ -71,6 +72,12 @@
           ]
         },
         "tree_property_crop": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "task_panel_crop": {
           "type": [
             "string",
             "null"
