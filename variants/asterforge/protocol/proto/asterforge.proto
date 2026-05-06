@@ -192,6 +192,10 @@ message WorkspaceSessionEntry {
   optional bool report_dock_visible = 12;
   optional float combo_view_size_hint = 13;
   optional float report_dock_size_hint = 14;
+  optional string report_dock_filter_label = 15;
+  optional string report_dock_filter_query = 16;
+  optional string diagnostics_dock_filter_label = 17;
+  optional string diagnostics_dock_filter_query = 18;
 }
 
 message ShellSnapshot {
@@ -439,6 +443,12 @@ message ShellSessionMutationRequest {
   optional string remove_workspace_session_id = 2;
   bool clear_recent_documents = 3;
   bool clear_inactive_workspace_sessions = 4;
+  optional string report_dock_filter_label = 5;
+  optional string report_dock_filter_query = 6;
+  optional string diagnostics_dock_filter_label = 7;
+  optional string diagnostics_dock_filter_query = 8;
+  bool clear_report_dock_filter = 9;
+  bool clear_diagnostics_dock_filter = 10;
 }
 
 message PreselectionState {

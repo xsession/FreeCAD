@@ -554,6 +554,10 @@ fn proto_workspace_session_from_http(response: WorkspaceSessionEntry) -> ProtoWo
         report_dock_visible: response.report_dock_visible,
         combo_view_size_hint: response.combo_view_size_hint,
         report_dock_size_hint: response.report_dock_size_hint,
+        report_dock_filter_label: response.report_dock_filter_label,
+        report_dock_filter_query: response.report_dock_filter_query,
+        diagnostics_dock_filter_label: response.diagnostics_dock_filter_label,
+        diagnostics_dock_filter_query: response.diagnostics_dock_filter_query,
     }
 }
 
@@ -573,6 +577,10 @@ fn http_workspace_session_from_proto(response: ProtoWorkspaceSessionEntry) -> Wo
         report_dock_visible: response.report_dock_visible,
         combo_view_size_hint: response.combo_view_size_hint,
         report_dock_size_hint: response.report_dock_size_hint,
+        report_dock_filter_label: response.report_dock_filter_label,
+        report_dock_filter_query: response.report_dock_filter_query,
+        diagnostics_dock_filter_label: response.diagnostics_dock_filter_label,
+        diagnostics_dock_filter_query: response.diagnostics_dock_filter_query,
     }
 }
 

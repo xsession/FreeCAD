@@ -1,5 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import * as THREE from "three";
+import {
+  AmbientLight,
+  Box3,
+  BufferAttribute,
+  BufferGeometry,
+  DirectionalLight,
+  DoubleSide,
+  EdgesGeometry,
+  GridHelper,
+  Group,
+  LineBasicMaterial,
+  LineSegments,
+  Mesh,
+  MeshStandardMaterial,
+  Object3D,
+  PerspectiveCamera,
+  Raycaster,
+  Scene,
+  Vector2,
+  Vector3,
+  WebGLRenderer,
+} from "three";
 
 import type { ShellSnapshot, ViewportDrawable } from "./protocol";
 import { projectStepRepresentation } from "./shellViewUtils";
@@ -79,44 +100,44 @@ export function StepViewportScene({
     let disposed = false;
 
     try {
-      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      const renderer = new WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       renderer.setClearColor(0x06101a, 1);
       renderer.domElement.className = "viewport-three-canvas";
       host.appendChild(renderer.domElement);
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(42, 1, 0.01, 2000);
+      const scene = new Scene();
+      const camera = new PerspectiveCamera(42, 1, 0.01, 2000);
 
-      scene.add(new THREE.AmbientLight(0xf4f8ff, 1.2));
+      scene.add(new AmbientLight(0xf4f8ff, 1.2));
 
-      const keyLight = new THREE.DirectionalLight(0xffffff, 1.7);
+      const keyLight = new DirectionalLight(0xffffff, 1.7);
       keyLight.position.set(5, 8, 10);
       scene.add(keyLight);
 
-      const fillLight = new THREE.DirectionalLight(0x8fd3ff, 0.8);
+      const fillLight = new DirectionalLight(0x8fd3ff, 0.8);
       fillLight.position.set(-6, 3, -4);
       scene.add(fillLight);
 
-      const root = new THREE.Group();
+      const root = new Group();
       scene.add(root);
 
-      const bounds = new THREE.Box3();
-      const pickables: THREE.Mesh[] = [];
+      const bounds = new Box3();
+      const pickables: Mesh[] = [];
 
       for (const packet of meshPackets) {
-        const geometry = new THREE.BufferGeometry();
-        geometry.setAttribute("position", new THREE.BufferAttribute(packet.positions, 3));
-        geometry.setIndex(new THREE.BufferAttribute(packet.indices, 1));
+        const geometry = new BufferGeometry();
+        geometry.setAttribute("position", new BufferAttribute(packet.positions, 3));
+        geometry.setIndex(new BufferAttribute(packet.indices, 1));
 
         if (packet.normals && packet.normals.length === packet.positions.length) {
-          geometry.setAttribute("normal", new THREE.BufferAttribute(packet.normals, 3));
+          geometry.setAttribute("normal", new BufferAttribute(packet.normals, 3));
         } else {
           geometry.computeVertexNormals();
         }
 
         geometry.computeBoundingBox();
-        bounds.union(geometry.boundingBox ?? new THREE.Box3());
+        bounds.union(geometry.boundingBox ?? new Box3());
 
         const objectId = `step-entity-${packet.entityId}`;
         const selected = objectId === selectedObjectId;
@@ -124,24 +145,24 @@ export function StepViewportScene({
         const inspected = inspectedPmi?.target_object_ids.includes(objectId) ?? false;
         const presentationLinked = inspectedPmi?.presentation_object_ids.includes(objectId) ?? false;
 
-        const mesh = new THREE.Mesh(
+        const mesh = new Mesh(
           geometry,
-          new THREE.MeshStandardMaterial({
+          new MeshStandardMaterial({
             color: pickSurfaceColor({ inspected, preselected, presentationLinked, selected }),
             transparent: true,
             opacity: selected ? 0.92 : preselected ? 0.88 : 0.8,
             metalness: 0.1,
             roughness: 0.72,
-            side: THREE.DoubleSide,
+            side: DoubleSide,
           })
         );
 
         mesh.userData.objectId = objectId;
         mesh.userData.representationId = packet.key;
 
-        const edges = new THREE.LineSegments(
-          new THREE.EdgesGeometry(geometry, 18),
-          new THREE.LineBasicMaterial({
+        const edges = new LineSegments(
+          new EdgesGeometry(geometry, 18),
+          new LineBasicMaterial({
             color: pickEdgeColor({ inspected, presentationLinked, selected }),
             transparent: true,
             opacity: selected ? 0.95 : 0.54,
@@ -153,10 +174,10 @@ export function StepViewportScene({
         pickables.push(mesh);
       }
 
-      const center = bounds.isEmpty() ? new THREE.Vector3() : bounds.getCenter(new THREE.Vector3());
-      const size = bounds.isEmpty() ? new THREE.Vector3(1, 1, 1) : bounds.getSize(new THREE.Vector3());
+      const center = bounds.isEmpty() ? new Vector3() : bounds.getCenter(new Vector3());
+      const size = bounds.isEmpty() ? new Vector3(1, 1, 1) : bounds.getSize(new Vector3());
       const radius = Math.max(size.length() * 0.5, 1);
-      const grid = new THREE.GridHelper(Math.max(radius * 3, 12), 12, 0x28445e, 0x142738);
+      const grid = new GridHelper(Math.max(radius * 3, 12), 12, 0x28445e, 0x142738);
       grid.position.set(center.x, bounds.min.y || center.y, center.z);
       scene.add(grid);
 
@@ -168,8 +189,8 @@ export function StepViewportScene({
       camera.far = Math.max(radius * 30, 200);
       camera.updateProjectionMatrix();
 
-      const raycaster = new THREE.Raycaster();
-      const pointer = new THREE.Vector2();
+      const raycaster = new Raycaster();
+      const pointer = new Vector2();
       let hoveredObjectId: string | null = null;
 
       const renderScene = () => {
@@ -236,8 +257,8 @@ export function StepViewportScene({
         renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
         renderer.domElement.removeEventListener("click", handleClick);
         window.removeEventListener("resize", handleResize);
-        scene.traverse((node: THREE.Object3D) => {
-          const mesh = node as THREE.Mesh;
+        scene.traverse((node: Object3D) => {
+          const mesh = node as Mesh;
           if (mesh.geometry) {
             mesh.geometry.dispose();
           }
@@ -432,7 +453,7 @@ function inspectedStepPmiOverlay(
 
 function deriveCameraDirection(cameraEye: number[] | undefined, cameraTarget: number[] | undefined) {
   if (cameraEye?.length === 3 && cameraTarget?.length === 3) {
-    const direction = new THREE.Vector3(
+    const direction = new Vector3(
       cameraEye[0] - cameraTarget[0],
       cameraEye[1] - cameraTarget[1],
       cameraEye[2] - cameraTarget[2]
@@ -443,7 +464,7 @@ function deriveCameraDirection(cameraEye: number[] | undefined, cameraTarget: nu
     }
   }
 
-  return new THREE.Vector3(1.4, 1.05, 1.8).normalize();
+  return new Vector3(1.4, 1.05, 1.8).normalize();
 }
 
 function pickSurfaceColor({

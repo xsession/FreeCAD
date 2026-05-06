@@ -1560,6 +1560,14 @@ async fn shell_snapshot_tracks_recent_documents_sessions_and_panel_tabs() {
     assert_eq!(shell_snapshot.workspace_sessions[0].combo_view_size_hint, Some(0.28));
     assert_eq!(shell_snapshot.workspace_sessions[0].report_dock_size_hint, Some(0.24));
     assert_eq!(
+        shell_snapshot.workspace_sessions[0].report_dock_filter_label.as_deref(),
+        None
+    );
+    assert_eq!(
+        shell_snapshot.workspace_sessions[0].diagnostics_dock_filter_query.as_deref(),
+        None
+    );
+    assert_eq!(
         shell_snapshot
             .layout
             .panels

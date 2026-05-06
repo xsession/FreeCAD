@@ -47,4 +47,10 @@ pub struct ShellSessionMutationRequest {
     pub remove_workspace_session_id: Option<String>,
     pub clear_recent_documents: bool,
     pub clear_inactive_workspace_sessions: bool,
+    pub report_dock_filter_label: Option<String>,
+    pub report_dock_filter_query: Option<String>,
+    pub diagnostics_dock_filter_label: Option<String>,
+    pub diagnostics_dock_filter_query: Option<String>,
+    pub clear_report_dock_filter: bool,
+    pub clear_diagnostics_dock_filter: bool,
 }

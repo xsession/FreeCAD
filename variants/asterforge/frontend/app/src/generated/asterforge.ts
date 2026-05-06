@@ -190,6 +190,10 @@ export interface WorkspaceSessionEntry {
   report_dock_visible: boolean | undefined;
   combo_view_size_hint: number | undefined;
   report_dock_size_hint: number | undefined;
+  report_dock_filter_label: string | undefined;
+  report_dock_filter_query: string | undefined;
+  diagnostics_dock_filter_label: string | undefined;
+  diagnostics_dock_filter_query: string | undefined;
 }
 
 export interface ShellSnapshot {
@@ -430,6 +434,12 @@ export interface ShellSessionMutationRequest {
   remove_workspace_session_id: string | undefined;
   clear_recent_documents: boolean;
   clear_inactive_workspace_sessions: boolean;
+  report_dock_filter_label: string | undefined;
+  report_dock_filter_query: string | undefined;
+  diagnostics_dock_filter_label: string | undefined;
+  diagnostics_dock_filter_query: string | undefined;
+  clear_report_dock_filter: boolean;
+  clear_diagnostics_dock_filter: boolean;
 }
 
 export interface PreselectionState {

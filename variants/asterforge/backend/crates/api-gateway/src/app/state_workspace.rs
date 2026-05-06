@@ -36,6 +36,10 @@ pub(super) fn remember_current_document(services: &AppServices, model: &mut AppM
         report_dock_visible: Some(model.report_dock_visible),
         combo_view_size_hint: Some(model.combo_view_size_hint),
         report_dock_size_hint: Some(model.report_dock_size_hint),
+        report_dock_filter_label: model.report_dock_filter_label.clone(),
+        report_dock_filter_query: model.report_dock_filter_query.clone(),
+        diagnostics_dock_filter_label: model.diagnostics_dock_filter_label.clone(),
+        diagnostics_dock_filter_query: model.diagnostics_dock_filter_query.clone(),
     };
 
     let mut workspace = DocumentWorkspaceState {
@@ -88,6 +92,10 @@ pub(super) fn apply_persisted_workspace_state(
     model.report_dock_visible = state.report_dock_visible;
     model.combo_view_size_hint = state.combo_view_size_hint;
     model.report_dock_size_hint = state.report_dock_size_hint;
+    model.report_dock_filter_label = state.report_dock_filter_label.clone();
+    model.report_dock_filter_query = state.report_dock_filter_query.clone();
+    model.diagnostics_dock_filter_label = state.diagnostics_dock_filter_label.clone();
+    model.diagnostics_dock_filter_query = state.diagnostics_dock_filter_query.clone();
     remember_current_document(services, model);
 }
 
@@ -105,6 +113,10 @@ pub(super) fn persisted_workspace_state(model: &AppModel) -> PersistedWorkspaceS
         report_dock_visible: model.report_dock_visible,
         combo_view_size_hint: model.combo_view_size_hint,
         report_dock_size_hint: model.report_dock_size_hint,
+        report_dock_filter_label: model.report_dock_filter_label.clone(),
+        report_dock_filter_query: model.report_dock_filter_query.clone(),
+        diagnostics_dock_filter_label: model.diagnostics_dock_filter_label.clone(),
+        diagnostics_dock_filter_query: model.diagnostics_dock_filter_query.clone(),
     }
 }
 

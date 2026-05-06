@@ -157,6 +157,12 @@ export async function updateShellSessionState(
     remove_workspace_session_id?: string;
     clear_recent_documents?: boolean;
     clear_inactive_workspace_sessions?: boolean;
+    report_dock_filter_label?: string;
+    report_dock_filter_query?: string;
+    diagnostics_dock_filter_label?: string;
+    diagnostics_dock_filter_query?: string;
+    clear_report_dock_filter?: boolean;
+    clear_diagnostics_dock_filter?: boolean;
   }
 ): Promise<ShellSnapshot> {
   return fetchJson<ShellSnapshot>("/api/shell/session", {

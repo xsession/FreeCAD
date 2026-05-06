@@ -44,6 +44,10 @@ pub(super) fn build_bootstrap_model(
         report_dock_visible: true,
         combo_view_size_hint: 0.28,
         report_dock_size_hint: 0.24,
+        report_dock_filter_label: None,
+        report_dock_filter_query: None,
+        diagnostics_dock_filter_label: None,
+        diagnostics_dock_filter_query: None,
         extension_compatibility: extension_compatibility_state(),
         step_cache_by_document: std::collections::HashMap::new(),
         step_pmi_inspection_by_document: std::collections::HashMap::<
@@ -107,6 +111,10 @@ mod tests {
                 report_dock_visible: Some(true),
                 combo_view_size_hint: Some(0.31),
                 report_dock_size_hint: Some(0.22),
+                report_dock_filter_label: Some("Report / body-001".into()),
+                report_dock_filter_query: Some("body-001".into()),
+                diagnostics_dock_filter_label: Some("Diagnostics / body-001".into()),
+                diagnostics_dock_filter_query: Some("body-001".into()),
             }],
             combo_view_tab: "tasks".into(),
             bottom_dock_tab: "report".into(),
@@ -114,6 +122,10 @@ mod tests {
             report_dock_visible: true,
             combo_view_size_hint: 0.31,
             report_dock_size_hint: 0.22,
+            report_dock_filter_label: Some("Report / body-001".into()),
+            report_dock_filter_query: Some("body-001".into()),
+            diagnostics_dock_filter_label: Some("Diagnostics / body-001".into()),
+            diagnostics_dock_filter_query: Some("body-001".into()),
         };
 
         let model = build_bootstrap_model(

@@ -24,6 +24,10 @@ pub(super) struct PersistedWorkspaceState {
     pub(super) report_dock_visible: bool,
     pub(super) combo_view_size_hint: f32,
     pub(super) report_dock_size_hint: f32,
+    pub(super) report_dock_filter_label: Option<String>,
+    pub(super) report_dock_filter_query: Option<String>,
+    pub(super) diagnostics_dock_filter_label: Option<String>,
+    pub(super) diagnostics_dock_filter_query: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -49,6 +53,10 @@ pub(super) struct AppModel {
     pub(super) report_dock_visible: bool,
     pub(super) combo_view_size_hint: f32,
     pub(super) report_dock_size_hint: f32,
+    pub(super) report_dock_filter_label: Option<String>,
+    pub(super) report_dock_filter_query: Option<String>,
+    pub(super) diagnostics_dock_filter_label: Option<String>,
+    pub(super) diagnostics_dock_filter_query: Option<String>,
     pub(super) extension_compatibility: crate::domain::ExtensionCompatibilityState,
     pub(super) step_cache_by_document: HashMap<String, StepCacheEntry>,
     pub(super) step_pmi_inspection_by_document: HashMap<String, StepPmiInspectionSummary>,

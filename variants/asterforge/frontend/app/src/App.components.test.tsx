@@ -7,17 +7,24 @@ import { describe, expect, it, vi } from "vitest";
 import {
   buildEventNotices,
   buildShellNotices,
+  BottomDockPinnedRail,
   commandNoticeAction,
   commandNoticeObjectId,
   commandNoticeTitle,
   CommandPalette,
+  DiagnosticsPanel,
+  JobsPanel,
+  ModelBrowserPane,
   NotificationCenter,
+  PropertyInspectorPane,
   ReportActivityFeed,
   ReportInspectionSummary,
   SelectionInspector,
+  TaskPanel,
   StepViewportScene,
   SuggestedCommandEditor,
   ViewportCommandBar,
+  ViewportCommandLens,
   ViewportHeadsUp,
   ViewportHoverCard
 } from "./App";
@@ -27,6 +34,7 @@ import type {
   CommandDefinition,
   CommandCatalogResponse,
   FeatureHistoryResponse,
+  JobStatusResponse,
   ObjectNode,
   PreselectionStateResponse,
   PropertyResponse,
@@ -336,16 +344,21 @@ describe("App component surfaces", () => {
       />
     );
 
-    const commandBar = screen.getByText("Command Bar").closest(".viewport-command-bar");
+    const commandBar = screen.getByRole("region", { name: "Viewport tool shelf" });
 
     expect(commandBar).not.toBeNull();
 
     const commandBarQueries = within(commandBar as HTMLElement);
 
+    expect(commandBarQueries.getByText("Tool Shelf")).toBeTruthy();
+
+    expect(commandBarQueries.getByText("Hover")).toBeTruthy();
+    expect(commandBarQueries.getByText("Housing")).toBeTruthy();
+
     fireEvent.click(commandBarQueries.getByRole("button", { name: /Refresh PMI/i }));
     fireEvent.click(commandBarQueries.getByRole("button", { name: /Refresh Measure/i }));
-    fireEvent.click(commandBarQueries.getByRole("button", { name: /Focus F/i }));
-    fireEvent.click(commandBarQueries.getByRole("button", { name: /More F/i }));
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /Focus view F/i }));
+    fireEvent.click(commandBarQueries.getByRole("button", { name: /More palette F/i }));
 
     expect(onRunCommand).toHaveBeenNthCalledWith(1, "step.inspect_pmi", undefined, "step-entity-20");
     expect(onRunCommand).toHaveBeenNthCalledWith(2, "step.measure_selection", undefined, "step-entity-20");
@@ -356,7 +369,7 @@ describe("App component surfaces", () => {
   it("expands parameterized viewport commands into the shared editor and submits them against the active target", () => {
     const onRunCommand = vi.fn();
 
-    render(
+    const view = render(
       <ViewportCommandBar
         commandCatalog={{
           document_id: "doc-step",
@@ -410,12 +423,116 @@ describe("App component surfaces", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Pad Edit/i }));
-    fireEvent.change(screen.getByRole("spinbutton"), { target: { value: "18" } });
-    fireEvent.click(screen.getByRole("button", { name: "Pad" }));
+    const scoped = within(view.container);
+    const toolShelf = scoped.getByRole("region", { name: "Viewport tool shelf" });
+    const toolShelfQueries = within(toolShelf);
+
+    expect(toolShelfQueries.getByText("Hover")).toBeTruthy();
+    expect(toolShelfQueries.getByText("Sketch")).toBeTruthy();
+
+    fireEvent.click(toolShelfQueries.getByRole("button", { name: /Pad partdesign Edit/i }));
+    fireEvent.change(scoped.getByRole("spinbutton"), { target: { value: "18" } });
+    fireEvent.click(scoped.getByRole("button", { name: "Pad" }));
 
     expect(onRunCommand).toHaveBeenCalledWith("partdesign.pad", { length: "18" }, "sketch-001");
-    expect(screen.queryByRole("spinbutton")).toBeNull();
+    expect(scoped.queryByRole("spinbutton")).toBeNull();
+  });
+
+  it("opens a viewport command lens with pointer context and routes commands through the same target", () => {
+    const onClose = vi.fn();
+    const onOpenPalette = vi.fn();
+    const onRunCommand = vi.fn();
+
+    const view = render(
+      <ViewportCommandLens
+        anchor={{ x: 180, y: 160 }}
+        commandCatalog={{
+          document_id: "doc-step",
+          workbench: {
+            workbench_id: "step",
+            display_name: "STEP",
+            mode: "inspection"
+          },
+          commands: [
+            {
+              command_id: "step.inspect_pmi",
+              label: "Inspect PMI",
+              group: "inspect",
+              icon: "measure",
+              shortcut: undefined,
+              enabled: true,
+              requires_selection: true,
+              description: "Inspect semantic PMI for the hovered entity.",
+              action_label: "PMI",
+              arguments: []
+            },
+            {
+              command_id: "partdesign.pad",
+              label: "Create Pad",
+              group: "partdesign",
+              icon: "pad",
+              shortcut: undefined,
+              enabled: true,
+              requires_selection: true,
+              description: "Create a pad from the active sketch.",
+              action_label: "Pad",
+              arguments: [
+                {
+                  argument_id: "length",
+                  label: "Length",
+                  value_type: "quantity",
+                  required: true,
+                  default_value: "10",
+                  placeholder: "10 mm",
+                  unit: "mm",
+                  options: []
+                }
+              ]
+            }
+          ]
+        }}
+        onClose={onClose}
+        onOpenPalette={onOpenPalette}
+        onRunCommand={onRunCommand}
+        open={true}
+        preselectionState={{
+          document_id: "doc-step",
+          current_mode: "object",
+          object_id: "step-entity-20",
+          object_label: "Housing",
+          object_type: "STEP::MANIFOLD_SOLID_BREP",
+          selectable: true,
+          model_state: "parsed",
+          dependency_note: "Ready",
+          suggested_commands: ["step.inspect_pmi", "partdesign.pad"],
+          detail: "Hovered shell candidate"
+        }}
+        selectedObjectId={"step-entity-10"}
+        taskPanel={null}
+      />
+    );
+
+    const scoped = within(view.container);
+    const lens = scoped.getByRole("region", { name: "Viewport command lens" });
+    const lensQueries = within(lens);
+
+    expect(lensQueries.getByText("Command Lens")).toBeTruthy();
+    expect(lensQueries.getByText("Housing")).toBeTruthy();
+
+    fireEvent.click(lensQueries.getByRole("button", { name: /PMI inspect/i }));
+    expect(onRunCommand).toHaveBeenCalledWith("step.inspect_pmi", undefined, "step-entity-20");
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(lensQueries.getByRole("button", { name: /Pad partdesign Edit/i }));
+    fireEvent.change(scoped.getByRole("spinbutton"), { target: { value: "24" } });
+    fireEvent.click(scoped.getByRole("button", { name: "Pad" }));
+
+    expect(onRunCommand).toHaveBeenCalledWith("partdesign.pad", { length: "24" }, "step-entity-20");
+    expect(onClose).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(lensQueries.getByRole("button", { name: "Command Palette" }));
+    expect(onOpenPalette).toHaveBeenCalledTimes(1);
+    expect(onClose).toHaveBeenCalledTimes(3);
   });
 
   it("filters STEP viewport geometry through backend-visible drawables", () => {
@@ -913,6 +1030,397 @@ describe("App component surfaces", () => {
     expect(onRunNoticeCommand).toHaveBeenCalledWith("step.measure_selection", "step-entity-20");
     expect(onSelectNoticeObject).toHaveBeenCalledWith("step-entity-20");
     expect(onFocusNoticeObject).toHaveBeenCalledWith("step-entity-20");
+  });
+
+  it("renders pinned dock rail object actions for notices and jobs", () => {
+    const onFocusJobObject = vi.fn();
+    const onFocusNoticeObject = vi.fn();
+    const onRunJobCommand = vi.fn();
+    const onRunNoticeCommand = vi.fn();
+    const onSelectJobObject = vi.fn();
+    const onSelectNoticeObject = vi.fn();
+    const commandCatalog: CommandCatalogResponse = {
+      document_id: "doc-step",
+      workbench: {
+        workbench_id: "step",
+        display_name: "STEP",
+        mode: "inspection"
+      },
+      commands: [
+        {
+          command_id: "step.measure_selection",
+          label: "Measure Selection",
+          group: "inspect",
+          icon: "measure",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: true,
+          description: "Measure the current STEP selection.",
+          action_label: "Measure",
+          arguments: []
+        },
+        {
+          command_id: "document.open",
+          label: "Open",
+          group: "document",
+          icon: "open",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: false,
+          description: "Open the current document.",
+          action_label: "Reopen",
+          arguments: []
+        }
+      ]
+    };
+    const jobs: JobStatusResponse = {
+      document_id: "doc-step",
+      jobs: [
+        {
+          job_id: "job-import-1",
+          title: "Import STEP",
+          command_id: "document.open",
+          state: "running",
+          progress_percent: 75,
+          detail: "Indexing assemblies",
+          object_id: "step-entity-42",
+          stages: []
+        }
+      ]
+    };
+
+    const view = render(
+      <BottomDockPinnedRail
+        commandCatalog={commandCatalog}
+        jobs={jobs}
+        notices={[
+          {
+            id: "notice-step-measurement-1",
+            level: "info",
+            title: "step measurement",
+            detail: "Measured Housing at 1.00 x 1.00 x 1.00",
+            objectId: "step-entity-20",
+            commandAction: {
+              commandId: "step.measure_selection",
+              label: "Refresh Measure"
+            }
+          }
+        ]}
+        onFocusJobObject={onFocusJobObject}
+        onFocusNoticeObject={onFocusNoticeObject}
+        onOpenJobs={vi.fn()}
+        onOpenReport={vi.fn()}
+        onRunJobCommand={onRunJobCommand}
+        onRunNoticeCommand={onRunNoticeCommand}
+        onSelectJobObject={onSelectJobObject}
+        onSelectNoticeObject={onSelectNoticeObject}
+      />
+    );
+
+    const rail = within(view.container).getByRole("complementary");
+    const scoped = within(rail);
+
+    fireEvent.click(scoped.getByRole("button", { name: /Refresh Measure/i }));
+    fireEvent.click(scoped.getByRole("button", { name: /Reopen/i }));
+    fireEvent.click(scoped.getAllByRole("button", { name: "Select" })[0]!);
+    fireEvent.click(scoped.getAllByRole("button", { name: "Focus" })[0]!);
+    fireEvent.click(scoped.getAllByRole("button", { name: "Select" })[1]!);
+    fireEvent.click(scoped.getAllByRole("button", { name: "Focus" })[1]!);
+
+    expect(onRunNoticeCommand).toHaveBeenCalledWith("step.measure_selection", "step-entity-20");
+    expect(onRunJobCommand).toHaveBeenCalledWith("document.open", undefined);
+    expect(onSelectNoticeObject).toHaveBeenCalledWith("step-entity-20");
+    expect(onFocusNoticeObject).toHaveBeenCalledWith("step-entity-20");
+    expect(onSelectJobObject).toHaveBeenCalledWith("step-entity-42");
+    expect(onFocusJobObject).toHaveBeenCalledWith("step-entity-42");
+  });
+
+  it("renders command-aware job actions in the full jobs panel", () => {
+    const onFocusJobObject = vi.fn();
+    const onRunJobCommand = vi.fn();
+    const onSelectJobObject = vi.fn();
+    const commandCatalog: CommandCatalogResponse = {
+      document_id: "doc-step",
+      workbench: {
+        workbench_id: "step",
+        display_name: "STEP",
+        mode: "inspection"
+      },
+      commands: [
+        {
+          command_id: "step.measure_selection",
+          label: "Measure Selection",
+          group: "inspect",
+          icon: "measure",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: true,
+          description: "Measure the current STEP selection.",
+          action_label: "Measure",
+          arguments: []
+        }
+      ]
+    };
+    const jobs: JobStatusResponse = {
+      document_id: "doc-step",
+      jobs: [
+        {
+          job_id: "job-measure-1",
+          title: "Measure Housing",
+          command_id: "step.measure_selection",
+          state: "completed",
+          progress_percent: 100,
+          detail: "Measurement overlay ready",
+          object_id: "step-entity-20",
+          stages: []
+        }
+      ]
+    };
+
+    const view = render(
+      <JobsPanel
+        commandCatalog={commandCatalog}
+        jobs={jobs}
+        onFocusJobObject={onFocusJobObject}
+        onRunJobCommand={onRunJobCommand}
+        onSelectJobObject={onSelectJobObject}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.click(scoped.getByRole("button", { name: /Measure/i }));
+    fireEvent.click(scoped.getByRole("button", { name: "Select" }));
+    fireEvent.click(scoped.getByRole("button", { name: "Focus" }));
+
+    expect(onRunJobCommand).toHaveBeenCalledWith("step.measure_selection", "step-entity-20");
+    expect(onSelectJobObject).toHaveBeenCalledWith("step-entity-20");
+    expect(onFocusJobObject).toHaveBeenCalledWith("step-entity-20");
+  });
+
+  it("expands a job card into stage diagnostics and related backend activity excerpts", () => {
+    const commandCatalog: CommandCatalogResponse = {
+      document_id: "doc-step",
+      workbench: {
+        workbench_id: "step",
+        display_name: "STEP",
+        mode: "inspection"
+      },
+      commands: [
+        {
+          command_id: "step.measure_selection",
+          label: "Measure Selection",
+          group: "inspect",
+          icon: "measure",
+          shortcut: undefined,
+          enabled: true,
+          requires_selection: true,
+          description: "Measure the current STEP selection.",
+          action_label: "Measure",
+          arguments: []
+        }
+      ]
+    };
+    const jobs: JobStatusResponse = {
+      document_id: "doc-step",
+      jobs: [
+        {
+          job_id: "job-measure-1",
+          title: "Measure Housing",
+          command_id: "step.measure_selection",
+          state: "running",
+          progress_percent: 60,
+          detail: "Collecting measurement overlays",
+          object_id: "step-entity-20",
+          stages: [
+            {
+              stage_id: "stage-parse",
+              label: "Parse Geometry",
+              state: "completed",
+              progress_percent: 100
+            },
+            {
+              stage_id: "stage-overlay",
+              label: "Build Overlay",
+              state: "running",
+              progress_percent: 60
+            }
+          ]
+        }
+      ]
+    };
+    const reportEvents: ActivityEvent[] = [
+      {
+        topic: "step_measurement",
+        level: "info",
+        message: "Measured Housing at 1.00 x 1.00 x 1.00",
+        object_id: "step-entity-20",
+        document_id: "doc-step"
+      },
+      {
+        topic: "backend_warning",
+        level: "warning",
+        message: "Overlay fit fell back to tessellated bounds",
+        object_id: "step-entity-20",
+        document_id: "doc-step"
+      }
+    ];
+
+    const view = render(
+      <JobsPanel commandCatalog={commandCatalog} jobs={jobs} reportEvents={reportEvents} />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.click(scoped.getByRole("button", { name: "Details" }));
+
+    const stageSection = scoped.getByText("Stage Diagnostics").closest("section");
+    const activitySection = scoped.getByText("Recent Backend Activity").closest("section");
+
+    if (!(stageSection instanceof HTMLElement) || !(activitySection instanceof HTMLElement)) {
+      throw new Error("Expected expanded job detail sections to render");
+    }
+
+    expect(within(stageSection).getByText("Parse Geometry")).toBeTruthy();
+    expect(within(stageSection).getByText("Build Overlay")).toBeTruthy();
+    expect(within(activitySection).getByText("Measured Housing at 1.00 x 1.00 x 1.00")).toBeTruthy();
+    expect(within(activitySection).getByText("Overlay fit fell back to tessellated bounds")).toBeTruthy();
+  });
+
+  it("deep-links expanded job cards into scoped report and diagnostics views", () => {
+    const onOpenJobDiagnostics = vi.fn();
+    const onOpenJobReport = vi.fn();
+    const jobs: JobStatusResponse = {
+      document_id: "doc-step",
+      jobs: [
+        {
+          job_id: "job-measure-1",
+          title: "Measure Housing",
+          command_id: "step.measure_selection",
+          state: "running",
+          progress_percent: 60,
+          detail: "Collecting measurement overlays",
+          object_id: "step-entity-20",
+          stages: []
+        }
+      ]
+    };
+
+    const view = render(
+      <JobsPanel
+        commandCatalog={null}
+        jobs={jobs}
+        onOpenJobDiagnostics={onOpenJobDiagnostics}
+        onOpenJobReport={onOpenJobReport}
+        reportEvents={[]}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.click(scoped.getByRole("button", { name: "Details" }));
+    fireEvent.click(scoped.getByRole("button", { name: "Open Report" }));
+    fireEvent.click(scoped.getByRole("button", { name: "Open Diagnostics" }));
+
+    expect(onOpenJobReport).toHaveBeenCalledWith({
+      label: "Measure Housing / step-entity-20",
+      query: "step-entity-20"
+    });
+    expect(onOpenJobDiagnostics).toHaveBeenCalledWith({
+      label: "Measure Housing / step-entity-20",
+      query: "step-entity-20"
+    });
+  });
+
+  it("filters report activity through a dock-scoped filter and clears it", () => {
+    const onClearFilter = vi.fn();
+    const reportEvents: ActivityEvent[] = [
+      {
+        topic: "step_measurement",
+        level: "info",
+        message: "Measured Housing at 1.00 x 1.00 x 1.00",
+        object_id: "step-entity-20",
+        document_id: "doc-step"
+      },
+      {
+        topic: "document_changed",
+        level: "info",
+        message: "Opened sample-ap242-assembly.stp",
+        object_id: undefined,
+        document_id: "doc-step"
+      }
+    ];
+
+    const view = render(
+      <ReportActivityFeed
+        filterState={{ label: "Measure Housing / step-entity-20", query: "step-entity-20" }}
+        onClearFilter={onClearFilter}
+        reportEvents={reportEvents}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    expect(scoped.getByText("Scoped View")).toBeTruthy();
+    expect(scoped.getByText("Measured Housing at 1.00 x 1.00 x 1.00")).toBeTruthy();
+    expect(scoped.queryByText("Opened sample-ap242-assembly.stp")).toBeNull();
+
+    fireEvent.click(scoped.getByRole("button", { name: "Clear Filter" }));
+    expect(onClearFilter).toHaveBeenCalledTimes(1);
+  });
+
+  it("filters diagnostics signals through a dock-scoped filter and clears it", () => {
+    const onClearFilter = vi.fn();
+
+    const view = render(
+      <DiagnosticsPanel
+        commandStatus={null}
+        diagnostics={{
+          document_id: "doc-step",
+          summary: {
+            total_features: 8,
+            suppressed_count: 1,
+            inactive_count: 0,
+            rolled_back_count: 0,
+            viewport_drawable_count: 16,
+            warning_count: 1,
+            error_count: 0,
+            history_marker_active: false,
+            worker_mode: "inspection"
+          },
+          selection: {
+            object_id: "step-entity-20",
+            object_label: "Housing",
+            object_type: "Step::Shell",
+            model_state: "parsed",
+            dependency_note: "Visible through parser-backed shell state",
+            visible_in_viewport: true
+          },
+          recent_signals: [
+            {
+              level: "warning",
+              title: "Overlay Fit",
+              detail: "step-entity-20 fell back to tessellated bounds"
+            },
+            {
+              level: "info",
+              title: "Cache Warm",
+              detail: "Assembly cache primed for other objects"
+            }
+          ]
+        }}
+        filterState={{ label: "Measure Housing / step-entity-20", query: "step-entity-20" }}
+        onClearFilter={onClearFilter}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    expect(scoped.getByText("Overlay Fit")).toBeTruthy();
+    expect(scoped.queryByText("Cache Warm")).toBeNull();
+
+    fireEvent.click(scoped.getByRole("button", { name: "Clear Filter" }));
+    expect(onClearFilter).toHaveBeenCalledTimes(1);
   });
 
   it("renders global command notices with a shared rerun action but no object controls", () => {
@@ -1668,5 +2176,202 @@ describe("App component surfaces", () => {
     expect(onRunSelectedCommand).toHaveBeenCalledWith("selection.focus");
     expect(onPromotePreselectionCommand).toHaveBeenCalledWith("step.inspect_pmi");
     expect(onRunPreselectionCommand).toHaveBeenCalledWith("partdesign.pad", { length: "14" });
+  });
+
+  it("filters task sections and suggested commands through the prompt-style task panel search", () => {
+    const onRunCommand = vi.fn();
+
+    const view = render(
+      <TaskPanel
+        commandCatalog={{
+          document_id: "doc-demo-001",
+          workbench: {
+            workbench_id: "partdesign",
+            display_name: "Part Design",
+            mode: "edit"
+          },
+          commands: [
+            {
+              command_id: "partdesign.pad",
+              label: "Create Pad",
+              group: "partdesign",
+              icon: "pad",
+              shortcut: undefined,
+              enabled: true,
+              requires_selection: true,
+              description: "Create a pad from the current sketch.",
+              action_label: "Pad",
+              arguments: []
+            },
+            {
+              command_id: "partdesign.pocket",
+              label: "Create Pocket",
+              group: "partdesign",
+              icon: "cut",
+              shortcut: undefined,
+              enabled: true,
+              requires_selection: true,
+              description: "Create a pocket from the current sketch.",
+              action_label: "Pocket",
+              arguments: []
+            }
+          ]
+        }}
+        onRunCommand={onRunCommand}
+        taskPanel={{
+          document_id: "doc-demo-001",
+          title: "Part Design",
+          description: "Compact panel",
+          sections: [
+            {
+              section_id: "constraints",
+              title: "Constraints",
+              rows: [
+                { label: "Profile", value: "Closed", emphasis: true },
+                { label: "Symmetry", value: "Locked", emphasis: false }
+              ]
+            },
+            {
+              section_id: "padding",
+              title: "Padding",
+              rows: [{ label: "Length", value: "24 mm", emphasis: true }]
+            }
+          ],
+          suggested_commands: ["partdesign.pad", "partdesign.pocket"]
+        }}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.change(scoped.getByPlaceholderText("Search tasks, rows, and commands..."), {
+      target: { value: "pocket" }
+    });
+
+    expect(scoped.queryByText("Constraints")).toBeNull();
+    expect(scoped.queryByText("Padding")).toBeNull();
+    expect(scoped.queryByRole("button", { name: "Pad" })).toBeNull();
+    fireEvent.click(scoped.getByRole("button", { name: "Pocket" }));
+
+    expect(onRunCommand).toHaveBeenCalledWith("partdesign.pocket");
+  });
+
+  it("filters visible properties through the prompt-style property pane search", () => {
+    const view = render(
+      <PropertyInspectorPane
+        objectId={"body-001"}
+        properties={{
+          object_id: "body-001",
+          groups: [
+            {
+              group_id: "base",
+              title: "Base",
+              properties: [
+                {
+                  property_id: "label",
+                  display_name: "Label",
+                  property_type: "App::PropertyString",
+                  value_preview: "Body",
+                  expression_capable: false,
+                  value_kind: "string",
+                  read_only: false,
+                  unit: undefined
+                },
+                {
+                  property_id: "placement",
+                  display_name: "Placement",
+                  property_type: "App::PropertyPlacement",
+                  value_preview: "0, 0, 0",
+                  expression_capable: true,
+                  value_kind: "placement",
+                  read_only: false,
+                  unit: undefined
+                }
+              ]
+            },
+            {
+              group_id: "design",
+              title: "Design",
+              properties: [
+                {
+                  property_id: "thickness",
+                  display_name: "Thickness",
+                  property_type: "App::PropertyLength",
+                  value_preview: "4 mm",
+                  expression_capable: true,
+                  value_kind: "quantity",
+                  read_only: false,
+                  unit: "mm"
+                }
+              ]
+            }
+          ]
+        }}
+      />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.change(scoped.getByPlaceholderText("Search properties, values, and groups..."), {
+      target: { value: "thickness" }
+    });
+
+    expect(scoped.queryByText("Base")).toBeNull();
+    expect(scoped.getByText("Design")).toBeTruthy();
+    expect(scoped.getByText("Thickness")).toBeTruthy();
+    expect(scoped.queryByText("Placement")).toBeNull();
+  });
+
+  it("filters the model browser while preserving the matching ancestor path", () => {
+    const onHoverChange = vi.fn();
+    const onSelect = vi.fn();
+
+    const view = render(
+      <ModelBrowserPane
+        objectTree={[
+          {
+            object_id: "body-001",
+            label: "Body",
+            object_type: "PartDesign::Body",
+            visibility: "visible",
+            children: [
+              {
+                object_id: "pad-001",
+                label: "Pad",
+                object_type: "PartDesign::Pad",
+                visibility: "visible",
+                children: []
+              }
+            ]
+          },
+          {
+            object_id: "sketch-001",
+            label: "Sketch",
+            object_type: "Sketcher::SketchObject",
+            visibility: "visible",
+            children: []
+          }
+        ]}
+        onHoverChange={onHoverChange}
+        onSelect={onSelect}
+        preselectedObjectId={null}
+        selectedObjectId={null}
+        selectionMode="object"
+      />
+    );
+
+    const scoped = within(view.container);
+
+    fireEvent.change(scoped.getByPlaceholderText("Search labels, ids, and object types..."), {
+      target: { value: "pad" }
+    });
+
+    expect(scoped.getByText("Body")).toBeTruthy();
+    expect(scoped.getByText("Pad")).toBeTruthy();
+    expect(scoped.queryByText("Sketch")).toBeNull();
+
+    fireEvent.click(scoped.getByRole("button", { name: /Pad/i }));
+
+    expect(onSelect).toHaveBeenCalledWith("pad-001");
   });
 });

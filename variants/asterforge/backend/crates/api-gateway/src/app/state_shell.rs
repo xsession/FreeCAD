@@ -153,6 +153,36 @@ pub(super) fn apply_shell_session_update(
         changed |= model.workspace_sessions.len() != previous_len;
     }
 
+    if let Some(label) = request.report_dock_filter_label {
+        model.report_dock_filter_label = Some(label);
+        changed = true;
+    }
+
+    if let Some(query) = request.report_dock_filter_query {
+        model.report_dock_filter_query = Some(query);
+        changed = true;
+    }
+
+    if let Some(label) = request.diagnostics_dock_filter_label {
+        model.diagnostics_dock_filter_label = Some(label);
+        changed = true;
+    }
+
+    if let Some(query) = request.diagnostics_dock_filter_query {
+        model.diagnostics_dock_filter_query = Some(query);
+        changed = true;
+    }
+
+    if request.clear_report_dock_filter {
+        changed |= model.report_dock_filter_label.take().is_some();
+        changed |= model.report_dock_filter_query.take().is_some();
+    }
+
+    if request.clear_diagnostics_dock_filter {
+        changed |= model.diagnostics_dock_filter_label.take().is_some();
+        changed |= model.diagnostics_dock_filter_query.take().is_some();
+    }
+
     if !changed {
         return Some(model.shell_snapshot());
     }
@@ -167,8 +197,16 @@ pub(super) fn apply_shell_session_update(
         "cleared recent documents".to_string()
     } else if request.clear_inactive_workspace_sessions {
         "cleared inactive workspace sessions".to_string()
+    } else if request.clear_report_dock_filter && request.clear_diagnostics_dock_filter {
+        "cleared dock filters".to_string()
+    } else if request.clear_report_dock_filter {
+        "cleared report dock filter".to_string()
+    } else if request.clear_diagnostics_dock_filter {
+        "cleared diagnostics dock filter".to_string()
     } else if let Some(session_id) = request.remove_workspace_session_id {
         format!("dismissed workspace session {session_id}")
+    } else if model.report_dock_filter_query.is_some() || model.diagnostics_dock_filter_query.is_some() {
+        "updated dock filter session state".to_string()
     } else {
         "updated shell session state".to_string()
     };

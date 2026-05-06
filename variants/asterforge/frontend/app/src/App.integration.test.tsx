@@ -25,6 +25,7 @@ const protocolMocks = vi.hoisted(() => ({
   setSelection: vi.fn(),
   setSelectionMode: vi.fn(),
   updateShellPanelState: vi.fn(),
+  updateShellSessionState: vi.fn(),
 }));
 
 const stepClientMocks = vi.hoisted(() => ({
@@ -56,6 +57,7 @@ vi.mock("./protocol", async () => {
     setSelection: protocolMocks.setSelection,
     setSelectionMode: protocolMocks.setSelectionMode,
     updateShellPanelState: protocolMocks.updateShellPanelState,
+    updateShellSessionState: protocolMocks.updateShellSessionState,
   };
 });
 
@@ -401,6 +403,7 @@ describe("App STEP viewport integration", () => {
     }));
     protocolMocks.activateWorkbench.mockResolvedValue(document);
     protocolMocks.updateShellPanelState.mockResolvedValue(shellSnapshot);
+    protocolMocks.updateShellSessionState.mockResolvedValue(shellSnapshot);
     protocolMocks.setSelection.mockResolvedValue({ selected_object_id: "step-entity-20" });
     protocolMocks.setSelectionMode.mockResolvedValue(selectionState);
     protocolMocks.setPreselection.mockResolvedValue(bootstrap.preselection_state);
@@ -526,7 +529,85 @@ describe("App STEP viewport integration", () => {
     expect(statusbarQueries.getByText("Step Runtime")).toBeTruthy();
   });
 
-  it("opens the command palette with F and switches selection modes with number keys", async () => {
+  it("drags the combo view divider through the existing panel-size mutation", async () => {
+    const { container } = render(<App />);
+
+    await screen.findByText("Inspection | In progress");
+
+    const workspace = container.querySelector(".freecad-workspace") as HTMLElement;
+    expect(workspace).toBeTruthy();
+    Object.defineProperty(workspace, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 800,
+        height: 800,
+        left: 0,
+        right: 1000,
+        toJSON: () => ({}),
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+      }),
+    });
+
+    fireEvent(
+      screen.getByRole("separator", { name: "Resize combo view" }),
+      new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientX: 280 })
+    );
+    fireEvent(window, new MouseEvent("pointermove", { bubbles: true, cancelable: true, clientX: 360 }));
+    fireEvent(window, new MouseEvent("pointerup", { bubbles: true, cancelable: true, clientX: 360 }));
+
+    await waitFor(() => {
+      expect(protocolMocks.updateShellPanelState).toHaveBeenCalled();
+    });
+
+    const mutation = protocolMocks.updateShellPanelState.mock.calls.at(-1);
+    expect(mutation?.[0]).toBe("doc-step");
+    expect(mutation?.[1]).toBe("combo_view");
+    expect(mutation?.[2]?.size_hint).toBeCloseTo(0.36, 5);
+  });
+
+  it("drags the bottom dock divider through the existing panel-size mutation", async () => {
+    const { container } = render(<App />);
+
+    await screen.findByText("Inspection | In progress");
+
+    const mainColumn = container.querySelector(".freecad-main-column") as HTMLElement;
+    expect(mainColumn).toBeTruthy();
+    Object.defineProperty(mainColumn, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        bottom: 800,
+        height: 800,
+        left: 0,
+        right: 1000,
+        toJSON: () => ({}),
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+      }),
+    });
+
+    fireEvent(
+      screen.getByRole("separator", { name: "Resize bottom dock" }),
+      new MouseEvent("pointerdown", { bubbles: true, cancelable: true, clientY: 610 })
+    );
+    fireEvent(window, new MouseEvent("pointermove", { bubbles: true, cancelable: true, clientY: 560 }));
+    fireEvent(window, new MouseEvent("pointerup", { bubbles: true, cancelable: true, clientY: 560 }));
+
+    await waitFor(() => {
+      expect(protocolMocks.updateShellPanelState).toHaveBeenCalled();
+    });
+
+    const mutation = protocolMocks.updateShellPanelState.mock.calls.at(-1);
+    expect(mutation?.[0]).toBe("doc-step");
+    expect(mutation?.[1]).toBe("report_dock");
+    expect(mutation?.[2]?.size_hint).toBeCloseTo(0.3, 5);
+  });
+
+  it("opens the command palette with F, opens the viewport command lens with Space, and switches selection modes with number keys", async () => {
     protocolMocks.setSelectionMode.mockResolvedValue({
       document_id: "doc-step",
       current_mode: "body",
@@ -554,6 +635,16 @@ describe("App STEP viewport integration", () => {
     render(<App />);
 
     await screen.findByText("Inspection | In progress");
+
+    fireEvent.keyDown(window, { key: " ", code: "Space" });
+
+    expect(await screen.findByRole("region", { name: "Viewport command lens" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "Escape", code: "Escape" });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("region", { name: "Viewport command lens" })).toBeNull();
+    });
 
     fireEvent.keyDown(window, { key: "f", code: "KeyF" });
 
@@ -1383,7 +1474,7 @@ describe("App STEP viewport integration", () => {
     });
 
     expect(await screen.findByText("Extension Compatibility")).toBeTruthy();
-    expect(screen.getByText("Backend-owned extension migration surface.")).toBeTruthy();
+    expect(screen.getAllByText("Backend-owned extension migration surface.").length).toBeGreaterThan(0);
     expect(screen.getByText("Macro execution and management")).toBeTruthy();
     expect(screen.getByText("Publish backend macro inventory.")).toBeTruthy();
 
@@ -1476,5 +1567,302 @@ describe("App STEP viewport integration", () => {
 
     expect(screen.getByText("External workbench registration")).toBeTruthy();
     expect(screen.getAllByText("reviewing").length).toBeGreaterThan(0);
+  });
+
+  it("restores a different workspace session without reusing the current document selection state", async () => {
+    const restoredDocument = {
+      document_id: "doc-restored",
+      display_name: "restored.FCStd",
+      file_path: "C:/models/restored.FCStd",
+      workbench: "Part",
+      dirty: false,
+    };
+
+    const restoredModes = [
+      {
+        mode_id: "object",
+        label: "Objects",
+        description: "Select restored objects.",
+        enabled: true,
+        object_count: 2,
+      },
+      {
+        mode_id: "face",
+        label: "Faces",
+        description: "Select restored faces.",
+        enabled: true,
+        object_count: 6,
+      },
+    ];
+
+    protocolMocks.fetchBootstrap.mockResolvedValueOnce({
+      boot_report: { services: [{ service_id: "gateway", status: "ready", detail: "ok" }] },
+      bridge_status: { connected: true, worker_mode: "runtime", bridge_pid: undefined },
+      document: {
+        document_id: "doc-current",
+        display_name: "current.FCStd",
+        file_path: "C:/models/current.FCStd",
+        workbench: "PartDesign",
+        dirty: false,
+      },
+      shell_snapshot: {
+        document: {
+          document_id: "doc-current",
+          display_name: "current.FCStd",
+          file_path: "C:/models/current.FCStd",
+          workbench: "PartDesign",
+          dirty: false,
+        },
+        workbench_catalog: {
+          active_workbench_id: "partdesign",
+          workbenches: [
+            {
+              workbench_id: "partdesign",
+              display_name: "PartDesign",
+              icon: "part",
+              enabled: true,
+              description: "Current workbench",
+              category: "Modeling",
+              migration_lane: "In progress",
+            },
+            {
+              workbench_id: "part",
+              display_name: "Part",
+              icon: "part",
+              enabled: true,
+              description: "Restored workbench",
+              category: "Modeling",
+              migration_lane: "Queued primary",
+            },
+          ],
+        },
+        menu_bar: { workbench_id: "partdesign", menus: [] },
+        toolbar_bands: { workbench_id: "partdesign", bands: [] },
+        layout: {
+          panels: [
+            { panel_id: "combo_view", active_tab: "model", visible: true, size_hint: 0.28 },
+            { panel_id: "report_dock", active_tab: "report", visible: true, size_hint: 0.24 },
+          ],
+        },
+        status_bar: {
+          items: [{ item_id: "workbench", label: "Workbench", value: "PartDesign", tone: "neutral" }],
+        },
+        extension_compatibility: undefined,
+        recent_documents: [],
+        workspace_sessions: [
+          {
+            session_id: "session-restored",
+            document_id: restoredDocument.document_id,
+            display_name: restoredDocument.display_name,
+            file_path: restoredDocument.file_path,
+            workbench: "Part",
+            dirty: false,
+            selected_object_id: null,
+            selection_mode: "face",
+            combo_view_tab: "tasks",
+            bottom_dock_tab: "report",
+            combo_view_visible: true,
+            report_dock_visible: true,
+            combo_view_size_hint: 0.31,
+            report_dock_size_hint: 0.27,
+            report_dock_filter_label: "Restored Report / step-entity-42",
+            report_dock_filter_query: "step-entity-42",
+            diagnostics_dock_filter_label: "Restored Diagnostics / step-entity-42",
+            diagnostics_dock_filter_query: "step-entity-42",
+          },
+        ],
+        inspection: undefined,
+      },
+      object_tree: [],
+      selected_object_id: "body-current",
+      selection_state: {
+        document_id: "doc-current",
+        current_mode: "object",
+        selected_object_id: "body-current",
+        selected_object_label: "Current Body",
+        selected_object_type: "PartDesign::Body",
+        available_modes: restoredModes,
+      },
+      preselection_state: {
+        document_id: "doc-current",
+        current_mode: "object",
+        object_id: undefined,
+        object_label: undefined,
+        object_type: undefined,
+        selectable: false,
+        model_state: "none",
+        dependency_note: "",
+        suggested_commands: [],
+        detail: "",
+      },
+      jobs: { document_id: "doc-current", jobs: [] },
+      properties: { object_id: "body-current", groups: [] },
+      viewport: {
+        document_id: "doc-current",
+        selected_object_id: "body-current",
+        scene: { camera_eye: [2, 2, 2], camera_target: [0, 0, 0], drawables: [] },
+      },
+      feature_history: { document_id: "doc-current", entries: [] },
+      command_catalog: {
+        document_id: "doc-current",
+        workbench: { workbench_id: "partdesign", display_name: "PartDesign", mode: "" },
+        commands: [],
+      },
+      task_panel: {
+        document_id: "doc-current",
+        title: "Tasks",
+        description: "",
+        sections: [],
+        suggested_commands: [],
+      },
+      diagnostics: {
+        document_id: "doc-current",
+        summary: {
+          total_features: 0,
+          suppressed_count: 0,
+          inactive_count: 0,
+          rolled_back_count: 0,
+          viewport_drawable_count: 0,
+          warning_count: 0,
+          error_count: 0,
+          history_marker_active: false,
+          worker_mode: "runtime",
+        },
+        selection: {
+          object_id: "body-current",
+          object_label: "Current Body",
+          object_type: "PartDesign::Body",
+          model_state: "ready",
+          dependency_note: "",
+          visible_in_viewport: true,
+        },
+        recent_signals: [],
+      },
+      events: [],
+    });
+
+    protocolMocks.openDocument.mockResolvedValueOnce(restoredDocument);
+    protocolMocks.fetchEvents.mockResolvedValueOnce([]);
+    protocolMocks.fetchViewport.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      selected_object_id: null,
+      scene: { camera_eye: [3, 3, 3], camera_target: [0, 0, 0], drawables: [] },
+    });
+    protocolMocks.fetchCommandCatalog.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      workbench: { workbench_id: "part", display_name: "Part", mode: "" },
+      commands: [],
+    });
+    protocolMocks.fetchTaskPanel.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      title: "Tasks",
+      description: "",
+      sections: [],
+      suggested_commands: [],
+    });
+    protocolMocks.fetchDiagnostics.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      summary: {
+        total_features: 0,
+        suppressed_count: 0,
+        inactive_count: 0,
+        rolled_back_count: 0,
+        viewport_drawable_count: 0,
+        warning_count: 0,
+        error_count: 0,
+        history_marker_active: false,
+        worker_mode: "runtime",
+      },
+      selection: undefined,
+      recent_signals: [],
+    });
+    protocolMocks.fetchPreselectionState.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      current_mode: "object",
+      object_id: undefined,
+      object_label: undefined,
+      object_type: undefined,
+      selectable: false,
+      model_state: "none",
+      dependency_note: "",
+      suggested_commands: [],
+      detail: "",
+    });
+    protocolMocks.fetchSelectionState.mockResolvedValueOnce({
+      document_id: restoredDocument.document_id,
+      current_mode: "object",
+      selected_object_id: null,
+      selected_object_label: null,
+      selected_object_type: null,
+      available_modes: restoredModes,
+    });
+    protocolMocks.fetchJobs.mockResolvedValueOnce({ document_id: restoredDocument.document_id, jobs: [] });
+    protocolMocks.fetchShellSnapshot.mockResolvedValueOnce({
+      document: restoredDocument,
+      workbench_catalog: {
+        active_workbench_id: "part",
+        workbenches: [
+          {
+            workbench_id: "part",
+            display_name: "Part",
+            icon: "part",
+            enabled: true,
+            description: "Restored workbench",
+            category: "Modeling",
+            migration_lane: "Queued primary",
+          },
+        ],
+      },
+      menu_bar: { workbench_id: "part", menus: [] },
+      toolbar_bands: { workbench_id: "part", bands: [] },
+      layout: {
+        panels: [
+          { panel_id: "combo_view", active_tab: "tasks", visible: true, size_hint: 0.31 },
+          { panel_id: "report_dock", active_tab: "report", visible: true, size_hint: 0.27 },
+        ],
+      },
+      status_bar: {
+        items: [{ item_id: "workbench", label: "Workbench", value: "Part", tone: "neutral" }],
+      },
+      extension_compatibility: undefined,
+      recent_documents: [],
+      workspace_sessions: [
+        {
+          session_id: "session-restored",
+          document_id: restoredDocument.document_id,
+          display_name: restoredDocument.display_name,
+          file_path: restoredDocument.file_path,
+          workbench: "Part",
+          dirty: false,
+          selected_object_id: null,
+          selection_mode: "face",
+          combo_view_tab: "tasks",
+          bottom_dock_tab: "report",
+          combo_view_visible: true,
+          report_dock_visible: true,
+          combo_view_size_hint: 0.31,
+          report_dock_size_hint: 0.27,
+          report_dock_filter_label: "Restored Report / step-entity-42",
+          report_dock_filter_query: "step-entity-42",
+          diagnostics_dock_filter_label: "Restored Diagnostics / step-entity-42",
+          diagnostics_dock_filter_query: "step-entity-42",
+        },
+      ],
+      inspection: undefined,
+    });
+    protocolMocks.fetchFeatureHistory.mockResolvedValueOnce({ document_id: restoredDocument.document_id, entries: [] });
+    protocolMocks.fetchObjectTree.mockResolvedValueOnce([]);
+    protocolMocks.fetchProperties.mockResolvedValueOnce({ object_id: null, groups: [] });
+
+    render(<App />);
+
+  fireEvent.click(await screen.findByRole("button", { name: /Report Scope: Restored Report \/ step-entity-42/i }));
+
+    await waitFor(() => {
+      expect(protocolMocks.openDocument).toHaveBeenCalledWith(restoredDocument.file_path);
+    });
+    expect(protocolMocks.setSelectionMode).toHaveBeenCalledWith(restoredDocument.document_id, "face");
+    expect(protocolMocks.setSelection).not.toHaveBeenCalledWith(restoredDocument.document_id, "body-current");
+    expect(await screen.findByText("Restored Report / step-entity-42")).toBeTruthy();
   });
 });

@@ -36,6 +36,10 @@ pub struct WorkspaceSessionEntry {
     pub report_dock_visible: Option<bool>,
     pub combo_view_size_hint: Option<f32>,
     pub report_dock_size_hint: Option<f32>,
+    pub report_dock_filter_label: Option<String>,
+    pub report_dock_filter_query: Option<String>,
+    pub diagnostics_dock_filter_label: Option<String>,
+    pub diagnostics_dock_filter_query: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -586,6 +590,10 @@ mod tests {
                 report_dock_visible: Some(true),
                 combo_view_size_hint: Some(0.28),
                 report_dock_size_hint: Some(0.24),
+                report_dock_filter_label: Some("Report / body-001".into()),
+                report_dock_filter_query: Some("body-001".into()),
+                diagnostics_dock_filter_label: Some("Diagnostics / body-001".into()),
+                diagnostics_dock_filter_query: Some("body-001".into()),
             },
         );
 

@@ -1,27 +1,27 @@
 :root {
   color-scheme: dark;
-  --bg: #2f373e;
-  --bg-soft: #414b53;
-  --panel: #2f373e;
-  --panel-strong: #293138;
-  --line: rgba(214, 220, 226, 0.15);
-  --text: #e4e8eb;
-  --muted: #b5bcc3;
-  --accent: #ff8f3d;
-  --accent-soft: #ffc27f;
+  --bg: #14181d;
+  --bg-soft: #1b2128;
+  --panel: rgba(21, 26, 32, 0.84);
+  --panel-strong: rgba(16, 20, 25, 0.92);
+  --line: rgba(193, 206, 220, 0.09);
+  --text: #edf2f7;
+  --muted: #95a2b1;
+  --accent: #f3a14b;
+  --accent-soft: #ffd09a;
   --signal: #8fe3c1;
   --warning: #ffd166;
   --danger: #ff7272;
-  --shadow: none;
-  --shell-frame-gap: 1px;
-  --shell-bar-height: 24px;
-  --shell-panel-radius: 2px;
-  --shell-control-height: 24px;
-  --shell-control-padding-x: 8px;
-  --shell-toolbar-gap: 3px;
-  --shell-workspace-gap: 1px;
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+  --shell-frame-gap: 8px;
+  --shell-bar-height: 28px;
+  --shell-panel-radius: 14px;
+  --shell-control-height: 30px;
+  --shell-control-padding-x: 10px;
+  --shell-toolbar-gap: 8px;
+  --shell-workspace-gap: 10px;
   --focus-ring: 1px solid rgba(255, 194, 127, 0.95);
-  font-family: "Segoe UI", "Segoe UI Variable", sans-serif;
+  font-family: "Segoe UI Variable Text", "Aptos", "Segoe UI", sans-serif;
 }
 
 * {
@@ -33,7 +33,9 @@ body,
 #root {
   margin: 0;
   min-height: 100%;
-  background: #20272d;
+  background:
+    radial-gradient(circle at top, rgba(67, 88, 117, 0.12), transparent 28%),
+    linear-gradient(180deg, #11151a, #0c1014 56%, #0b0f13);
   color: var(--text);
 }
 
@@ -70,32 +72,42 @@ select:focus-visible {
 .app-shell {
   width: 100vw;
   margin: 0;
-  padding: 0;
+  padding: 10px;
 }
 
 .freecad-shell {
   display: grid;
   gap: var(--shell-frame-gap);
   min-height: 100vh;
-  background: #1d2328;
+  padding: 10px;
+  background: rgba(10, 13, 17, 0.8);
 }
 
-.freecad-menubar,
 .freecad-toolbar-stack,
 .freecad-statusbar {
   background: linear-gradient(180deg, var(--panel), var(--panel-strong));
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
 }
 
-.freecad-menubar,
 .freecad-statusbar {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   min-height: var(--shell-bar-height);
-  padding: 0 4px;
-  border-radius: 0;
+  padding: 0 10px;
+  border-radius: 12px;
+}
+
+.freecad-inline-menubar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .freecad-menu {
@@ -108,8 +120,8 @@ select:focus-visible {
   border: 0;
   background: transparent;
   color: var(--text);
-  padding: 2px 7px;
-  border-radius: 2px;
+  padding: 4px 9px;
+  border-radius: 999px;
   cursor: pointer;
 }
 
@@ -185,38 +197,96 @@ select:focus-visible {
 
 .freecad-toolbar-stack {
   display: grid;
-  gap: 2px;
-  padding: 2px 4px;
-  border-radius: 0;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 18px;
 }
 
 .freecad-toolbar-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-wrap: wrap;
+}
+
+.freecad-toolbar-row:first-child {
+  align-items: flex-start;
 }
 
 .freecad-toolbar-row-compact {
   min-height: var(--shell-control-height);
 }
 
+.studio-shell-header {
+  gap: 12px;
+  padding: 14px;
+  border-radius: 24px;
+}
+
+.studio-shell-row {
+  align-items: center;
+  gap: 14px;
+}
+
+.studio-inline-menubar {
+  flex: 0 0 auto;
+}
+
+.studio-title-cluster {
+  min-width: 180px;
+}
+
+.studio-shell-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+}
+
+.studio-workbench-picker {
+  min-width: 220px;
+}
+
+.studio-open-form {
+  flex: 1 1 360px;
+}
+
+.studio-status-cluster {
+  flex: 0 1 auto;
+}
+
+.studio-command-rail {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.studio-scope-chip {
+  max-width: min(320px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.studio-restore-actions {
+  margin-left: auto;
+}
+
 .freecad-brand {
   display: grid;
-  gap: 0;
-  min-width: 148px;
+  gap: 2px;
+  min-width: 180px;
 }
 
 .freecad-brand strong {
-  font-family: "Segoe UI", sans-serif;
-  font-size: 0.82rem;
-  font-weight: 600;
+  font-family: "Segoe UI Variable Display", "Aptos Display", sans-serif;
+  font-size: 0.98rem;
+  font-weight: 620;
 }
 
 .freecad-frame-title {
-  color: var(--muted);
-  font-size: 0.7rem;
-  letter-spacing: 0.03em;
+  display: none;
 }
 
 .workbench-picker {
@@ -228,12 +298,12 @@ select:focus-visible {
 .workbench-active-chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-height: var(--shell-control-height);
-  padding: 0 6px;
+  padding: 0 10px;
   border-radius: var(--shell-panel-radius);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .workbench-active-chip strong {
@@ -253,7 +323,7 @@ select:focus-visible {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 0.72rem;
+  font-size: 0.62rem;
 }
 
 .workbench-picker select {
@@ -278,7 +348,7 @@ select:focus-visible {
 
 .freecad-open-form {
   margin-top: 0;
-  flex: 1 1 420px;
+  flex: 0 1 340px;
 }
 
 .topbar,
@@ -287,6 +357,7 @@ select:focus-visible {
   background: linear-gradient(180deg, var(--panel), var(--panel-strong));
   border: 1px solid var(--line);
   box-shadow: var(--shadow);
+  backdrop-filter: blur(16px);
 }
 
 .topbar {
@@ -300,6 +371,8 @@ select:focus-visible {
 
 .session-tabs-shell {
   margin-top: 0;
+  padding: 4px 2px 2px;
+  background: transparent;
 }
 
 .session-tabs-header {
@@ -307,31 +380,34 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .session-tabs {
   display: flex;
-  gap: 2px;
+  gap: 6px;
   overflow-x: auto;
-  padding-bottom: 0;
+  padding-bottom: 2px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.01));
+  min-width: 0;
 }
 
 .session-tab-card {
   position: relative;
-  min-width: 210px;
+  min-width: 248px;
 }
 
 .session-tab {
-  min-width: 180px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: linear-gradient(180deg, rgba(34, 42, 49, 0.9), rgba(25, 32, 38, 0.92));
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(26, 31, 37, 0.76), rgba(18, 22, 28, 0.82));
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -339,40 +415,83 @@ select:focus-visible {
 }
 
 .session-tab-active {
-  border-color: rgba(255, 143, 61, 0.34);
+  border-color: rgba(243, 161, 75, 0.22);
   background:
-    linear-gradient(135deg, rgba(255, 143, 61, 0.12), rgba(143, 227, 193, 0.06)),
-    linear-gradient(180deg, rgba(20, 30, 35, 0.82), rgba(10, 17, 21, 0.86));
+    linear-gradient(135deg, rgba(243, 161, 75, 0.08), rgba(143, 227, 193, 0.04)),
+    linear-gradient(180deg, rgba(20, 27, 31, 0.8), rgba(12, 18, 22, 0.86));
 }
 
 .session-tab-main,
 .session-tab-meta {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.session-tab-main strong {
+  font-size: 0.76rem;
+  line-height: 1.15;
 }
 
 .session-tab-main span,
 .session-tab-meta span {
   color: var(--muted);
-  font-size: 0.68rem;
+  font-size: 0.64rem;
   letter-spacing: 0.05em;
+}
+
+.session-tab-main span {
+  letter-spacing: 0;
+  text-transform: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .session-tab-meta {
   text-transform: uppercase;
-  flex: none;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content;
+  gap: 8px;
+  align-items: center;
+}
+
+.session-tab-scope {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 0.64rem;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-tab-scope-button {
+  width: calc(100% - 12px);
+  margin: 4px 6px 0;
+  padding: 5px 7px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.session-tab-scope-button:hover {
+  border-color: rgba(255, 143, 61, 0.2);
+  color: var(--text-primary);
 }
 
 .session-tab-close {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 24px;
-  height: 24px;
+  top: 7px;
+  right: 7px;
+  width: 20px;
+  height: 20px;
   border: 0;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--muted);
   cursor: pointer;
 }
@@ -396,21 +515,23 @@ select:focus-visible {
 
 .recent-docs-list {
   display: flex;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: wrap;
 }
 
 .recent-doc-chip {
-  padding: 2px 8px;
+  min-height: 22px;
+  padding: 2px 10px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 143, 61, 0.16);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
   color: var(--text);
+  font-size: 0.72rem;
 }
 
 .recent-doc-chip-active {
-  border-color: rgba(255, 143, 61, 0.35);
-  background: rgba(255, 143, 61, 0.08);
+  border-color: rgba(255, 143, 61, 0.24);
+  background: rgba(255, 143, 61, 0.06);
 }
 
 .topbar h1,
@@ -423,8 +544,9 @@ select:focus-visible {
 
 .status-cluster {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 
 .shell-layout-actions {
@@ -434,12 +556,12 @@ select:focus-visible {
 }
 
 .badge {
-  padding: 3px 7px;
+  padding: 4px 9px;
   border-radius: var(--shell-panel-radius);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(255, 255, 255, 0.04);
   color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
-  font-size: 0.72rem;
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 0.68rem;
 }
 
 .badge strong {
@@ -449,8 +571,8 @@ select:focus-visible {
 }
 
 .badge-hot {
-  border-color: rgba(255, 143, 61, 0.4);
-  background: rgba(255, 143, 61, 0.12);
+  border-color: rgba(243, 161, 75, 0.24);
+  background: rgba(243, 161, 75, 0.08);
 }
 
 .badge-interactive {
@@ -515,11 +637,11 @@ select:focus-visible {
 }
 
 .recent-doc-chip {
-  border: 1px solid rgba(255, 143, 61, 0.16);
-  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
   color: var(--text);
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px 10px;
   cursor: pointer;
 }
 
@@ -531,9 +653,9 @@ select:focus-visible {
 .open-input {
   min-width: min(420px, 100%);
   flex: 1 1 320px;
-  padding: 6px 10px;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(255, 255, 255, 0.02);
   color: var(--text);
 }
@@ -578,8 +700,8 @@ select:focus-visible {
 }
 
 .panel {
-  border-radius: 6px;
-  padding: 10px;
+  border-radius: 18px;
+  padding: 12px;
 }
 
 .inline-alert,
@@ -605,8 +727,8 @@ select:focus-visible {
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .dock-subtab-strip {
@@ -615,13 +737,14 @@ select:focus-visible {
 
 .dock-tab-button-active,
 .dock-subtab-button-active {
-  background: rgba(255, 143, 61, 0.12);
+  background: rgba(243, 161, 75, 0.14);
   color: var(--accent-soft);
 }
 
 .dock-tab-button-utility {
   color: var(--muted);
-  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .dock-panel {
@@ -632,6 +755,7 @@ select:focus-visible {
 .combo-view-body,
 .bottom-dock-content,
 .bottom-dock-report,
+.bottom-dock-layout,
 .freecad-main-column,
 .combo-view-task-stack {
   display: grid;
@@ -645,6 +769,7 @@ select:focus-visible {
   gap: var(--shell-workspace-gap);
   min-height: 0;
   flex: 1 1 auto;
+  align-items: stretch;
 }
 
 .freecad-combo-view {
@@ -653,7 +778,7 @@ select:focus-visible {
   align-content: start;
   gap: var(--shell-workspace-gap);
   min-height: 0;
-  background: linear-gradient(180deg, rgba(30, 36, 41, 0.94), rgba(24, 30, 34, 0.96));
+  background: linear-gradient(180deg, rgba(18, 23, 29, 0.78), rgba(12, 16, 21, 0.88));
 }
 
 .freecad-main-column {
@@ -662,14 +787,192 @@ select:focus-visible {
   gap: var(--shell-workspace-gap);
 }
 
+.studio-workspace {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+  flex: 1 1 auto;
+  align-items: stretch;
+}
+
+.studio-sidebar-left,
+.studio-sidebar-right,
+.studio-center-column {
+  min-height: 0;
+}
+
+.studio-sidebar-left,
+.studio-sidebar-right {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  padding: 12px;
+}
+
+.studio-center-column {
+  display: grid;
+  min-width: 0;
+}
+
+.studio-sidebar-left {
+  background: linear-gradient(180deg, rgba(16, 20, 26, 0.86), rgba(10, 14, 18, 0.94));
+}
+
+.studio-sidebar-right {
+  background: linear-gradient(180deg, rgba(17, 22, 28, 0.84), rgba(12, 16, 22, 0.94));
+}
+
+.studio-pane-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.studio-pane-heading strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.96rem;
+  font-weight: 620;
+}
+
+.studio-pane-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.studio-sidebar-scroll {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding-right: 2px;
+}
+
+.studio-sidebar-scroll-right {
+  gap: 14px;
+}
+
+.studio-sidebar-section {
+  display: grid;
+  gap: 8px;
+}
+
+.studio-sidebar-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.studio-recent-docs-list {
+  gap: 6px;
+}
+
+.studio-sidebar-left .session-tabs-header {
+  margin-bottom: 8px;
+}
+
+.studio-sidebar-left .session-tabs {
+  display: grid;
+  gap: 8px;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  padding-bottom: 0;
+}
+
+.studio-sidebar-left .session-tab-card {
+  min-width: 0;
+}
+
+.studio-sidebar-left .session-tab-close {
+  top: 10px;
+  right: 10px;
+}
+
+.studio-scene-stack {
+  min-height: 0;
+}
+
+.studio-viewport-shell {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 24px;
+}
+
+.studio-viewport-chrome {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.studio-viewport-title {
+  display: grid;
+  gap: 4px;
+}
+
+.studio-viewport-title strong {
+  font-size: 0.95rem;
+  font-weight: 620;
+}
+
+.studio-viewport-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.studio-bottom-dock-shell {
+  border-radius: 20px;
+}
+
+.freecad-pane-resize-handle {
+  position: relative;
+  align-self: stretch;
+  justify-self: stretch;
+  touch-action: none;
+  user-select: none;
+}
+
+.freecad-pane-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 2px 3px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.16));
+  opacity: 0.48;
+  transition: opacity 140ms ease, box-shadow 140ms ease;
+}
+
+.freecad-pane-resize-handle:hover::before,
+.freecad-pane-resize-handle-active::before {
+  opacity: 1;
+  box-shadow: 0 0 0 1px rgba(243, 161, 75, 0.16);
+}
+
+.freecad-pane-resize-handle-vertical {
+  cursor: col-resize;
+}
+
+.freecad-pane-resize-handle-horizontal {
+  cursor: row-resize;
+}
+
 .freecad-viewport-panel {
   min-height: 0;
   position: relative;
   overflow: hidden;
   padding: 0;
   background:
-    radial-gradient(circle at top, rgba(74, 97, 120, 0.16), transparent 36%),
-    linear-gradient(180deg, rgba(18, 24, 28, 0.98), rgba(14, 19, 23, 0.99));
+    radial-gradient(circle at top, rgba(104, 126, 151, 0.14), transparent 32%),
+    linear-gradient(180deg, rgba(11, 16, 21, 0.98), rgba(8, 12, 16, 1));
 }
 
 .freecad-viewport-panel > .panel-header {
@@ -678,16 +981,145 @@ select:focus-visible {
   left: 132px;
   z-index: 1;
   gap: 6px;
-  padding: 6px 10px;
+  padding: 7px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(4, 8, 10, 0.58);
-  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(7, 11, 14, 0.52);
+  backdrop-filter: blur(10px);
 }
 
 .freecad-bottom-dock {
   min-height: 0;
-  background: linear-gradient(180deg, rgba(24, 29, 34, 0.96), rgba(18, 23, 27, 0.98));
+  background: linear-gradient(180deg, rgba(17, 22, 27, 0.82), rgba(11, 15, 19, 0.92));
+}
+
+.bottom-dock-tray,
+.bottom-dock-tray-header,
+.bottom-dock-tray-title,
+.bottom-dock-tray-summary,
+.bottom-dock-tray-strip,
+.bottom-dock-tray-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.bottom-dock-tray {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.bottom-dock-tray-header {
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  flex: 1 1 280px;
+}
+
+.bottom-dock-tray-title,
+.bottom-dock-tray-summary {
+  flex-direction: column;
+  gap: 2px;
+}
+
+.bottom-dock-tray-title span,
+.bottom-dock-tray-summary span,
+.bottom-dock-chip span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bottom-dock-tray-title strong,
+.bottom-dock-tray-summary strong,
+.bottom-dock-chip strong {
+  color: var(--text);
+  font-size: 0.8rem;
+}
+
+.bottom-dock-tray-summary {
+  align-items: end;
+  text-align: right;
+}
+
+.bottom-dock-tray-strip {
+  flex: 1 1 320px;
+  flex-wrap: wrap;
+}
+
+.bottom-dock-chip {
+  display: inline-grid;
+  gap: 1px;
+  min-width: 74px;
+  padding: 6px 9px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.bottom-dock-chip-active {
+  border-color: rgba(243, 161, 75, 0.26);
+  background: rgba(243, 161, 75, 0.1);
+}
+
+.bottom-dock-tray-actions {
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.bottom-dock-layout-with-rail {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 280px);
+  align-items: start;
+}
+
+.bottom-dock-pinned-rail,
+.bottom-dock-pinned-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bottom-dock-pinned-rail {
+  min-height: 0;
+}
+
+.bottom-dock-pinned-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.015));
+}
+
+.bottom-dock-pinned-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+
+.bottom-dock-pinned-actions {
+  margin-top: 0.45rem;
+}
+  align-items: start;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.bottom-dock-pinned-item strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.bottom-dock-pinned-item p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .bottom-dock-content > .panel,
@@ -710,6 +1142,53 @@ select:focus-visible {
 .combo-pane-properties {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   padding-top: 8px;
+}
+
+.prompt-pane-toolbar,
+.prompt-pane-search,
+.prompt-pane-summary {
+  display: flex;
+  gap: 8px;
+}
+
+.prompt-pane-toolbar {
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  padding: 0 0 2px;
+}
+
+.prompt-pane-search {
+  flex: 1 1 220px;
+  flex-direction: column;
+}
+
+.prompt-pane-search span,
+.prompt-pane-summary span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.prompt-pane-search-input {
+  min-height: 32px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+}
+
+.prompt-pane-summary {
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.prompt-pane-summary strong {
+  color: var(--text);
+  font-size: 0.78rem;
 }
 
 .combo-pane-scroll,
@@ -749,6 +1228,7 @@ select:focus-visible {
   gap: 6px;
   padding-top: 4px;
   padding-bottom: 4px;
+  background: rgba(10, 13, 17, 0.72);
 }
 
 .freecad-statusbar-item {
@@ -758,8 +1238,8 @@ select:focus-visible {
   min-height: 22px;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.02);
 }
 
 .freecad-statusbar-label {
@@ -767,6 +1247,7 @@ select:focus-visible {
   font-size: 0.62rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  opacity: 0.72;
 }
 
 .freecad-statusbar-value {
@@ -1033,7 +1514,13 @@ select:focus-visible {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+}
+
+.panel-header h2 {
+  font-size: 0.84rem;
+  font-weight: 620;
+  letter-spacing: 0.01em;
 }
 
 .tree-panel,
@@ -1100,12 +1587,12 @@ select:focus-visible {
 
 .selection-mode-toolbar {
   margin-top: 8px;
-  padding: 6px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
   background:
-    linear-gradient(135deg, rgba(255, 143, 61, 0.08), rgba(143, 227, 193, 0.04)),
-    rgba(255, 255, 255, 0.02);
+    linear-gradient(135deg, rgba(243, 161, 75, 0.08), rgba(143, 227, 193, 0.03)),
+    rgba(255, 255, 255, 0.016);
 }
 
 .selection-mode-header {
@@ -1137,9 +1624,9 @@ select:focus-visible {
 
 .selection-mode-chip {
   padding: 6px 8px;
-  border-radius: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text);
   text-align: left;
   cursor: pointer;
@@ -1199,10 +1686,10 @@ select:focus-visible {
 .selection-card,
 .selection-detail,
 .selection-command-chip {
-  padding: 8px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 7px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.024), rgba(255, 255, 255, 0.012));
 }
 
 .selection-command-chip-button {
@@ -1255,7 +1742,7 @@ select:focus-visible {
 .selection-kv strong,
 .selection-command-chip strong {
   display: block;
-  margin: 8px 0 6px;
+  margin: 6px 0 4px;
 }
 
 .selection-command-chip .shell-icon {
@@ -1273,15 +1760,15 @@ select:focus-visible {
 }
 
 .selection-detail h3 {
-  margin: 0 0 12px;
+  margin: 0 0 8px;
 }
 
 .selection-kv {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 0;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 8px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .selection-kv:first-child {
@@ -1321,8 +1808,8 @@ select:focus-visible {
 .diagnostic-event,
 .job-card {
   padding: 12px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -1374,6 +1861,98 @@ select:focus-visible {
   margin: 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.job-card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.job-card-actions {
+  margin-top: 2px;
+}
+
+.job-detail-toggle {
+  min-width: 108px;
+}
+
+.job-detail-panel,
+.job-stage-detail-list,
+.job-log-list {
+  display: grid;
+  gap: 10px;
+}
+
+.job-detail-panel {
+  padding-top: 4px;
+}
+
+.job-detail-section {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.job-detail-links,
+.dock-filter-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.job-detail-links {
+  margin-top: -2px;
+}
+
+.job-stage-detail-row,
+.job-log-entry {
+  display: grid;
+  gap: 10px;
+  align-items: start;
+}
+
+.job-stage-detail-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.job-stage-detail-row span:nth-of-type(1) {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.74rem;
+}
+
+.job-stage-detail-row span:nth-of-type(2) {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.job-log-entry {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.job-log-topic {
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.job-log-message {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  line-height: 1.45;
 }
 
 .job-stage-list {
@@ -1437,14 +2016,18 @@ select:focus-visible {
   display: flex;
   align-items: flex-start;
   gap: 6px;
-  padding: 5px 6px;
-  border-radius: 3px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.015);
   width: 100%;
   color: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.tree-row:hover {
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .tree-row:disabled {
@@ -1553,16 +2136,20 @@ select:focus-visible {
 }
 
 .shell-toolbar-band {
-  display: grid;
+  display: inline-grid;
   grid-template-columns: auto auto;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   flex-wrap: nowrap;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .shell-toolbar-band-actions {
   display: flex;
-  gap: 4px;
+  gap: 6px;
   flex-wrap: nowrap;
 }
 
@@ -1576,7 +2163,7 @@ select:focus-visible {
 .shell-toolbar-band-actions .action-button {
   white-space: nowrap;
   align-items: center;
-  min-height: 24px;
+  min-height: 28px;
 }
 
 .shell-toolbar-group .action-button span,
@@ -1587,7 +2174,7 @@ select:focus-visible {
 .shell-toolbar-separator {
   width: 1px;
   min-height: 18px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .quick-action-rail .action-button {
@@ -1606,12 +2193,19 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.025);
   color: var(--text);
   border-radius: var(--shell-panel-radius);
-  padding: 4px var(--shell-control-padding-x);
+  padding: 5px var(--shell-control-padding-x);
   cursor: pointer;
+}
+
+.action-button:hover,
+.recent-doc-chip:hover,
+.bottom-dock-chip:hover,
+.session-tab:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .shell-icon {
@@ -1638,8 +2232,8 @@ select:focus-visible {
 }
 
 .action-button-primary {
-  background: linear-gradient(135deg, rgba(255, 143, 61, 0.22), rgba(255, 194, 127, 0.12));
-  border-color: rgba(255, 143, 61, 0.35);
+  background: linear-gradient(135deg, rgba(243, 161, 75, 0.2), rgba(255, 208, 154, 0.08));
+  border-color: rgba(243, 161, 75, 0.26);
 }
 
 .command-status-ok {
@@ -1705,19 +2299,41 @@ select:focus-visible {
 }
 
 .task-section {
-  padding: 12px;
+  padding: 10px 11px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
+}
+
+.task-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+  margin-bottom: 10px;
 }
 
 .task-section h3 {
-  margin: 0 0 12px;
+  margin: 0;
+}
+
+.task-section-header span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-section-empty,
+.property-group-empty,
+.tree-panel-empty {
+  color: var(--muted);
+  text-align: center;
 }
 
 .task-rows {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .task-row strong {
@@ -1832,11 +2448,11 @@ select:focus-visible {
 }
 
 .task-editor {
-  margin-top: 14px;
-  padding: 12px;
+  margin-top: 10px;
+  padding: 10px 11px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
 }
 
 .task-editor-header {
@@ -1861,13 +2477,13 @@ select:focus-visible {
 
 .task-editor-grid {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .task-editor-fields {
   display: grid;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 10px;
 }
 
 .task-editor-label {
@@ -1881,22 +2497,23 @@ select:focus-visible {
 
 .task-editor-label span {
   display: block;
-  margin-bottom: 10px;
+  margin-bottom: 7px;
 }
 
 .task-editor-row {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   align-items: center;
 }
 
 .task-editor-input,
 .task-editor-select {
   flex: 1 1 auto;
-  padding: 10px 12px;
-  border-radius: 12px;
+  min-height: 34px;
+  padding: 8px 10px;
+  border-radius: 9px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
   color: var(--text);
 }
 
@@ -1916,9 +2533,37 @@ select:focus-visible {
 }
 
 .task-command-note {
-  margin: 0 0 12px;
+  margin: 0 0 10px;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.task-panel-meta-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.task-panel-meta-chip {
+  display: inline-grid;
+  gap: 2px;
+  min-width: 88px;
+  padding: 7px 9px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.task-panel-meta-chip span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.task-panel-meta-chip strong {
+  font-size: 0.82rem;
 }
 
 .viewport-canvas {
@@ -2118,8 +2763,23 @@ select:focus-visible {
   transform: translateX(-50%);
 }
 
+.viewport-command-bar-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: end;
+}
+
+.viewport-command-bar-heading,
+.viewport-command-bar-summary,
+.viewport-command-bar-context {
+  display: grid;
+  gap: 3px;
+}
+
 .viewport-command-bar-label {
-  justify-self: center;
+  justify-self: start;
+  width: fit-content;
   padding: 2px 8px;
   border-radius: 999px;
   background: rgba(4, 8, 10, 0.54);
@@ -2129,15 +2789,36 @@ select:focus-visible {
   text-transform: uppercase;
 }
 
+.viewport-command-bar-context span,
+.viewport-command-bar-summary span,
+.viewport-command-bar-button-copy small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.viewport-command-bar-context strong,
+.viewport-command-bar-summary strong {
+  color: rgba(232, 241, 235, 0.9);
+  font-size: 0.74rem;
+  letter-spacing: 0.03em;
+}
+
+.viewport-command-bar-summary {
+  justify-items: end;
+  text-align: right;
+}
+
 .viewport-command-bar-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  padding: 8px 10px;
-  border-radius: 999px;
+  padding: 7px 8px;
+  border-radius: 18px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(4, 8, 10, 0.62);
+  background: rgba(4, 8, 10, 0.68);
   backdrop-filter: blur(8px);
 }
 
@@ -2145,13 +2826,19 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
-  padding: 5px 10px;
-  border-radius: 999px;
+  min-height: 34px;
+  padding: 6px 10px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.04);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
   color: var(--text);
   cursor: pointer;
+}
+
+.viewport-command-bar-button-copy {
+  display: grid;
+  gap: 1px;
+  text-align: left;
 }
 
 .viewport-command-bar-button-active {
@@ -2160,7 +2847,8 @@ select:focus-visible {
 }
 
 .viewport-command-bar-button span {
-  font-size: 0.74rem;
+  font-size: 0.72rem;
+  line-height: 1.05;
 }
 
 .viewport-command-bar-button strong {
@@ -2168,6 +2856,10 @@ select:focus-visible {
   font-size: 0.68rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.viewport-command-bar-button-tail {
+  margin-left: auto;
 }
 
 .viewport-command-bar-button-utility {
@@ -2178,11 +2870,104 @@ select:focus-visible {
 .viewport-command-editor {
   justify-self: center;
   width: min(100%, 420px);
-  padding: 10px 12px;
-  border-radius: 14px;
+  padding: 10px 11px;
+  border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(4, 8, 10, 0.82);
   backdrop-filter: blur(10px);
+}
+
+.viewport-command-lens {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 10px;
+  width: min(360px, calc(100% - 24px));
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(4, 8, 10, 0.84);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(12px);
+  transform: translate(-50%, -50%);
+}
+
+.viewport-command-lens-centered {
+  left: 50%;
+  top: 50%;
+}
+
+.viewport-command-lens-header,
+.viewport-command-lens-meta,
+.viewport-command-lens-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.viewport-command-lens-header {
+  align-items: start;
+}
+
+.viewport-command-lens-label,
+.viewport-command-lens-meta span,
+.viewport-command-lens-copy span,
+.viewport-command-lens-button small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.viewport-command-lens-header strong,
+.viewport-command-lens-copy strong {
+  display: block;
+  color: rgba(232, 241, 235, 0.92);
+}
+
+.viewport-command-lens-meta {
+  flex-direction: column;
+  align-items: end;
+  text-align: right;
+}
+
+.viewport-command-lens-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.viewport-command-lens-button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 46px;
+  padding: 9px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.viewport-command-lens-button-active {
+  border-color: rgba(255, 143, 61, 0.32);
+  background: rgba(255, 143, 61, 0.12);
+}
+
+.viewport-command-lens-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.viewport-command-lens-editor {
+  margin-top: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .viewport-selection-hud {
@@ -2405,14 +3190,14 @@ select:focus-visible {
 }
 
 .property-group {
-  padding: 8px;
+  padding: 7px 8px;
   border-radius: 4px;
   border: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(255, 255, 255, 0.02);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
 }
 
 .property-group h3 {
-  margin-bottom: 6px;
+  margin-bottom: 5px;
 }
 
 .property-row,
@@ -2421,7 +3206,7 @@ select:focus-visible {
   justify-content: space-between;
   gap: 8px;
   align-items: flex-start;
-  padding: 6px 0;
+  padding: 5px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
@@ -2490,6 +3275,10 @@ select:focus-visible {
 }
 
 @media (max-width: 1120px) {
+  .freecad-pane-resize-handle {
+    display: none;
+  }
+
   .freecad-workspace {
     grid-template-columns: 1fr;
   }
@@ -2520,6 +3309,23 @@ select:focus-visible {
     bottom: 104px;
     min-width: 0;
     transform: none;
+  }
+
+  .viewport-command-bar-header {
+    align-items: start;
+  }
+
+  .viewport-command-lens {
+    left: 12px !important;
+    right: 12px;
+    top: auto !important;
+    bottom: 148px;
+    width: auto;
+    transform: none;
+  }
+
+  .bottom-dock-layout-with-rail {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2565,5 +3371,23 @@ select:focus-visible {
 
   .command-palette-meta {
     justify-items: start;
+  }
+
+  .viewport-command-bar-button-tail {
+    margin-left: 0;
+  }
+
+  .viewport-command-lens-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .viewport-command-lens-header,
+  .viewport-command-lens-actions {
+    display: grid;
+  }
+
+  .viewport-command-lens-meta {
+    align-items: start;
+    text-align: left;
   }
 }

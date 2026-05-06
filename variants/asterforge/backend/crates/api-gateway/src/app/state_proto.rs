@@ -115,6 +115,12 @@ impl AppState {
             remove_workspace_session_id: request.remove_workspace_session_id,
             clear_recent_documents: request.clear_recent_documents,
             clear_inactive_workspace_sessions: request.clear_inactive_workspace_sessions,
+            report_dock_filter_label: request.report_dock_filter_label,
+            report_dock_filter_query: request.report_dock_filter_query,
+            diagnostics_dock_filter_label: request.diagnostics_dock_filter_label,
+            diagnostics_dock_filter_query: request.diagnostics_dock_filter_query,
+            clear_report_dock_filter: request.clear_report_dock_filter,
+            clear_diagnostics_dock_filter: request.clear_diagnostics_dock_filter,
         })
         .await
         .map(proto_shell_snapshot_from_http)

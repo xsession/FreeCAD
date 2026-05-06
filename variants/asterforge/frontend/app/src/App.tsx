@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, Suspense, lazy, useEffect, useRef, useState } from "react";
 import {
   activateWorkbench,
   fetchBootstrap,
@@ -55,11 +55,15 @@ import {
   type StepViewportPreset,
   viewportOrientationLabel
 } from "./shellViewUtils";
-import { StepViewportScene } from "./StepViewportScene";
 import { fetchStepDocumentIndex, fetchStepSceneBundle } from "./stepClient";
 import type { StepDocumentIndex, StepSceneBundle } from "./stepTypes";
 
 export { StepViewportScene } from "./StepViewportScene";
+
+const LazyStepViewportScene = lazy(async () => {
+  const module = await import("./StepViewportScene");
+  return { default: module.StepViewportScene };
+});
 
 type ShellNotice = {
   id: string;
@@ -73,6 +77,106 @@ type ShellNotice = {
 type ActivityCommandAction = {
   commandId: string;
   label: string;
+};
+
+type DockFilterState = {
+  label: string;
+  query: string;
+};
+
+type ResizableShellPanelId = "combo_view" | "report_dock";
+type ResizeAxis = "horizontal" | "vertical";
+
+const PANEL_RESIZE_HANDLE_SIZE = 10;
+
+function clampValue(value: number, minimum: number, maximum: number) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function clampShellPanelSizeHint(panelId: ResizableShellPanelId, sizeHint: number) {
+  return panelId === "combo_view"
+    ? clampValue(sizeHint, 0.22, 0.42)
+    : clampValue(sizeHint, 0.18, 0.4);
+}
+
+function resolveShellPanelSizeHintFromPointer(
+  panelId: ResizableShellPanelId,
+  axis: ResizeAxis,
+  pointerPosition: number,
+  rect: DOMRect
+) {
+  const span = axis === "horizontal" ? rect.width : rect.height;
+  if (span <= 0) {
+    return null;
+  }
+
+  const rawSizeHint =
+    axis === "horizontal" ? (pointerPosition - rect.left) / span : (rect.bottom - pointerPosition) / span;
+  return clampShellPanelSizeHint(panelId, rawSizeHint);
+}
+
+function dockFilterStateFromParts(label?: string | null, query?: string | null): DockFilterState | null {
+  if (!label || !query) {
+    return null;
+  }
+
+  return { label, query };
+}
+
+function activeWorkspaceSessionForDocument(
+  shellSnapshot: ShellSnapshot | null,
+  document: DocumentRef | null
+): WorkspaceSessionEntry | null {
+  if (!shellSnapshot || !document) {
+    return null;
+  }
+
+  return (
+    shellSnapshot.workspace_sessions.find((session) => session.document_id === document.document_id) ??
+    shellSnapshot.workspace_sessions.find(
+      (session) => Boolean(document.file_path) && session.file_path === document.file_path
+    ) ??
+    null
+  );
+}
+
+function sessionDockFilterSummary(session: WorkspaceSession) {
+  if (session.report_dock_filter_label) {
+    return `Report Scope: ${session.report_dock_filter_label}`;
+  }
+
+  if (session.diagnostics_dock_filter_label) {
+    return `Diagnostics Scope: ${session.diagnostics_dock_filter_label}`;
+  }
+
+  return null;
+}
+
+function sessionScopeTarget(session: WorkspaceSession):
+  | { tab: "report" | "diagnostics"; filterState: DockFilterState }
+  | null {
+  const reportFilter = dockFilterStateFromParts(
+    session.report_dock_filter_label,
+    session.report_dock_filter_query
+  );
+  if (reportFilter) {
+    return { tab: "report", filterState: reportFilter };
+  }
+
+  const diagnosticsFilter = dockFilterStateFromParts(
+    session.diagnostics_dock_filter_label,
+    session.diagnostics_dock_filter_query
+  );
+  if (diagnosticsFilter) {
+    return { tab: "diagnostics", filterState: diagnosticsFilter };
+  }
+
+  return null;
+}
+
+type ViewportAnchor = {
+  x: number;
+  y: number;
 };
 
 type StatusbarTone = "neutral" | "info" | "warning" | "error";
@@ -199,6 +303,10 @@ type WorkspaceSession = {
   report_dock_visible: boolean | null;
   combo_view_size_hint: number | null;
   report_dock_size_hint: number | null;
+  report_dock_filter_label: string | null;
+  report_dock_filter_query: string | null;
+  diagnostics_dock_filter_label: string | null;
+  diagnostics_dock_filter_query: string | null;
 };
 
 type BottomDockTab = "report" | "python" | "jobs" | "diagnostics" | "history" | "commands" | "extensions";
@@ -444,6 +552,95 @@ function TreeNode({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function filterObjectTree(nodes: ObjectNode[], query: string): ObjectNode[] {
+  if (!query.trim()) {
+    return nodes;
+  }
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return nodes.flatMap((node) => {
+    const filteredChildren = filterObjectTree(node.children, query);
+    const matchesNode = matchesPromptFilter(
+      `${node.label} ${node.object_type} ${node.object_id}`,
+      normalizedQuery
+    );
+
+    if (!matchesNode && filteredChildren.length === 0) {
+      return [];
+    }
+
+    return [{
+      ...node,
+      children: filteredChildren
+    }];
+  });
+}
+
+export function ModelBrowserPane({
+  objectTree,
+  onHoverChange,
+  onSelect,
+  preselectedObjectId,
+  selectedObjectId,
+  selectionMode,
+}: {
+  objectTree: ObjectNode[];
+  onHoverChange: (objectId: string | null) => void;
+  onSelect: (objectId: string) => void;
+  preselectedObjectId: string | null;
+  selectedObjectId: string | null;
+  selectionMode: string;
+}) {
+  const [filterQuery, setFilterQuery] = useState("");
+
+  const filteredTree = filterObjectTree(objectTree, filterQuery);
+  const flattenedFilteredTree = flattenObjectTree(filteredTree);
+  const visibleSelectableCount = flattenedFilteredTree.filter((node) =>
+    objectMatchesSelectionMode(node.object_type, selectionMode)
+  ).length;
+
+  return (
+    <section className="dock-panel combo-pane">
+      <div className="panel-header panel-header-dense">
+        <h2>Model</h2>
+        <span>{selectionMode} / {visibleSelectableCount} selectable</span>
+      </div>
+      <div className="prompt-pane-toolbar">
+        <label className="prompt-pane-search">
+          <span>Filter</span>
+          <input
+            className="prompt-pane-search-input"
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder="Search labels, ids, and object types..."
+            value={filterQuery}
+          />
+        </label>
+        <div className="prompt-pane-summary">
+          <span>{filteredTree.length} roots</span>
+          <strong>{flattenedFilteredTree.length} visible nodes</strong>
+        </div>
+      </div>
+      <div className="tree-panel combo-pane-scroll">
+        {filteredTree.map((node) => (
+          <TreeNode
+            key={node.object_id}
+            node={node}
+            onHoverChange={onHoverChange}
+            onSelect={onSelect}
+            preselectedObjectId={preselectedObjectId}
+            selectedObjectId={selectedObjectId}
+            selectionMode={selectionMode}
+          />
+        ))}
+        {filteredTree.length === 0 ? (
+          <div className="tree-panel-empty">No model nodes match this filter.</div>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -1202,6 +1399,61 @@ function initializeSuggestedCommandDrafts(
   );
 }
 
+function matchesPromptFilter(value: string, query: string) {
+  if (!query.trim()) {
+    return true;
+  }
+
+  return value.toLowerCase().includes(query.trim().toLowerCase());
+}
+
+function resolveViewportCommandContext(
+  commandCatalog: CommandCatalogResponse | null,
+  preselectionState: PreselectionStateResponse | null,
+  selectedObjectId: string | null,
+  taskPanel: TaskPanelResponse | null
+) {
+  if (!commandCatalog) {
+    return {
+      targetLabel: "",
+      targetObjectId: undefined,
+      targetStateLabel: "Workbench",
+      visibleCommandStateKey: "",
+      visibleCommands: [] as CommandDefinition[]
+    };
+  }
+
+  const prioritizedCommandIds = [
+    ...(preselectionState?.suggested_commands ?? []),
+    ...(taskPanel?.suggested_commands ?? []),
+    ...(selectedObjectId ? ["selection.focus"] : [])
+  ];
+  const commandById = new Map(commandCatalog.commands.map((command) => [command.command_id, command]));
+  const visibleCommands = Array.from(new Set(prioritizedCommandIds))
+    .map((commandId) => commandById.get(commandId))
+    .filter((command): command is CommandDefinition => Boolean(command))
+    .filter((command) => command.enabled)
+    .slice(0, 6);
+
+  return {
+    targetLabel:
+      preselectionState?.object_label ??
+      preselectionState?.object_id ??
+      selectedObjectId ??
+      commandCatalog.workbench.display_name,
+    targetObjectId: preselectionState?.object_id ?? selectedObjectId ?? undefined,
+    targetStateLabel: preselectionState?.object_id
+      ? "Hover"
+      : selectedObjectId
+        ? "Selection"
+        : "Workbench",
+    visibleCommandStateKey: visibleCommands
+      .map((command) => `${command.command_id}:${command.arguments.length}`)
+      .join("|"),
+    visibleCommands
+  };
+}
+
 export function SuggestedCommandEditor({
   className,
   command,
@@ -1376,20 +1628,13 @@ export function ViewportCommandBar({
     return null;
   }
 
-  const prioritizedCommandIds = [
-    ...(preselectionState?.suggested_commands ?? []),
-    ...(taskPanel?.suggested_commands ?? []),
-    ...(selectedObjectId ? ["selection.focus"] : []),
-  ];
-  const commandById = new Map(commandCatalog.commands.map((command) => [command.command_id, command]));
-  const visibleCommands = Array.from(new Set(prioritizedCommandIds))
-    .map((commandId) => commandById.get(commandId))
-    .filter((command): command is CommandDefinition => Boolean(command))
-    .filter((command) => command.enabled)
-    .slice(0, 5);
-  const visibleCommandStateKey = visibleCommands
-    .map((command) => `${command.command_id}:${command.arguments.length}`)
-    .join("|");
+  const {
+    targetLabel,
+    targetObjectId,
+    targetStateLabel,
+    visibleCommandStateKey,
+    visibleCommands
+  } = resolveViewportCommandContext(commandCatalog, preselectionState, selectedObjectId, taskPanel);
 
   useEffect(() => {
     setCommandDrafts((current) => initializeCommandDrafts(current, visibleCommands));
@@ -1408,7 +1653,6 @@ export function ViewportCommandBar({
     return null;
   }
 
-  const targetObjectId = preselectionState?.object_id ?? selectedObjectId ?? undefined;
   const expandedCommand =
     expandedCommandId
       ? visibleCommands.find((command) => command.command_id === expandedCommandId) ?? null
@@ -1444,8 +1688,24 @@ export function ViewportCommandBar({
   }
 
   return (
-    <div className="viewport-command-bar">
-      <div className="viewport-command-bar-label">Command Bar</div>
+    <div aria-label="Viewport tool shelf" className="viewport-command-bar" role="region">
+      <div className="viewport-command-bar-header">
+        <div className="viewport-command-bar-heading">
+          <div className="viewport-command-bar-label">Tool Shelf</div>
+          <div className="viewport-command-bar-context">
+            <span>{targetStateLabel}</span>
+            <strong>{targetLabel}</strong>
+          </div>
+        </div>
+        <div className="viewport-command-bar-summary">
+          <span>{visibleCommands.length} live tools</span>
+          <strong>
+            {expandedCommand
+              ? expandedCommand.action_label ?? expandedCommand.label
+              : commandCatalog.workbench.display_name}
+          </strong>
+        </div>
+      </div>
       <div className="viewport-command-bar-actions">
         {visibleCommands.map((command) => (
           <button
@@ -1457,14 +1717,24 @@ export function ViewportCommandBar({
             type="button"
           >
             <ShellIcon icon={command.icon} title={command.label} />
-            <span>{command.action_label ?? command.label}</span>
+            <div className="viewport-command-bar-button-copy">
+              <span>{command.action_label ?? command.label}</span>
+              <small>{command.group}</small>
+            </div>
             {command.arguments.length > 0 ? <strong>Edit</strong> : null}
             {!command.arguments.length && command.shortcut ? <strong>{command.shortcut}</strong> : null}
           </button>
         ))}
-        <button className="viewport-command-bar-button viewport-command-bar-button-utility" onClick={onOpenPalette} type="button">
+        <button
+          className="viewport-command-bar-button viewport-command-bar-button-tail viewport-command-bar-button-utility"
+          onClick={onOpenPalette}
+          type="button"
+        >
           <ShellIcon icon="list" title="More commands" />
-          <span>More</span>
+          <div className="viewport-command-bar-button-copy">
+            <span>More</span>
+            <small>palette</small>
+          </div>
           <strong>F</strong>
         </button>
       </div>
@@ -1493,28 +1763,221 @@ export function ViewportCommandBar({
   );
 }
 
+export function ViewportCommandLens({
+  anchor,
+  commandCatalog,
+  onClose,
+  onOpenPalette,
+  onRunCommand,
+  open,
+  preselectionState,
+  selectedObjectId,
+  taskPanel,
+}: {
+  anchor: ViewportAnchor | null;
+  commandCatalog: CommandCatalogResponse | null;
+  onClose: () => void;
+  onOpenPalette: () => void;
+  onRunCommand: (
+    commandId: string,
+    commandArguments?: Record<string, string>,
+    targetObjectId?: string
+  ) => void;
+  open: boolean;
+  preselectionState: PreselectionStateResponse | null;
+  selectedObjectId: string | null;
+  taskPanel: TaskPanelResponse | null;
+}) {
+  const [commandDrafts, setCommandDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [expandedCommandId, setExpandedCommandId] = useState<string | null>(null);
+
+  const {
+    targetLabel,
+    targetObjectId,
+    targetStateLabel,
+    visibleCommandStateKey,
+    visibleCommands
+  } = resolveViewportCommandContext(commandCatalog, preselectionState, selectedObjectId, taskPanel);
+
+  useEffect(() => {
+    if (!open) {
+      setExpandedCommandId(null);
+      return;
+    }
+
+    setCommandDrafts((current) => initializeCommandDrafts(current, visibleCommands));
+
+    if (
+      expandedCommandId &&
+      !visibleCommands.some(
+        (command) => command.command_id === expandedCommandId && command.arguments.length > 0
+      )
+    ) {
+      setExpandedCommandId(null);
+    }
+  }, [expandedCommandId, open, visibleCommandStateKey]);
+
+  if (!open || !commandCatalog || visibleCommands.length === 0) {
+    return null;
+  }
+
+  const expandedCommand =
+    expandedCommandId
+      ? visibleCommands.find((command) => command.command_id === expandedCommandId) ?? null
+      : null;
+  const lensStyle = anchor
+    ? {
+        left: `${Math.max(96, anchor.x)}px`,
+        top: `${Math.max(84, anchor.y)}px`
+      }
+    : undefined;
+
+  function updateDraftValue(commandId: string, argumentId: string, value: string) {
+    setCommandDrafts((current) => ({
+      ...current,
+      [commandId]: {
+        ...(current[commandId] ?? {}),
+        [argumentId]: value
+      }
+    }));
+  }
+
+  function currentDraftValue(commandId: string, argument: CommandArgumentDefinition) {
+    return commandDrafts[commandId]?.[argument.argument_id] ?? argument.default_value ?? "";
+  }
+
+  function handleLensCommand(command: CommandDefinition) {
+    if (command.arguments.length > 0) {
+      setExpandedCommandId((current) => (current === command.command_id ? null : command.command_id));
+      return;
+    }
+
+    onRunCommand(command.command_id, undefined, command.requires_selection ? targetObjectId : undefined);
+    onClose();
+  }
+
+  return (
+    <div
+      aria-label="Viewport command lens"
+      className={`viewport-command-lens ${anchor ? "" : "viewport-command-lens-centered"}`.trim()}
+      role="region"
+      style={lensStyle}
+    >
+      <div className="viewport-command-lens-header">
+        <div>
+          <span className="viewport-command-lens-label">Command Lens</span>
+          <strong>{targetLabel}</strong>
+        </div>
+        <div className="viewport-command-lens-meta">
+          <span>{targetStateLabel}</span>
+          <span>Space / Right Click</span>
+        </div>
+      </div>
+      <div className="viewport-command-lens-grid">
+        {visibleCommands.map((command) => (
+          <button
+            className={`viewport-command-lens-button ${
+              expandedCommandId === command.command_id ? "viewport-command-lens-button-active" : ""
+            }`}
+            key={command.command_id}
+            onClick={() => handleLensCommand(command)}
+            type="button"
+          >
+            <ShellIcon icon={command.icon} title={command.label} />
+            <div className="viewport-command-lens-copy">
+              <strong>{command.action_label ?? command.label}</strong>
+              <span>{command.group}</span>
+            </div>
+            {command.arguments.length > 0 ? <small>Edit</small> : null}
+          </button>
+        ))}
+      </div>
+      <div className="viewport-command-lens-actions">
+        <button className="action-button" onClick={onClose} type="button">
+          Close
+        </button>
+        <button
+          className="action-button action-button-primary"
+          onClick={() => {
+            onClose();
+            onOpenPalette();
+          }}
+          type="button"
+        >
+          Command Palette
+        </button>
+      </div>
+      {expandedCommand && expandedCommand.arguments.length > 0 ? (
+        <SuggestedCommandEditor
+          className="task-editor viewport-command-lens-editor"
+          command={expandedCommand}
+          currentDraftValue={(argument) => currentDraftValue(expandedCommand.command_id, argument)}
+          headerLabel={expandedCommand.action_label ?? expandedCommand.label}
+          idPrefix="viewport-command-lens"
+          onSubmitCommand={(commandArguments) => {
+            onRunCommand(
+              expandedCommand.command_id,
+              commandArguments,
+              expandedCommand.requires_selection ? targetObjectId : undefined
+            );
+            setExpandedCommandId(null);
+            onClose();
+          }}
+          onUpdateDraftValue={(argumentId, value) =>
+            updateDraftValue(expandedCommand.command_id, argumentId, value)
+          }
+          submitLabel={expandedCommand.action_label ?? expandedCommand.label}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 export function ReportActivityFeed({
   commandCatalog,
+  filterState,
+  onClearFilter,
   onFocusActivityObject,
   onRunCommand,
   onSelectActivityObject,
   reportEvents
 }: {
   commandCatalog?: CommandCatalogResponse | null;
+  filterState?: DockFilterState | null;
+  onClearFilter?: () => void;
   onFocusActivityObject?: (objectId: string) => void;
   onRunCommand?: (commandId: string, targetObjectId?: string) => void;
   onSelectActivityObject?: (objectId: string) => void;
   reportEvents: ActivityEvent[];
 }) {
-  const prioritizedEvents = prioritizeReportEvents(summarizeReportEvents(reportEvents));
+  const scopedEvents = filterState?.query
+    ? reportEvents.filter((activity) =>
+        matchesPromptFilter(
+          `${activity.topic} ${activity.message} ${activity.object_id ?? ""}`,
+          filterState.query
+        )
+      )
+    : reportEvents;
+  const prioritizedEvents = prioritizeReportEvents(summarizeReportEvents(scopedEvents));
 
   return (
     <section className="dock-panel">
       <div className="panel-header">
         <h2>Backend Activity</h2>
-        <span>{reportEvents.length} live backend events</span>
+        <span>{scopedEvents.length} live backend events</span>
       </div>
-      {reportEvents.length > 0 ? (
+      {filterState ? (
+        <div className="prompt-pane-toolbar dock-filter-toolbar">
+          <div className="prompt-pane-summary">
+            <span>Scoped View</span>
+            <strong>{filterState.label}</strong>
+          </div>
+          <button className="dock-tab-button dock-tab-button-utility" onClick={onClearFilter} type="button">
+            Clear Filter
+          </button>
+        </div>
+      ) : null}
+      {scopedEvents.length > 0 ? (
         <div className="activity-list">
           {prioritizedEvents.map((activity, index) => (
             <div className="activity-item" key={`${activity.topic}-${index}`}>
@@ -1538,8 +2001,9 @@ export function ReportActivityFeed({
         </div>
       ) : (
         <p className="selection-empty">
-          Structured STEP inspection is shown above. No additional backend activity is pending for
-          the current report view.
+          {filterState
+            ? "No backend activity matched the current dock filter."
+            : "Structured STEP inspection is shown above. No additional backend activity is pending for the current report view."}
         </p>
       )}
     </section>
@@ -1762,6 +2226,7 @@ function SessionTabs({
   activeDocumentId,
   activeFilePath,
   onActivate,
+  onActivateScope,
   onClearInactive,
   onDismiss
 }: {
@@ -1769,6 +2234,7 @@ function SessionTabs({
   activeDocumentId: string | null;
   activeFilePath: string | null | undefined;
   onActivate: (session: WorkspaceSession) => void;
+  onActivateScope: (session: WorkspaceSession) => void;
   onClearInactive: () => void;
   onDismiss: (session: WorkspaceSession) => void;
 }) {
@@ -1791,26 +2257,41 @@ function SessionTabs({
           const active =
             session.document_id === activeDocumentId ||
             (activeFilePath !== null && activeFilePath !== undefined && session.file_path === activeFilePath);
+          const sessionModeLabel = titleCaseShellToken(session.selection_mode, "Object");
+          const sessionStateLabel = session.dirty ? "Unsaved" : "Saved";
+          const sessionFilterSummary = sessionDockFilterSummary(session);
+          const scopeTarget = sessionScopeTarget(session);
+          const sessionScopeButtonLabel = scopeTarget?.filterState.label ?? sessionFilterSummary;
 
           return (
             <div className={`session-tab-card ${active ? "session-tab-card-active" : ""}`} key={session.session_id}>
               <button
                 className={`session-tab ${active ? "session-tab-active" : ""}`}
                 onClick={() => onActivate(session)}
+                title={`${session.file_path} • ${session.workbench} • ${sessionModeLabel} • ${sessionStateLabel}${session.selected_object_id ? ` • ${session.selected_object_id}` : ""}${sessionFilterSummary ? ` • ${sessionFilterSummary}` : ""}`}
                 type="button"
               >
                 <div className="session-tab-main">
                   <strong>{session.display_name}</strong>
-                  <span>{session.file_path.split("/").at(-1) ?? session.file_path}</span>
+                  <span>{session.file_path}</span>
                 </div>
                 <div className="session-tab-meta">
                   <span>{session.workbench}</span>
-                  <span>{session.selection_mode ?? "object"}</span>
-                  <span>{`${session.combo_view_tab ?? "model"} / ${session.bottom_dock_tab ?? "report"}`}</span>
-                  <span>{session.dirty ? "Unsaved" : "Saved"}</span>
-                  <span>{session.selected_object_id ?? "No saved selection"}</span>
+                  <span>{sessionModeLabel}</span>
+                  <span>{sessionStateLabel}</span>
                 </div>
               </button>
+              {sessionFilterSummary && scopeTarget ? (
+                <button
+                  aria-label={sessionFilterSummary}
+                  className="session-tab-scope session-tab-scope-button"
+                  onClick={() => onActivateScope(session)}
+                  title={`Open ${sessionFilterSummary}`}
+                  type="button"
+                >
+                  {sessionScopeButtonLabel}
+                </button>
+              ) : null}
               {!active ? (
                 <button
                   className="session-tab-close"
@@ -2237,7 +2718,7 @@ function FeatureTimeline({
   );
 }
 
-function TaskPanel({
+export function TaskPanel({
   taskPanel,
   commandCatalog,
   onRunCommand
@@ -2247,6 +2728,7 @@ function TaskPanel({
   onRunCommand: (commandId: string, commandArguments?: Record<string, string>) => void;
 }) {
   const [commandDrafts, setCommandDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [filterQuery, setFilterQuery] = useState("");
 
   useEffect(() => {
     if (!taskPanel || !commandCatalog) {
@@ -2264,6 +2746,28 @@ function TaskPanel({
   }
 
   const suggestedCommands = resolveSuggestedCommands(commandCatalog, taskPanel.suggested_commands);
+  const filteredSections = taskPanel.sections
+    .map((section) => {
+      if (!filterQuery.trim()) {
+        return section;
+      }
+
+      const rows = section.rows.filter((row) =>
+        matchesPromptFilter(`${section.title} ${row.label} ${row.value}`, filterQuery)
+      );
+
+      return rows.length > 0 || matchesPromptFilter(section.title, filterQuery)
+        ? { ...section, rows }
+        : null;
+    })
+    .filter((section): section is TaskPanelResponse["sections"][number] => Boolean(section));
+  const filteredSuggestedCommands = suggestedCommands.filter((command) =>
+    matchesPromptFilter(
+      `${command.label} ${command.action_label ?? ""} ${command.description} ${command.group}`,
+      filterQuery
+    )
+  );
+  const visibleRowCount = filteredSections.reduce((count, section) => count + section.rows.length, 0);
 
   function updateDraftValue(
     commandId: string,
@@ -2290,10 +2794,38 @@ function TaskPanel({
         <span>{taskPanel.title}</span>
       </div>
       <p className="task-panel-description">{taskPanel.description}</p>
+      <div className="prompt-pane-toolbar">
+        <label className="prompt-pane-search">
+          <span>Filter</span>
+          <input
+            className="prompt-pane-search-input"
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder="Search tasks, rows, and commands..."
+            value={filterQuery}
+          />
+        </label>
+      </div>
+      <div className="task-panel-meta-strip">
+        <div className="task-panel-meta-chip">
+          <span>Sections</span>
+          <strong>{filteredSections.length}</strong>
+        </div>
+        <div className="task-panel-meta-chip">
+          <span>Rows</span>
+          <strong>{visibleRowCount}</strong>
+        </div>
+        <div className="task-panel-meta-chip">
+          <span>Actions</span>
+          <strong>{filteredSuggestedCommands.length}</strong>
+        </div>
+      </div>
       <div className="task-sections">
-        {taskPanel.sections.map((section) => (
+        {filteredSections.map((section) => (
           <div className="task-section" key={section.section_id}>
-            <h3>{section.title}</h3>
+            <div className="task-section-header">
+              <h3>{section.title}</h3>
+              <span>{section.rows.length} rows</span>
+            </div>
             <div className="task-rows">
               {section.rows.map((row, index) => (
                 <div className="task-row" key={`${section.section_id}-${index}`}>
@@ -2304,10 +2836,13 @@ function TaskPanel({
             </div>
           </div>
         ))}
+        {filteredSections.length === 0 ? (
+          <div className="task-section task-section-empty">No task rows match this filter.</div>
+        ) : null}
       </div>
-      {suggestedCommands.length > 0 ? (
+      {filteredSuggestedCommands.length > 0 ? (
         <div className="task-editor-grid">
-          {suggestedCommands.map((command) =>
+          {filteredSuggestedCommands.map((command) =>
             command.arguments.length > 0 ? (
               <SuggestedCommandEditor
                 className="task-editor"
@@ -2341,6 +2876,85 @@ function TaskPanel({
           )}
         </div>
       ) : null}
+    </section>
+  );
+}
+
+export function PropertyInspectorPane({
+  objectId,
+  properties,
+}: {
+  objectId: string | null | undefined;
+  properties: PropertyResponse | null;
+}) {
+  const [filterQuery, setFilterQuery] = useState("");
+
+  const filteredGroups = (properties?.groups ?? [])
+    .map((group) => {
+      if (!filterQuery.trim()) {
+        return group;
+      }
+
+      const visibleProperties = group.properties.filter((property) =>
+        matchesPromptFilter(
+          `${group.title} ${property.display_name} ${property.property_type} ${property.value_preview}`,
+          filterQuery
+        )
+      );
+
+      return visibleProperties.length > 0 || matchesPromptFilter(group.title, filterQuery)
+        ? { ...group, properties: visibleProperties }
+        : null;
+    })
+    .filter((group): group is PropertyResponse["groups"][number] => Boolean(group));
+  const visiblePropertyCount = filteredGroups.reduce(
+    (count, group) => count + group.properties.length,
+    0
+  );
+
+  return (
+    <section className="dock-panel combo-pane combo-pane-properties">
+      <div className="panel-header panel-header-dense">
+        <h2>Data</h2>
+        <span>{objectId ?? "No active selection"}</span>
+      </div>
+      <div className="prompt-pane-toolbar">
+        <label className="prompt-pane-search">
+          <span>Filter</span>
+          <input
+            className="prompt-pane-search-input"
+            onChange={(event) => setFilterQuery(event.target.value)}
+            placeholder="Search properties, values, and groups..."
+            value={filterQuery}
+          />
+        </label>
+        <div className="prompt-pane-summary">
+          <span>{filteredGroups.length} groups</span>
+          <strong>{visiblePropertyCount} visible properties</strong>
+        </div>
+      </div>
+      <div className="property-groups combo-pane-scroll">
+        {filteredGroups.map((group) => (
+          <div className="property-group" key={group.group_id}>
+            <h3>{group.title}</h3>
+            {group.properties.map((property) => (
+              <div className="property-row" key={property.property_id}>
+                <div>
+                  <div className="property-name">{property.display_name}</div>
+                  <div className="property-type">{property.property_type}</div>
+                </div>
+                <div className="property-value">
+                  <span>{property.value_preview}</span>
+                  {property.expression_capable ? <em>fx</em> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        ))}
+        {filteredGroups.length === 0 ? (
+          <div className="property-group property-group-empty">No properties match this filter.</div>
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -2662,16 +3276,26 @@ export function SelectionInspector({
   );
 }
 
-function DiagnosticsPanel({
+export function DiagnosticsPanel({
   diagnostics,
-  commandStatus
+  commandStatus,
+  filterState,
+  onClearFilter
 }: {
   diagnostics: DiagnosticsResponse | null;
   commandStatus: CommandExecutionResponse | null;
+  filterState?: DockFilterState | null;
+  onClearFilter?: () => void;
 }) {
   if (!diagnostics) {
     return null;
   }
+
+  const visibleSignals = filterState?.query
+    ? diagnostics.recent_signals.filter((signal) =>
+        matchesPromptFilter(`${signal.title} ${signal.detail}`, filterState.query)
+      )
+    : diagnostics.recent_signals;
 
   const commandHealth = commandStatus
     ? commandStatus.accepted
@@ -2685,6 +3309,17 @@ function DiagnosticsPanel({
         <h2>Diagnostics</h2>
         <span>{diagnostics.selection.object_id ?? "No active selection"}</span>
       </div>
+      {filterState ? (
+        <div className="prompt-pane-toolbar dock-filter-toolbar">
+          <div className="prompt-pane-summary">
+            <span>Scoped View</span>
+            <strong>{filterState.label}</strong>
+          </div>
+          <button className="dock-tab-button dock-tab-button-utility" onClick={onClearFilter} type="button">
+            Clear Filter
+          </button>
+        </div>
+      ) : null}
       <div className="diagnostic-summary-grid">
         <div className="diagnostic-card">
           <span className="diagnostic-label">History Health</span>
@@ -2747,7 +3382,7 @@ function DiagnosticsPanel({
         <div className="diagnostic-detail">
           <h3>Recent Signals</h3>
           <div className="diagnostic-event-list">
-            {diagnostics.recent_signals.map((signal, index) => (
+            {visibleSignals.map((signal, index) => (
               <div className="diagnostic-event" key={`${signal.title}-${index}`}>
                 <span className={`level level-${signal.level}`}>{signal.level}</span>
                 <div>
@@ -2756,8 +3391,12 @@ function DiagnosticsPanel({
                 </div>
               </div>
             ))}
-            {diagnostics.recent_signals.length === 0 ? (
-              <p className="selection-empty">No backend events have been published yet.</p>
+            {visibleSignals.length === 0 ? (
+              <p className="selection-empty">
+                {filterState
+                  ? "No diagnostics signals matched the current dock filter."
+                  : "No backend events have been published yet."}
+              </p>
             ) : null}
           </div>
         </div>
@@ -2766,11 +3405,101 @@ function DiagnosticsPanel({
   );
 }
 
-function JobsPanel({
-  jobs
+function JobActions({
+  className,
+  commandCatalog,
+  job,
+  onFocusJobObject,
+  onRunJobCommand,
+  onSelectJobObject
 }: {
-  jobs: JobStatusResponse | null;
+  className?: string;
+  commandCatalog: CommandCatalogResponse | null;
+  job: JobStatusResponse["jobs"][number];
+  onFocusJobObject?: (objectId: string) => void;
+  onRunJobCommand?: (commandId: string, targetObjectId?: string) => void;
+  onSelectJobObject?: (objectId: string) => void;
 }) {
+  const command = inspectionCommand(commandCatalog, job.command_id);
+  const commandTargetObjectId = command?.requires_selection ? job.object_id : undefined;
+  const canRunCommand = Boolean(command && (!command.requires_selection || commandTargetObjectId));
+
+  if (!canRunCommand && !job.object_id) {
+    return null;
+  }
+
+  return (
+    <div className={className ?? "activity-actions"}>
+      {canRunCommand ? (
+        <InspectionActionButton
+          command={command}
+          label={command?.action_label ?? command?.label}
+          onClick={() => onRunJobCommand?.(job.command_id, commandTargetObjectId)}
+        />
+      ) : null}
+      {job.object_id ? (
+        <>
+          <button className="action-button" onClick={() => onSelectJobObject?.(job.object_id!)} type="button">
+            <ShellIcon icon="part" title="Select job object" />
+            <span>Select</span>
+          </button>
+          <button className="action-button" onClick={() => onFocusJobObject?.(job.object_id!)} type="button">
+            <ShellIcon icon="focus" title="Focus job object" />
+            <span>Focus</span>
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function relatedJobEvents(job: JobStatusResponse["jobs"][number], reportEvents: ActivityEvent[]) {
+  const matchingEvents = reportEvents.filter((event) => {
+    if (job.object_id && event.object_id === job.object_id) {
+      return true;
+    }
+
+    return !job.object_id && event.topic === "job_update";
+  });
+
+  return prioritizeReportEvents(summarizeReportEvents(matchingEvents)).slice(0, 3);
+}
+
+function jobDockFilterState(job: JobStatusResponse["jobs"][number]): DockFilterState {
+  if (job.object_id) {
+    return {
+      label: `${job.title} / ${job.object_id}`,
+      query: job.object_id
+    };
+  }
+
+  return {
+    label: `${job.title} / ${job.command_id}`,
+    query: job.title || job.command_id
+  };
+}
+
+export function JobsPanel({
+  commandCatalog,
+  jobs,
+  onFocusJobObject,
+  onOpenJobDiagnostics,
+  onOpenJobReport,
+  onRunJobCommand,
+  reportEvents,
+  onSelectJobObject
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  jobs: JobStatusResponse | null;
+  onFocusJobObject?: (objectId: string) => void;
+  onOpenJobDiagnostics?: (filterState: DockFilterState) => void;
+  onOpenJobReport?: (filterState: DockFilterState) => void;
+  onRunJobCommand?: (commandId: string, targetObjectId?: string) => void;
+  reportEvents?: ActivityEvent[];
+  onSelectJobObject?: (objectId: string) => void;
+}) {
+  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+
   if (!jobs) {
     return null;
   }
@@ -2784,34 +3513,223 @@ function JobsPanel({
       <div className="jobs-list">
         {jobs.jobs.length > 0 ? (
           jobs.jobs.map((job) => (
-            <div className="job-card" key={job.job_id}>
-              <div className="job-card-top">
-                <strong>{job.title}</strong>
-                <span className={`job-state job-state-${job.state}`}>{job.state}</span>
-              </div>
-              <div className="job-progress">
-                <div className="job-progress-bar" style={{ width: `${job.progress_percent}%` }} />
-              </div>
-              <p>{job.detail}</p>
-              <div className="job-stage-list">
-                {job.stages.map((stage) => (
-                  <div className="job-stage-chip" key={`${job.job_id}-${stage.stage_id}`}>
-                    <span>{stage.label}</span>
-                    <strong>{stage.progress_percent}%</strong>
+            (() => {
+              const isExpanded = expandedJobId === job.job_id;
+              const jobEvents = relatedJobEvents(job, reportEvents ?? []);
+              const dockFilter = jobDockFilterState(job);
+
+              return (
+                <div className="job-card" key={job.job_id}>
+                  <div className="job-card-top">
+                    <strong>{job.title}</strong>
+                    <span className={`job-state job-state-${job.state}`}>{job.state}</span>
                   </div>
-                ))}
-              </div>
-              <div className="job-meta">
-                <span>{job.command_id}</span>
-                <span>{job.object_id ?? "global"}</span>
-              </div>
-            </div>
+                  <div className="job-progress">
+                    <div className="job-progress-bar" style={{ width: `${job.progress_percent}%` }} />
+                  </div>
+                  <p>{job.detail}</p>
+                  <div className="job-stage-list">
+                    {job.stages.map((stage) => (
+                      <div className="job-stage-chip" key={`${job.job_id}-${stage.stage_id}`}>
+                        <span>{stage.label}</span>
+                        <strong>{stage.progress_percent}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="job-card-toolbar">
+                    <JobActions
+                      className="activity-actions job-card-actions"
+                      commandCatalog={commandCatalog}
+                      job={job}
+                      onFocusJobObject={onFocusJobObject}
+                      onRunJobCommand={onRunJobCommand}
+                      onSelectJobObject={onSelectJobObject}
+                    />
+                    <button
+                      aria-expanded={isExpanded}
+                      className="dock-tab-button dock-tab-button-utility job-detail-toggle"
+                      onClick={() => setExpandedJobId((current) => (current === job.job_id ? null : job.job_id))}
+                      type="button"
+                    >
+                      {isExpanded ? "Hide Details" : "Details"}
+                    </button>
+                  </div>
+                  {isExpanded ? (
+                    <div className="job-detail-panel">
+                      <section className="job-detail-section">
+                        <div className="panel-header panel-header-dense">
+                          <h3>Stage Diagnostics</h3>
+                          <span>{job.stages.length} tracked</span>
+                        </div>
+                        {job.stages.length > 0 ? (
+                          <div className="job-stage-detail-list">
+                            {job.stages.map((stage) => (
+                              <div className="job-stage-detail-row" key={`${job.job_id}-detail-${stage.stage_id}`}>
+                                <strong>{stage.label}</strong>
+                                <span>{stage.state}</span>
+                                <span>{stage.progress_percent}%</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="selection-empty">This job did not publish stage diagnostics.</p>
+                        )}
+                      </section>
+                      <section className="job-detail-section">
+                        <div className="panel-header panel-header-dense">
+                          <h3>Recent Backend Activity</h3>
+                          <span>{jobEvents.length} excerpts</span>
+                        </div>
+                        <div className="job-detail-links">
+                          <button
+                            className="dock-tab-button dock-tab-button-utility"
+                            onClick={() => onOpenJobReport?.(dockFilter)}
+                            type="button"
+                          >
+                            Open Report
+                          </button>
+                          <button
+                            className="dock-tab-button dock-tab-button-utility"
+                            onClick={() => onOpenJobDiagnostics?.(dockFilter)}
+                            type="button"
+                          >
+                            Open Diagnostics
+                          </button>
+                        </div>
+                        {jobEvents.length > 0 ? (
+                          <div className="job-log-list">
+                            {jobEvents.map((activity, index) => (
+                              <div className="job-log-entry" key={`${job.job_id}-activity-${activity.topic}-${index}`}>
+                                <span className={`level level-${activity.level}`}>{activity.level}</span>
+                                <div>
+                                  <div className="job-log-topic">
+                                    {activity.topic}
+                                    {activity.object_id ? ` / ${activity.object_id}` : ""}
+                                  </div>
+                                  <div className="job-log-message">{activity.message}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="selection-empty">No related backend activity has been captured for this job yet.</p>
+                        )}
+                      </section>
+                    </div>
+                  ) : null}
+                  <div className="job-meta">
+                    <span>{job.command_id}</span>
+                    <span>{job.object_id ?? "global"}</span>
+                  </div>
+                </div>
+              );
+            })()
           ))
         ) : (
           <p className="selection-empty">No backend jobs have been recorded yet.</p>
         )}
       </div>
     </section>
+  );
+}
+
+export function BottomDockPinnedRail({
+  commandCatalog,
+  jobs,
+  notices,
+  onFocusJobObject,
+  onFocusNoticeObject,
+  onOpenJobs,
+  onOpenReport,
+  onRunJobCommand,
+  onRunNoticeCommand,
+  onSelectJobObject,
+  onSelectNoticeObject,
+}: {
+  commandCatalog: CommandCatalogResponse | null;
+  jobs: JobStatusResponse | null;
+  notices: ShellNotice[];
+  onFocusJobObject?: (objectId: string) => void;
+  onFocusNoticeObject?: (objectId: string) => void;
+  onOpenJobs: () => void;
+  onOpenReport: () => void;
+  onRunJobCommand?: (commandId: string, targetObjectId?: string) => void;
+  onRunNoticeCommand?: (commandId: string, targetObjectId?: string) => void;
+  onSelectJobObject?: (objectId: string) => void;
+  onSelectNoticeObject?: (objectId: string) => void;
+}) {
+  const recentJobs = jobs?.jobs.slice(0, 2) ?? [];
+  const visibleNotices = notices.slice(0, 2);
+
+  if (visibleNotices.length === 0 && recentJobs.length === 0) {
+    return null;
+  }
+
+  return (
+    <aside className="bottom-dock-pinned-rail">
+      <section className="bottom-dock-pinned-card">
+        <div className="panel-header panel-header-dense">
+          <h2>Pinned Notices</h2>
+          <button className="dock-tab-button dock-tab-button-utility" onClick={onOpenReport} type="button">
+            Open Report
+          </button>
+        </div>
+        {visibleNotices.length > 0 ? (
+          <div className="bottom-dock-pinned-list">
+            {visibleNotices.map((notice) => (
+              <div className="bottom-dock-pinned-item" key={notice.id}>
+                <span className={`level level-${notice.level}`}>{notice.level}</span>
+                <div>
+                  <strong>{notice.title}</strong>
+                  <p>{notice.detail}</p>
+                  <ActivityObjectActions
+                    activity={{ object_id: notice.objectId ?? null, topic: notice.title.replaceAll(" ", "_") }}
+                    commandActionOverride={notice.commandAction}
+                    commandCatalog={commandCatalog}
+                    onFocusActivityObject={onFocusNoticeObject}
+                    onRunCommand={onRunNoticeCommand}
+                    onSelectActivityObject={onSelectNoticeObject}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="selection-empty">No live notices are pinned right now.</p>
+        )}
+      </section>
+      <section className="bottom-dock-pinned-card">
+        <div className="panel-header panel-header-dense">
+          <h2>Pinned Jobs</h2>
+          <button className="dock-tab-button dock-tab-button-utility" onClick={onOpenJobs} type="button">
+            Open Jobs
+          </button>
+        </div>
+        {recentJobs.length > 0 ? (
+          <div className="bottom-dock-pinned-list">
+            {recentJobs.map((job) => (
+              <div className="bottom-dock-pinned-item" key={job.job_id}>
+                <span className={`job-state job-state-${job.state}`}>{job.state}</span>
+                <div>
+                  <strong>{job.title}</strong>
+                  <p>{job.detail}</p>
+                  <JobActions
+                    className="activity-actions bottom-dock-pinned-actions"
+                    commandCatalog={commandCatalog}
+                    job={job}
+                    onFocusJobObject={onFocusJobObject}
+                    onRunJobCommand={onRunJobCommand}
+                    onSelectJobObject={onSelectJobObject}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="selection-empty">No jobs are currently pinned.</p>
+        )}
+      </section>
+    </aside>
   );
 }
 
@@ -2866,8 +3784,12 @@ function objectMatchesSelectionMode(objectType: string, selectionMode: string) {
 }
 
 export default function App() {
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const mainColumnRef = useRef<HTMLElement | null>(null);
   const [boot, setBoot] = useState<BootPayload | null>(null);
   const [document, setDocument] = useState<DocumentRef | null>(null);
+  const [reportDockFilter, setReportDockFilter] = useState<DockFilterState | null>(null);
+  const [diagnosticsDockFilter, setDiagnosticsDockFilter] = useState<DockFilterState | null>(null);
   const [shellSnapshot, setShellSnapshot] = useState<ShellSnapshot | null>(null);
   const [objectTree, setObjectTree] = useState<ObjectNode[]>([]);
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
@@ -2889,9 +3811,14 @@ export default function App() {
   const [openPath, setOpenPath] = useState(initialPath);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const [viewportCommandLensOpen, setViewportCommandLensOpen] = useState(false);
+  const [viewportPointerAnchor, setViewportPointerAnchor] = useState<ViewportAnchor | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeResizePanelId, setActiveResizePanelId] = useState<ResizableShellPanelId | null>(null);
+  const [comboViewDraftSizeHint, setComboViewDraftSizeHint] = useState<number | null>(null);
+  const [reportDockDraftSizeHint, setReportDockDraftSizeHint] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -2943,19 +3870,28 @@ export default function App() {
       if (isEditableEventTarget(event.target)) {
         if (event.key === "Escape") {
           setPaletteOpen(false);
+          setViewportCommandLensOpen(false);
         }
         return;
       }
 
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
+        setViewportCommandLensOpen(false);
         setPaletteOpen(true);
         return;
       }
 
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "f") {
         event.preventDefault();
+        setViewportCommandLensOpen(false);
         setPaletteOpen(true);
+        return;
+      }
+
+      if (!paletteOpen && !event.ctrlKey && !event.metaKey && !event.altKey && event.code === "Space") {
+        event.preventDefault();
+        setViewportCommandLensOpen((current) => !current);
         return;
       }
 
@@ -2974,6 +3910,7 @@ export default function App() {
 
       if (event.key === "Escape") {
         setPaletteOpen(false);
+        setViewportCommandLensOpen(false);
       }
     }
 
@@ -3033,6 +3970,22 @@ export default function App() {
   useEffect(() => {
     setStepViewportPreset(null);
   }, [document?.document_id]);
+
+  useEffect(() => {
+    const activeSession = activeWorkspaceSessionForDocument(shellSnapshot, document);
+    setReportDockFilter(
+      dockFilterStateFromParts(
+        activeSession?.report_dock_filter_label,
+        activeSession?.report_dock_filter_query
+      )
+    );
+    setDiagnosticsDockFilter(
+      dockFilterStateFromParts(
+        activeSession?.diagnostics_dock_filter_label,
+        activeSession?.diagnostics_dock_filter_query
+      )
+    );
+  }, [document, shellSnapshot]);
 
   async function refreshDocumentSlices(
     documentId: string,
@@ -3259,9 +4212,18 @@ export default function App() {
       setError(null);
       setPaletteOpen(false);
       setPaletteQuery("");
+      setViewportCommandLensOpen(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to run command");
     }
+  }
+
+  function setViewportAnchorFromClientPosition(element: HTMLDivElement, clientX: number, clientY: number) {
+    const rect = element.getBoundingClientRect();
+    setViewportPointerAnchor({
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    });
   }
 
   async function handleOpenDocument(event: FormEvent<HTMLFormElement>) {
@@ -3394,11 +4356,15 @@ export default function App() {
     await openDocumentPath(filePath);
   }
 
-  async function handleSessionActivate(session: WorkspaceSession) {
+  async function handleSessionActivate(
+    session: WorkspaceSession,
+    preferredBottomDockTab?: "report" | "diagnostics"
+  ) {
     const activeFilePath = document?.file_path ?? null;
     let activeDocument = document;
+    const sameActiveDocument = activeFilePath === session.file_path;
 
-    if (activeFilePath !== session.file_path) {
+    if (!sameActiveDocument) {
       const nextDocument = await openDocumentPath(session.file_path);
       if (!nextDocument) {
         return;
@@ -3422,7 +4388,7 @@ export default function App() {
       const targetSelectionMode = session.selection_mode;
       if (
         targetSelectionMode &&
-        targetSelectionMode !== (selectionState?.current_mode ?? "object")
+        (!sameActiveDocument || targetSelectionMode !== (selectionState?.current_mode ?? "object"))
       ) {
         await setSelectionMode(nextDocument.document_id, targetSelectionMode);
       }
@@ -3435,15 +4401,27 @@ export default function App() {
         });
       }
 
-      if (session.bottom_dock_tab || session.report_dock_visible !== null) {
+      if (session.bottom_dock_tab || session.report_dock_visible !== null || preferredBottomDockTab) {
         await updateShellPanelState(nextDocument.document_id, "report_dock", {
-          active_tab: session.bottom_dock_tab ?? undefined,
+          active_tab: preferredBottomDockTab ?? session.bottom_dock_tab ?? undefined,
           visible: session.report_dock_visible ?? undefined,
           size_hint: session.report_dock_size_hint ?? undefined
         });
       }
 
-      const restoredSelectionId = session.selected_object_id ?? selectionState?.selected_object_id ?? null;
+      setReportDockFilter(
+        dockFilterStateFromParts(session.report_dock_filter_label, session.report_dock_filter_query)
+      );
+      setDiagnosticsDockFilter(
+        dockFilterStateFromParts(
+          session.diagnostics_dock_filter_label,
+          session.diagnostics_dock_filter_query
+        )
+      );
+
+      const restoredSelectionId = sameActiveDocument
+        ? session.selected_object_id ?? selectionState?.selected_object_id ?? null
+        : session.selected_object_id ?? null;
       if (restoredSelectionId) {
         const restoredSelection = await setSelection(nextDocument.document_id, restoredSelectionId);
         await refreshDocumentSlices(nextDocument.document_id, restoredSelection.selected_object_id, nextDocument);
@@ -3555,6 +4533,72 @@ export default function App() {
     }
   }
 
+  async function handlePersistDockFilters(mutation: {
+    report_dock_filter_label?: string;
+    report_dock_filter_query?: string;
+    diagnostics_dock_filter_label?: string;
+    diagnostics_dock_filter_query?: string;
+    clear_report_dock_filter?: boolean;
+    clear_diagnostics_dock_filter?: boolean;
+  }) {
+    if (!document) {
+      return;
+    }
+
+    try {
+      const nextShellSnapshot = await updateShellSessionState(document.document_id, mutation);
+      setShellSnapshot(nextShellSnapshot);
+      setBoot((current) =>
+        current
+          ? {
+              ...current,
+              shell_snapshot: nextShellSnapshot
+            }
+          : current
+      );
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Failed to persist dock filter state");
+    }
+  }
+
+  async function handleOpenFilteredBottomDockTab(tab: "report" | "diagnostics", filterState: DockFilterState) {
+    if (tab === "report") {
+      setReportDockFilter(filterState);
+      await handlePersistDockFilters({
+        report_dock_filter_label: filterState.label,
+        report_dock_filter_query: filterState.query
+      });
+    } else {
+      setDiagnosticsDockFilter(filterState);
+      await handlePersistDockFilters({
+        diagnostics_dock_filter_label: filterState.label,
+        diagnostics_dock_filter_query: filterState.query
+      });
+    }
+
+    await handlePanelTabChange("report_dock", tab);
+  }
+
+  async function handleSessionScopeActivate(session: WorkspaceSession) {
+    const scopeTarget = sessionScopeTarget(session);
+
+    if (!scopeTarget) {
+      await handleSessionActivate(session);
+      return;
+    }
+
+    const activeFilePath = document?.file_path ?? null;
+    const sameActiveDocument = activeFilePath === session.file_path;
+
+    if (sameActiveDocument) {
+      await handleOpenFilteredBottomDockTab(scopeTarget.tab, scopeTarget.filterState);
+      return;
+    }
+
+    await handleSessionActivate(session, scopeTarget.tab);
+  }
+
   async function handlePanelVisibilityChange(panelId: "combo_view" | "report_dock", visible: boolean) {
     if (!document) {
       return;
@@ -3604,6 +4648,76 @@ export default function App() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Failed to resize panel");
     }
+  }
+
+  function handlePanelResizeDragStart(
+    panelId: ResizableShellPanelId,
+    axis: ResizeAxis,
+    container: HTMLElement | null,
+    event: ReactPointerEvent<HTMLDivElement>
+  ) {
+    if (!container) {
+      return;
+    }
+
+    const rect = container.getBoundingClientRect();
+    const initialSizeHint = resolveShellPanelSizeHintFromPointer(
+      panelId,
+      axis,
+      axis === "horizontal" ? event.clientX : event.clientY,
+      rect
+    );
+
+    if (initialSizeHint === null) {
+      return;
+    }
+
+    event.preventDefault();
+    setActiveResizePanelId(panelId);
+
+    const applyDraftSizeHint =
+      panelId === "combo_view" ? setComboViewDraftSizeHint : setReportDockDraftSizeHint;
+    applyDraftSizeHint(initialSizeHint);
+
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      const nextSizeHint = resolveShellPanelSizeHintFromPointer(
+        panelId,
+        axis,
+        axis === "horizontal" ? moveEvent.clientX : moveEvent.clientY,
+        rect
+      );
+      if (nextSizeHint !== null) {
+        applyDraftSizeHint(nextSizeHint);
+      }
+    };
+
+    const clearDragState = () => {
+      setActiveResizePanelId((current) => (current === panelId ? null : current));
+      applyDraftSizeHint(null);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerCancel);
+    };
+
+    const handlePointerUp = (upEvent: PointerEvent) => {
+      const nextSizeHint =
+        resolveShellPanelSizeHintFromPointer(
+          panelId,
+          axis,
+          axis === "horizontal" ? upEvent.clientX : upEvent.clientY,
+          rect
+        ) ?? initialSizeHint;
+      clearDragState();
+      void handlePanelSizeChange(panelId, nextSizeHint);
+    };
+
+    const handlePointerCancel = () => {
+      clearDragState();
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerCancel);
   }
 
   async function handleMenuAction(commandId: string | null | undefined) {
@@ -3656,9 +4770,6 @@ export default function App() {
   const reportEvents = filteredReportEvents(events, shellSnapshot, selectedObjectId);
   const flattenedTree = flattenObjectTree(objectTree);
   const objectTypeById = new Map(flattenedTree.map((node) => [node.object_id, node.object_type]));
-  const selectableObjectCount = flattenedTree.filter((node) =>
-    objectMatchesSelectionMode(node.object_type, selectionState?.current_mode ?? "object")
-  ).length;
   const stepAvailable = stepStatus === "ready" && Boolean(stepDocument) && Boolean(stepScene);
   const stepProtocolSummary = stepDocument?.header.application_protocols.join(", ") ?? "No STEP payload";
   const paletteTargetOptions: CommandTargetOption[] = [
@@ -3728,8 +4839,21 @@ export default function App() {
       combo_view_visible: session.combo_view_visible ?? null,
       report_dock_visible: session.report_dock_visible ?? null,
       combo_view_size_hint: session.combo_view_size_hint ?? null,
-      report_dock_size_hint: session.report_dock_size_hint ?? null
+      report_dock_size_hint: session.report_dock_size_hint ?? null,
+      report_dock_filter_label: session.report_dock_filter_label ?? null,
+      report_dock_filter_query: session.report_dock_filter_query ?? null,
+      diagnostics_dock_filter_label: session.diagnostics_dock_filter_label ?? null,
+      diagnostics_dock_filter_query: session.diagnostics_dock_filter_query ?? null
     }));
+  const activeWorkspaceSession = activeWorkspaceSessionForDocument(shellSnapshot, document);
+  const activeWorkspaceScopeSession =
+    activeWorkspaceSession ?? workspaceSessions.find((session) => Boolean(sessionScopeTarget(session))) ?? null;
+  const activeWorkspaceScopeTarget = activeWorkspaceScopeSession
+    ? sessionScopeTarget(activeWorkspaceScopeSession)
+    : null;
+  const activeWorkspaceScopeSummary = activeWorkspaceScopeSession
+    ? sessionDockFilterSummary(activeWorkspaceScopeSession)
+    : null;
   const comboViewTab =
     shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "combo_view")?.active_tab ??
     "model";
@@ -3765,8 +4889,8 @@ export default function App() {
   const reportDockPanel = shellSnapshot?.layout.panels.find((panel) => panel.panel_id === "report_dock");
   const comboViewVisible = comboViewPanel?.visible ?? true;
   const reportDockVisible = reportDockPanel?.visible ?? true;
-  const comboViewSizeHint = comboViewPanel?.size_hint ?? 0.28;
-  const reportDockSizeHint = reportDockPanel?.size_hint ?? 0.24;
+  const comboViewSizeHint = comboViewDraftSizeHint ?? comboViewPanel?.size_hint ?? 0.28;
+  const reportDockSizeHint = reportDockDraftSizeHint ?? reportDockPanel?.size_hint ?? 0.24;
   const comboColumnPercent = Math.round(comboViewSizeHint * 100);
   const selectionModeLabel =
     selectionState?.available_modes.find((mode) => mode.mode_id === selectionState.current_mode)?.label ??
@@ -3792,6 +4916,56 @@ export default function App() {
   const jobsCount = jobs?.jobs.length ?? 0;
   const workerModeLabel = titleCaseShellToken(boot.bridge_status.worker_mode, "Unknown");
   const dockSummary = reportDockVisible ? titleCaseShellToken(bottomDockTab, "Report") : "Hidden";
+  const bottomDockSections: Array<{ count: string; label: string; summary: string; tab: BottomDockTab }> = [
+    {
+      tab: "report",
+      label: "Report",
+      count: `${shellNotices.length}`,
+      summary: shellNotices.length > 0 ? "Notices and inspection activity" : "Inspection summary"
+    },
+    {
+      tab: "python",
+      label: "Python",
+      count: "Host",
+      summary: "Compatibility console slot"
+    },
+    {
+      tab: "jobs",
+      label: "Jobs",
+      count: `${jobsCount}`,
+      summary: jobsCount > 0 ? "Queued or running work" : "No active jobs"
+    },
+    {
+      tab: "diagnostics",
+      label: "Diagnostics",
+      count: diagnosticsSummary,
+      summary: "Selection and worker health"
+    },
+    {
+      tab: "history",
+      label: "History",
+      count: `${featureHistory?.entries.length ?? 0}`,
+      summary: "Rollback and suppression lane"
+    },
+    {
+      tab: "commands",
+      label: "Commands",
+      count: `${commandCatalog?.commands.length ?? 0}`,
+      summary: commandCatalog?.workbench.display_name ?? activeWorkbench.display_name
+    },
+    {
+      tab: "extensions",
+      label: "Extensions",
+      count: `${extensionCompatibility?.lanes.length ?? 0}`,
+      summary:
+        extensionCompatibility?.lanes.length
+          ? `${extensionCompatibility.lanes.length} compatibility lanes`
+          : "Compatibility surface"
+    }
+  ];
+  const activeBottomDockSection =
+    bottomDockSections.find((section) => section.tab === bottomDockTab) ?? bottomDockSections[0];
+  const showPinnedBottomDockRail = bottomDockTab !== "report" && (shellNotices.length > 0 || jobsCount > 0);
   const totalPanels = shellSnapshot?.layout.panels.length ?? 0;
   const fallbackStatusbarItems: ProtocolShellStatusBarItem[] = [
     {
@@ -3858,16 +5032,37 @@ export default function App() {
   const statusbarItems = (shellSnapshot?.status_bar?.items ?? fallbackStatusbarItems).filter(
     (item) => item.item_id !== "notices"
   );
+  const comboColumnWidth = `clamp(232px, ${Math.max(20, comboColumnPercent)}vw, 344px)`;
+  const inspectorColumnWidth = "clamp(300px, 24vw, 380px)";
+  const bottomDockHeight = `clamp(184px, ${Math.max(18, Math.round(reportDockSizeHint * 100))}vh, 296px)`;
+  const studioWorkspaceStyle = comboViewVisible
+    ? {
+        columnGap: 0,
+        gridTemplateColumns: `${comboColumnWidth} ${PANEL_RESIZE_HANDLE_SIZE}px minmax(0, 1fr) ${inspectorColumnWidth}`
+      }
+    : {
+        gridTemplateColumns: `minmax(0, 1fr) ${inspectorColumnWidth}`
+      };
+  const studioCenterColumnStyle = reportDockVisible
+    ? {
+        gridTemplateRows: `minmax(0, 1fr) ${PANEL_RESIZE_HANDLE_SIZE}px ${bottomDockHeight}`,
+        rowGap: 0
+      }
+    : {
+        gridTemplateRows: "minmax(0, 1fr)"
+      };
   const workspaceStyle = comboViewVisible
     ? {
-        gridTemplateColumns: `minmax(260px, ${comboColumnPercent}%) minmax(0, ${100 - comboColumnPercent}%)`
+        columnGap: 0,
+        gridTemplateColumns: `${comboColumnWidth} ${PANEL_RESIZE_HANDLE_SIZE}px minmax(0, 1fr)`
       }
     : {
         gridTemplateColumns: "minmax(0, 1fr)"
       };
   const mainColumnStyle = reportDockVisible
     ? {
-        gridTemplateRows: `minmax(0, ${Math.max(0.45, 1 - reportDockSizeHint)}fr) minmax(200px, ${reportDockSizeHint}fr)`
+        gridTemplateRows: `minmax(0, 1fr) ${PANEL_RESIZE_HANDLE_SIZE}px ${bottomDockHeight}`,
+        rowGap: 0
       }
     : {
         gridTemplateRows: "minmax(0, 1fr)"
@@ -3876,116 +5071,159 @@ export default function App() {
     ...(comboViewVisible ? [] : [{ panelId: "combo_view" as const, label: "Show Combo View" }]),
     ...(reportDockVisible ? [] : [{ panelId: "report_dock" as const, label: "Show Bottom Dock" }])
   ];
+  const studioInspectorPrimary =
+    comboViewTab === "tasks" ? (
+      <TaskPanel
+        commandCatalog={commandCatalog}
+        onRunCommand={(commandId, commandArguments) =>
+          void handleCommand(commandId, commandArguments ?? {})
+        }
+        taskPanel={taskPanel}
+      />
+    ) : (
+      <PropertyInspectorPane objectId={properties?.object_id} properties={properties} />
+    );
+  const studioInspectorSecondary =
+    comboViewTab === "tasks" ? (
+      <PropertyInspectorPane objectId={properties?.object_id} properties={properties} />
+    ) : (
+      <TaskPanel
+        commandCatalog={commandCatalog}
+        onRunCommand={(commandId, commandArguments) =>
+          void handleCommand(commandId, commandArguments ?? {})
+        }
+        taskPanel={taskPanel}
+      />
+    );
 
   return (
     <div className="app-shell freecad-shell">
-      <div className="freecad-menubar">
-        {visibleMenus.map((menu) => (
-          <div
-            className={`freecad-menu ${openMenuId === menu.menu_id ? "freecad-menu-open" : ""}`}
-            key={menu.menu_id}
-            onMouseLeave={() => setOpenMenuId((current) => (current === menu.menu_id ? null : current))}
-          >
-            <button
-              aria-expanded={openMenuId === menu.menu_id}
-              className="freecad-menu-button"
-              onClick={() =>
-                setOpenMenuId((current) => (current === menu.menu_id ? null : menu.menu_id))
-              }
-              type="button"
-            >
-              {menu.label}
-            </button>
-            {openMenuId === menu.menu_id ? (
-              <div className="freecad-menu-dropdown">
-                {menu.items.map((item, index) =>
-                  item.kind === "separator" ? (
-                    <div className="freecad-menu-separator" key={`${menu.menu_id}-separator-${index}`} />
-                  ) : (
-                    <button
-                      className={`freecad-menu-item ${item.checked ? "freecad-menu-item-checked" : ""}`}
-                      disabled={item.enabled === false}
-                      key={`${menu.menu_id}-${item.label ?? item.command_id ?? index}`}
-                      onClick={() => void handleMenuAction(item.command_id)}
-                      type="button"
-                    >
-                      <span className="freecad-menu-item-check">{item.checked ? "x" : ""}</span>
-                      <span className="freecad-menu-item-label">{item.label ?? item.command_id ?? "Unavailable"}</span>
-                    </button>
-                  )
-                )}
+      <div className="freecad-toolbar-stack studio-shell-header">
+        <div className="freecad-toolbar-row studio-shell-row">
+          <div className="freecad-inline-menubar studio-inline-menubar">
+            {visibleMenus.map((menu) => (
+              <div
+                className={`freecad-menu ${openMenuId === menu.menu_id ? "freecad-menu-open" : ""}`}
+                key={menu.menu_id}
+                onMouseLeave={() => setOpenMenuId((current) => (current === menu.menu_id ? null : current))}
+              >
+                <button
+                  aria-expanded={openMenuId === menu.menu_id}
+                  className="freecad-menu-button"
+                  onClick={() =>
+                    setOpenMenuId((current) => (current === menu.menu_id ? null : menu.menu_id))
+                  }
+                  type="button"
+                >
+                  {menu.label}
+                </button>
+                {openMenuId === menu.menu_id ? (
+                  <div className="freecad-menu-dropdown">
+                    {menu.items.map((item, index) =>
+                      item.kind === "separator" ? (
+                        <div className="freecad-menu-separator" key={`${menu.menu_id}-separator-${index}`} />
+                      ) : (
+                        <button
+                          className={`freecad-menu-item ${item.checked ? "freecad-menu-item-checked" : ""}`}
+                          disabled={item.enabled === false}
+                          key={`${menu.menu_id}-${item.label ?? item.command_id ?? index}`}
+                          onClick={() => void handleMenuAction(item.command_id)}
+                          type="button"
+                        >
+                          <span className="freecad-menu-item-check">{item.checked ? "x" : ""}</span>
+                          <span className="freecad-menu-item-label">{item.label ?? item.command_id ?? "Unavailable"}</span>
+                        </button>
+                      )
+                    )}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            ))}
           </div>
-        ))}
-      </div>
 
-      <div className="freecad-toolbar-stack">
-        <div className="freecad-toolbar-row">
-          <div className="freecad-brand">
-            <div className="freecad-frame-title">FreeCAD</div>
+          <div className="freecad-brand studio-title-cluster">
+            <div className="freecad-frame-title">AsterForge Studio</div>
             <strong>{document.display_name}</strong>
           </div>
-          <label className="workbench-picker">
-            <span>Workbench</span>
-            <div className="workbench-active-chip">
-              <ShellIcon icon={activeWorkbench.icon} title={activeWorkbench.display_name} />
-              <div>
-                <strong>{activeWorkbench.display_name}</strong>
-                <small className="workbench-active-chip-meta">
-                  {activeWorkbench.category} | {activeWorkbench.migration_lane}
-                </small>
-              </div>
-            </div>
-            {workbenchLocked ? (
-              <div className="workbench-lock-note">
-                {activeWorkbench.description ?? "Workbench is fixed by the active document context."}
-              </div>
-            ) : (
-              <select
-                value={activeWorkbenchId}
-                onChange={(event) => void handleWorkbenchChange(event.target.value)}
-              >
-                {selectableWorkbenchOptions.map((workbench) => (
-                  <option disabled={!workbench.enabled} key={workbench.workbench_id} value={workbench.workbench_id}>
-                    {workbench.display_name} ({workbench.category}, {workbench.migration_lane})
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-          <form className="open-form freecad-open-form" onSubmit={handleOpenDocument}>
-            <input
-              className="open-input"
-              onChange={(event) => setOpenPath(event.target.value)}
-              placeholder="C:/models/example.FCStd"
-              value={openPath}
-            />
-            <button className="action-button action-button-primary" type="submit">
-              Open
-            </button>
-          </form>
-          <button className="action-button" onClick={() => setPaletteOpen(true)} type="button">
-            Command Palette
-            <strong>F / Ctrl+K</strong>
-          </button>
-        </div>
 
-        <div className="freecad-toolbar-row freecad-toolbar-row-compact">
-          <ShellToolbarBands
-            catalog={commandCatalog}
-            onRunCommand={(commandId) => void handleCommand(commandId)}
-            shellSnapshot={shellSnapshot}
-          />
-          <div className="status-cluster">
+          <div className="studio-shell-actions">
+            <label className="workbench-picker studio-workbench-picker">
+              <span>Workbench</span>
+              <div className="workbench-active-chip">
+                <ShellIcon icon={activeWorkbench.icon} title={activeWorkbench.display_name} />
+                <div>
+                  <strong>{activeWorkbench.display_name}</strong>
+                  <small className="workbench-active-chip-meta">
+                    {activeWorkbench.category} | {activeWorkbench.migration_lane}
+                  </small>
+                </div>
+              </div>
+              {workbenchLocked ? (
+                <div className="workbench-lock-note">
+                  {activeWorkbench.description ?? "Workbench is fixed by the active document context."}
+                </div>
+              ) : (
+                <select
+                  value={activeWorkbenchId}
+                  onChange={(event) => void handleWorkbenchChange(event.target.value)}
+                >
+                  {selectableWorkbenchOptions.map((workbench) => (
+                    <option disabled={!workbench.enabled} key={workbench.workbench_id} value={workbench.workbench_id}>
+                      {workbench.display_name} ({workbench.category}, {workbench.migration_lane})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </label>
+
+            <form className="open-form freecad-open-form studio-open-form" onSubmit={handleOpenDocument}>
+              <input
+                className="open-input"
+                onChange={(event) => setOpenPath(event.target.value)}
+                placeholder="C:/models/example.FCStd"
+                value={openPath}
+              />
+              <button className="action-button action-button-primary" type="submit">
+                Open
+              </button>
+            </form>
+
+            <button className="action-button" onClick={() => setPaletteOpen(true)} type="button">
+              Command Palette
+              <strong>F / Ctrl+K</strong>
+            </button>
+          </div>
+
+          <div className="status-cluster studio-status-cluster">
             <span className="badge badge-hot">{document.workbench}</span>
             <span className="badge">{document.dirty ? "Unsaved changes" : "Saved"}</span>
             <span className="badge">{boot.boot_report.services.length} backend services</span>
             <span className="badge">{boot.bridge_status.worker_mode}</span>
             <span className="badge">{visiblePanels} visible panels</span>
           </div>
+        </div>
+
+        <div className="freecad-toolbar-row freecad-toolbar-row-compact studio-command-rail">
+          <ShellToolbarBands
+            catalog={commandCatalog}
+            onRunCommand={(commandId) => void handleCommand(commandId)}
+            shellSnapshot={shellSnapshot}
+          />
+          {activeWorkspaceScopeSession && activeWorkspaceScopeTarget && activeWorkspaceScopeSummary ? (
+            <button
+              aria-label={activeWorkspaceScopeSummary}
+              className="action-button studio-scope-chip"
+              onClick={() => {
+                void handleSessionScopeActivate(activeWorkspaceScopeSession);
+              }}
+              title={`Open ${activeWorkspaceScopeSummary}`}
+              type="button"
+            >
+              {activeWorkspaceScopeTarget.filterState.label}
+            </button>
+          ) : null}
           {reopenTabs.length > 0 ? (
-            <div className="shell-layout-actions">
+            <div className="shell-layout-actions studio-restore-actions">
               {reopenTabs.map((entry) => (
                 <button
                   className="action-button"
@@ -3999,46 +5237,7 @@ export default function App() {
             </div>
           ) : null}
         </div>
-
-        {recentDocuments.length > 0 ? (
-          <div className="freecad-toolbar-row freecad-toolbar-row-compact">
-            <span className="dock-strip-label">Recent</span>
-            <div className="recent-docs-list">
-              {recentDocuments.map((entry) => (
-                <button
-                  className={`recent-doc-chip ${(document.file_path ?? openPath) === entry.file_path ? "recent-doc-chip-active" : ""}`}
-                  key={entry.file_path}
-                  onClick={() => void handleRecentDocumentOpen(entry.file_path)}
-                  title={`${entry.display_name} • ${entry.workbench} • ${entry.dirty ? "Unsaved" : "Saved"}`}
-                  type="button"
-                >
-                  {entry.display_name}
-                </button>
-              ))}
-            </div>
-            <div className="recent-doc-actions">
-              <button className="action-button action-button-subtle" onClick={() => void handleClearRecentDocuments()} type="button">
-                Clear History
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
-
-      <SessionTabs
-        activeDocumentId={document.document_id}
-        activeFilePath={document.file_path}
-        onClearInactive={() => {
-          void handleClearInactiveSessions();
-        }}
-        onDismiss={(session) => {
-          void handleDismissSession(session);
-        }}
-        onActivate={(session) => {
-          void handleSessionActivate(session);
-        }}
-        sessions={workspaceSessions}
-      />
 
       <CommandPalette
         catalog={commandCatalog}
@@ -4054,151 +5253,174 @@ export default function App() {
 
       {error ? <div className="inline-alert">{error}</div> : null}
 
-      <main className="freecad-workspace" style={workspaceStyle}>
+      <main className="studio-workspace" ref={workspaceRef} style={studioWorkspaceStyle}>
         {comboViewVisible ? (
-        <aside className="panel freecad-combo-view">
-          <div className="dock-tab-strip">
-            <button
-              className={`dock-tab-button ${comboViewTab === "model" ? "dock-tab-button-active" : ""}`}
-              onClick={() => void handlePanelTabChange("combo_view", "model")}
-              type="button"
-            >
-              Model
-            </button>
-            <button
-              className={`dock-tab-button ${comboViewTab === "tasks" ? "dock-tab-button-active" : ""}`}
-              onClick={() => void handlePanelTabChange("combo_view", "tasks")}
-              type="button"
-            >
-              Tasks
-            </button>
-            <button
-              className="dock-tab-button dock-tab-button-utility"
-              onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint - 0.03)}
-              type="button"
-            >
-              Narrower
-            </button>
-            <button
-              className="dock-tab-button dock-tab-button-utility"
-              onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint + 0.03)}
-              type="button"
-            >
-              Wider
-            </button>
-            <button
-              className="dock-tab-button dock-tab-button-utility"
-              onClick={() => void handlePanelVisibilityChange("combo_view", false)}
-              type="button"
-            >
-              Hide
-            </button>
+        <aside className="panel studio-sidebar-left">
+          <div className="studio-pane-heading">
+            <div>
+              <span className="dock-strip-label">Studio</span>
+              <strong>Scene Browser</strong>
+            </div>
+            <div className="studio-pane-actions">
+              <button
+                className={`dock-tab-button ${comboViewTab === "model" ? "dock-tab-button-active" : ""}`}
+                onClick={() => void handlePanelTabChange("combo_view", "model")}
+                type="button"
+              >
+                Scene
+              </button>
+              <button
+                className={`dock-tab-button ${comboViewTab === "tasks" ? "dock-tab-button-active" : ""}`}
+                onClick={() => void handlePanelTabChange("combo_view", "tasks")}
+                type="button"
+              >
+                Workflow
+              </button>
+              <button
+                className="dock-tab-button dock-tab-button-utility"
+                onClick={() => void handlePanelVisibilityChange("combo_view", false)}
+                type="button"
+              >
+                Hide
+              </button>
+            </div>
           </div>
 
-          {comboViewTab === "model" ? (
-            <div className="combo-view-body combo-model-stack">
-              <section className="dock-panel combo-pane">
-                <div className="panel-header panel-header-dense">
-                  <h2>Model</h2>
-                  <span>
-                    {selectionState
-                      ? `${selectionState.current_mode} / ${selectableObjectCount} selectable`
-                      : document.file_path ?? "Unsaved document"}
-                  </span>
-                </div>
-                <div className="tree-panel combo-pane-scroll">
-                  {objectTree.map((node) => (
-                    <TreeNode
-                      key={node.object_id}
-                      node={node}
-                      onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
-                      onSelect={handleSelect}
-                      preselectedObjectId={preselectionState?.object_id ?? null}
-                      selectedObjectId={selectedObjectId}
-                      selectionMode={selectionState?.current_mode ?? "object"}
-                    />
-                  ))}
-                </div>
-              </section>
+          <div className="studio-sidebar-scroll">
+            <SessionTabs
+              activeDocumentId={document.document_id}
+              activeFilePath={document.file_path}
+              onClearInactive={() => {
+                void handleClearInactiveSessions();
+              }}
+              onDismiss={(session) => {
+                void handleDismissSession(session);
+              }}
+              onActivate={(session) => {
+                void handleSessionActivate(session);
+              }}
+              onActivateScope={(session) => {
+                void handleSessionScopeActivate(session);
+              }}
+              sessions={workspaceSessions}
+            />
 
-              <section className="dock-panel combo-pane combo-pane-properties">
-                <div className="panel-header panel-header-dense">
-                  <h2>Data</h2>
-                  <span>{properties?.object_id ?? "No active selection"}</span>
+            {recentDocuments.length > 0 ? (
+              <section className="studio-sidebar-section">
+                <div className="studio-sidebar-section-head">
+                  <span className="dock-strip-label">Recent</span>
+                  <button
+                    className="action-button action-button-subtle"
+                    onClick={() => void handleClearRecentDocuments()}
+                    type="button"
+                  >
+                    Clear History
+                  </button>
                 </div>
-                <div className="property-groups combo-pane-scroll">
-                  {(properties?.groups ?? []).map((group) => (
-                    <div className="property-group" key={group.group_id}>
-                      <h3>{group.title}</h3>
-                      {group.properties.map((property) => (
-                        <div className="property-row" key={property.property_id}>
-                          <div>
-                            <div className="property-name">{property.display_name}</div>
-                            <div className="property-type">{property.property_type}</div>
-                          </div>
-                          <div className="property-value">
-                            <span>{property.value_preview}</span>
-                            {property.expression_capable ? <em>fx</em> : null}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="recent-docs-list studio-recent-docs-list">
+                  {recentDocuments.map((entry) => (
+                    <button
+                      className={`recent-doc-chip ${(document.file_path ?? openPath) === entry.file_path ? "recent-doc-chip-active" : ""}`}
+                      key={entry.file_path}
+                      onClick={() => void handleRecentDocumentOpen(entry.file_path)}
+                      title={`${entry.display_name} • ${entry.workbench} • ${entry.dirty ? "Unsaved" : "Saved"}`}
+                      type="button"
+                    >
+                      {entry.display_name}
+                    </button>
                   ))}
                 </div>
               </section>
-            </div>
-          ) : (
-            <div className="combo-view-body combo-view-task-stack">
-              <TaskPanel
-                commandCatalog={commandCatalog}
-                onRunCommand={(commandId, commandArguments) =>
-                  void handleCommand(commandId, commandArguments ?? {})
-                }
-                taskPanel={taskPanel}
-              />
-              <SelectionInspector
-                commandCatalog={commandCatalog}
-                featureHistory={featureHistory}
+            ) : null}
+
+            <div className="combo-view-body combo-model-stack studio-scene-stack">
+              <ModelBrowserPane
                 objectTree={objectTree}
-                onRunSelectedCommand={(commandId, commandArguments) =>
-                  void handleCommand(commandId, commandArguments ?? {})
-                }
-                onPromotePreselectionCommand={(commandId) =>
-                  void handlePromotePreselectionCommand(commandId)
-                }
-                onRunPreselectionCommand={(commandId, commandArguments) =>
-                  void handleRunPreselectionCommand(commandId, commandArguments ?? {})
-                }
-                preselectionState={preselectionState}
-                properties={properties}
+                onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
+                onSelect={handleSelect}
+                preselectedObjectId={preselectionState?.object_id ?? null}
                 selectedObjectId={selectedObjectId}
-                viewport={viewport}
+                selectionMode={selectionState?.current_mode ?? "object"}
               />
             </div>
-          )}
+          </div>
         </aside>
         ) : null}
 
-        <section className="freecad-main-column" style={mainColumnStyle}>
-          <section className="panel viewport-panel freecad-viewport-panel">
-            <div className="panel-header">
-              <h2>3D View</h2>
-              <span>{document.file_path ?? "Unsaved document"}</span>
+        {comboViewVisible ? (
+          <div
+            aria-label="Resize combo view"
+            aria-orientation="vertical"
+            className={`freecad-pane-resize-handle freecad-pane-resize-handle-vertical ${
+              activeResizePanelId === "combo_view" ? "freecad-pane-resize-handle-active" : ""
+            }`.trim()}
+            onPointerDown={(event) =>
+              handlePanelResizeDragStart("combo_view", "horizontal", workspaceRef.current, event)
+            }
+            role="separator"
+          />
+        ) : null}
+
+        <section className="studio-center-column" ref={mainColumnRef} style={studioCenterColumnStyle}>
+          <section className="panel viewport-panel freecad-viewport-panel studio-viewport-shell">
+            <div className="studio-viewport-chrome">
+              <div className="studio-viewport-title">
+                <span className="dock-strip-label">Viewport</span>
+                <strong>{document.file_path ?? "Unsaved document"}</strong>
+              </div>
+              <div className="studio-viewport-actions">
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint - 0.03)}
+                  type="button"
+                >
+                  Narrower
+                </button>
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelSizeChange("combo_view", comboViewSizeHint + 0.03)}
+                  type="button"
+                >
+                  Wider
+                </button>
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelVisibilityChange("report_dock", !reportDockVisible)}
+                  type="button"
+                >
+                  {reportDockVisible ? "Hide Utilities" : "Show Utilities"}
+                </button>
+              </div>
             </div>
-            <div className="viewport-canvas">
+            <div
+              className="viewport-canvas"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setViewportAnchorFromClientPosition(event.currentTarget, event.clientX, event.clientY);
+                setViewportCommandLensOpen(true);
+              }}
+              onPointerDown={(event) => {
+                setViewportAnchorFromClientPosition(event.currentTarget, event.clientX, event.clientY);
+              }}
+              onPointerMove={(event) => {
+                setViewportAnchorFromClientPosition(event.currentTarget, event.clientX, event.clientY);
+              }}
+            >
               {stepAvailable && stepDocument && stepScene ? (
-                <StepViewportScene
-                  cameraEye={viewport?.scene.camera_eye}
-                  cameraTarget={viewport?.scene.camera_target}
-                  onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
-                  onSelect={handleSelect}
-                  preselectedObjectId={preselectionState?.object_id ?? null}
-                  selectedObjectId={selectedObjectId}
-                  shellSnapshot={shellSnapshot}
-                  stepDocument={stepDocument}
-                  stepScene={stepScene}
-                  visibleDrawables={viewport?.scene.drawables}
-                />
+                <Suspense fallback={<div className="viewport-empty">Loading STEP viewport...</div>}>
+                  <LazyStepViewportScene
+                    cameraEye={viewport?.scene.camera_eye}
+                    cameraTarget={viewport?.scene.camera_target}
+                    onHoverChange={(objectId) => void handlePreselectionChange(objectId)}
+                    onSelect={handleSelect}
+                    preselectedObjectId={preselectionState?.object_id ?? null}
+                    selectedObjectId={selectedObjectId}
+                    shellSnapshot={shellSnapshot}
+                    stepDocument={stepDocument}
+                    stepScene={stepScene}
+                    visibleDrawables={viewport?.scene.drawables}
+                  />
+                </Suspense>
               ) : (
                 <ViewportScene
                   objectTypeById={objectTypeById}
@@ -4219,7 +5441,10 @@ export default function App() {
                 onApplyPreset={(preset) => void handleApplyStepViewportPreset(preset)}
                 onFitAll={() => void handleFitAllStepViewport()}
                 onFocusSelection={() => void handleCommand("selection.focus")}
-                onOpenPalette={() => setPaletteOpen(true)}
+                onOpenPalette={() => {
+                  setViewportCommandLensOpen(false);
+                  setPaletteOpen(true);
+                }}
                 onOpenModel={() => void handlePanelTabChange("combo_view", "model")}
                 onOpenReport={() => void handlePanelTabChange("report_dock", "report")}
                 onOpenTasks={() => void handlePanelTabChange("combo_view", "tasks")}
@@ -4232,10 +5457,26 @@ export default function App() {
               />
               <ViewportCommandBar
                 commandCatalog={commandCatalog}
+                onOpenPalette={() => {
+                  setViewportCommandLensOpen(false);
+                  setPaletteOpen(true);
+                }}
+                onRunCommand={(commandId, commandArguments, targetObjectId) =>
+                  void handleCommand(commandId, commandArguments ?? {}, targetObjectId)
+                }
+                preselectionState={preselectionState}
+                selectedObjectId={selectedObjectId}
+                taskPanel={taskPanel}
+              />
+              <ViewportCommandLens
+                anchor={viewportPointerAnchor}
+                commandCatalog={commandCatalog}
+                onClose={() => setViewportCommandLensOpen(false)}
                 onOpenPalette={() => setPaletteOpen(true)}
                 onRunCommand={(commandId, commandArguments, targetObjectId) =>
                   void handleCommand(commandId, commandArguments ?? {}, targetObjectId)
                 }
+                open={viewportCommandLensOpen}
                 preselectionState={preselectionState}
                 selectedObjectId={selectedObjectId}
                 taskPanel={taskPanel}
@@ -4287,182 +5528,272 @@ export default function App() {
           </section>
 
           {reportDockVisible ? (
-          <section className="panel freecad-bottom-dock">
-            <div className="dock-tab-strip dock-tab-strip-bottom">
-              <button
-                className={`dock-tab-button ${bottomDockTab === "report" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "report")}
-                type="button"
-              >
-                Report view
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "python" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "python")}
-                type="button"
-              >
-                Python console
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "jobs" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "jobs")}
-                type="button"
-              >
-                Jobs
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "diagnostics" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "diagnostics")}
-                type="button"
-              >
-                Diagnostics
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "history" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "history")}
-                type="button"
-              >
-                History
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "commands" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "commands")}
-                type="button"
-              >
-                Commands
-              </button>
-              <button
-                className={`dock-tab-button ${bottomDockTab === "extensions" ? "dock-tab-button-active" : ""}`}
-                onClick={() => void handlePanelTabChange("report_dock", "extensions")}
-                type="button"
-              >
-                Extensions
-              </button>
-              <button
-                className="dock-tab-button dock-tab-button-utility"
-                onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint - 0.03)}
-                type="button"
-              >
-                Shorter
-              </button>
-              <button
-                className="dock-tab-button dock-tab-button-utility"
-                onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint + 0.03)}
-                type="button"
-              >
-                Taller
-              </button>
-              <button
-                className="dock-tab-button dock-tab-button-utility"
-                onClick={() => void handlePanelVisibilityChange("report_dock", false)}
-                type="button"
-              >
-                Hide
-              </button>
+            <div
+              aria-label="Resize bottom dock"
+              aria-orientation="horizontal"
+              className={`freecad-pane-resize-handle freecad-pane-resize-handle-horizontal ${
+                activeResizePanelId === "report_dock" ? "freecad-pane-resize-handle-active" : ""
+              }`.trim()}
+              onPointerDown={(event) =>
+                handlePanelResizeDragStart("report_dock", "vertical", mainColumnRef.current, event)
+              }
+              role="separator"
+            />
+          ) : null}
+
+          {reportDockVisible ? (
+          <section className="panel freecad-bottom-dock studio-bottom-dock-shell">
+            <div className="bottom-dock-tray">
+              <div className="bottom-dock-tray-header">
+                <div className="bottom-dock-tray-title">
+                  <span>Utilities</span>
+                  <strong>{activeBottomDockSection.label}</strong>
+                </div>
+                <div className="bottom-dock-tray-summary">
+                  <span>{activeBottomDockSection.summary}</span>
+                  <strong>{activeBottomDockSection.count}</strong>
+                </div>
+              </div>
+              <div className="bottom-dock-tray-strip">
+                {bottomDockSections.map((section) => (
+                  <button
+                    className={`bottom-dock-chip ${bottomDockTab === section.tab ? "bottom-dock-chip-active" : ""}`}
+                    key={section.tab}
+                    onClick={() => void handlePanelTabChange("report_dock", section.tab)}
+                    type="button"
+                  >
+                    <span>{section.label}</span>
+                    <strong>{section.count}</strong>
+                  </button>
+                ))}
+              </div>
+              <div className="bottom-dock-tray-actions">
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint - 0.03)}
+                  type="button"
+                >
+                  Shorter
+                </button>
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelSizeChange("report_dock", reportDockSizeHint + 0.03)}
+                  type="button"
+                >
+                  Taller
+                </button>
+                <button
+                  className="dock-tab-button dock-tab-button-utility"
+                  onClick={() => void handlePanelVisibilityChange("report_dock", false)}
+                  type="button"
+                >
+                  Hide
+                </button>
+              </div>
             </div>
 
-            <div className="bottom-dock-content">
-              {bottomDockTab === "report" ? (
-                <div className="bottom-dock-report">
-                  <NotificationCenter
-                    commandCatalog={commandCatalog}
-                    notices={shellNotices}
-                    onFocusNoticeObject={(objectId) =>
-                      void handleSelectAndCommand(objectId, "selection.focus")
-                    }
-                    onRunNoticeCommand={(commandId, targetObjectId) =>
-                      void handleCommand(commandId, {}, targetObjectId)
-                    }
-                    onSelectNoticeObject={(objectId) => void handleSelect(objectId)}
-                  />
-                  <ReportInspectionSummary
-                    commandCatalog={commandCatalog}
-                    onRunCommand={(commandId, targetObjectId) =>
-                      void handleCommand(commandId, {}, targetObjectId)
-                    }
-                    shellSnapshot={shellSnapshot}
-                  />
-                  <ReportActivityFeed
-                    commandCatalog={commandCatalog}
-                    onFocusActivityObject={(objectId) =>
-                      void handleSelectAndCommand(objectId, "selection.focus")
-                    }
-                    onRunCommand={(commandId, targetObjectId) =>
-                      void handleCommand(commandId, {}, targetObjectId)
-                    }
-                    onSelectActivityObject={(objectId) => void handleSelect(objectId)}
-                    reportEvents={reportEvents}
-                  />
-                </div>
-              ) : null}
-
-              {bottomDockTab === "python" ? (
-                <section className="dock-panel python-console-placeholder">
-                  <div className="panel-header">
-                    <h2>Python Console</h2>
-                    <span>Compatibility host planned</span>
+            <div className={`bottom-dock-layout ${showPinnedBottomDockRail ? "bottom-dock-layout-with-rail" : ""}`.trim()}>
+              <div className="bottom-dock-content">
+                {bottomDockTab === "report" ? (
+                  <div className="bottom-dock-report">
+                    <NotificationCenter
+                      commandCatalog={commandCatalog}
+                      notices={shellNotices}
+                      onFocusNoticeObject={(objectId) =>
+                        void handleSelectAndCommand(objectId, "selection.focus")
+                      }
+                      onRunNoticeCommand={(commandId, targetObjectId) =>
+                        void handleCommand(commandId, {}, targetObjectId)
+                      }
+                      onSelectNoticeObject={(objectId) => void handleSelect(objectId)}
+                    />
+                    <ReportInspectionSummary
+                      commandCatalog={commandCatalog}
+                      onRunCommand={(commandId, targetObjectId) =>
+                        void handleCommand(commandId, {}, targetObjectId)
+                      }
+                      shellSnapshot={shellSnapshot}
+                    />
+                    <ReportActivityFeed
+                      commandCatalog={commandCatalog}
+                      filterState={reportDockFilter}
+                      onClearFilter={() => {
+                        setReportDockFilter(null);
+                        void handlePersistDockFilters({ clear_report_dock_filter: true });
+                      }}
+                      onFocusActivityObject={(objectId) =>
+                        void handleSelectAndCommand(objectId, "selection.focus")
+                      }
+                      onRunCommand={(commandId, targetObjectId) =>
+                        void handleCommand(commandId, {}, targetObjectId)
+                      }
+                      onSelectActivityObject={(objectId) => void handleSelect(objectId)}
+                      reportEvents={reportEvents}
+                    />
                   </div>
-                  <div className="python-console-shell">
-                    <div className="python-console-log">
-                      <div>{">>> import FreeCAD as App"}</div>
-                      <div>{">>> App.ActiveDocument"}</div>
-                      <div>{"<Backend automation bridge pending>"}</div>
-                    </div>
-                    <div className="python-console-note">
-                      This dock slot is intentionally reserved now so the React shell matches the
-                      classic FreeCAD workspace anatomy while we wire a real backend console
-                      service next.
-                    </div>
-                  </div>
-                </section>
-              ) : null}
+                ) : null}
 
-              {bottomDockTab === "jobs" ? <JobsPanel jobs={jobs} /> : null}
-              {bottomDockTab === "diagnostics" ? (
-                <DiagnosticsPanel commandStatus={commandStatus} diagnostics={diagnostics} />
-              ) : null}
-              {bottomDockTab === "history" ? (
-                <FeatureTimeline
-                  history={featureHistory}
-                  onSelect={(objectId) => void handleSelect(objectId)}
-                  onRollbackHere={(objectId) => {
-                    if (selectedObjectId !== objectId) {
-                      void handleSelectAndCommand(objectId, "history.rollback_here");
-                      return;
+                {bottomDockTab === "python" ? (
+                  <section className="dock-panel python-console-placeholder">
+                    <div className="panel-header">
+                      <h2>Python Console</h2>
+                      <span>Compatibility host planned</span>
+                    </div>
+                    <div className="python-console-shell">
+                      <div className="python-console-log">
+                        <div>{">>> import FreeCAD as App"}</div>
+                        <div>{">>> App.ActiveDocument"}</div>
+                        <div>{"<Backend automation bridge pending>"}</div>
+                      </div>
+                      <div className="python-console-note">
+                        This dock slot is intentionally reserved now so the React shell matches the
+                        classic FreeCAD workspace anatomy while we wire a real backend console
+                        service next.
+                      </div>
+                    </div>
+                  </section>
+                ) : null}
+
+                {bottomDockTab === "jobs" ? (
+                  <JobsPanel
+                    commandCatalog={commandCatalog}
+                    jobs={jobs}
+                    onFocusJobObject={(objectId) => void handleSelectAndCommand(objectId, "selection.focus")}
+                    onOpenJobDiagnostics={(filterState) =>
+                      void handleOpenFilteredBottomDockTab("diagnostics", filterState)
                     }
-                    void handleCommand("history.rollback_here");
-                  }}
-                  onResumeFull={() => void handleCommand("history.resume_full")}
-                  onToggleSuppression={(objectId) => {
-                    if (selectedObjectId !== objectId) {
-                      void handleSelectAndCommand(objectId, "model.toggle_suppression");
-                      return;
+                    onOpenJobReport={(filterState) =>
+                      void handleOpenFilteredBottomDockTab("report", filterState)
                     }
-                    void handleCommand("model.toggle_suppression");
-                  }}
-                  selectedObjectId={selectedObjectId}
-                />
-              ) : null}
-              {bottomDockTab === "commands" ? (
-                <CommandCatalog
-                  catalog={commandCatalog}
-                  onRunCommand={(id) => void handleCommand(id)}
-                  taskPanel={taskPanel}
-                />
-              ) : null}
-              {bottomDockTab === "extensions" ? (
-                <ExtensionCompatibilityPanel
+                    onRunJobCommand={(commandId, targetObjectId) =>
+                      void handleCommand(commandId, {}, targetObjectId)
+                    }
+                    reportEvents={events}
+                    onSelectJobObject={(objectId) => void handleSelect(objectId)}
+                  />
+                ) : null}
+                {bottomDockTab === "diagnostics" ? (
+                  <DiagnosticsPanel
+                    commandStatus={commandStatus}
+                    diagnostics={diagnostics}
+                    filterState={diagnosticsDockFilter}
+                    onClearFilter={() => {
+                      setDiagnosticsDockFilter(null);
+                      void handlePersistDockFilters({ clear_diagnostics_dock_filter: true });
+                    }}
+                  />
+                ) : null}
+                {bottomDockTab === "history" ? (
+                  <FeatureTimeline
+                    history={featureHistory}
+                    onSelect={(objectId) => void handleSelect(objectId)}
+                    onRollbackHere={(objectId) => {
+                      if (selectedObjectId !== objectId) {
+                        void handleSelectAndCommand(objectId, "history.rollback_here");
+                        return;
+                      }
+                      void handleCommand("history.rollback_here");
+                    }}
+                    onResumeFull={() => void handleCommand("history.resume_full")}
+                    onToggleSuppression={(objectId) => {
+                      if (selectedObjectId !== objectId) {
+                        void handleSelectAndCommand(objectId, "model.toggle_suppression");
+                        return;
+                      }
+                      void handleCommand("model.toggle_suppression");
+                    }}
+                    selectedObjectId={selectedObjectId}
+                  />
+                ) : null}
+                {bottomDockTab === "commands" ? (
+                  <CommandCatalog
+                    catalog={commandCatalog}
+                    onRunCommand={(id) => void handleCommand(id)}
+                    taskPanel={taskPanel}
+                  />
+                ) : null}
+                {bottomDockTab === "extensions" ? (
+                  <ExtensionCompatibilityPanel
+                    commandCatalog={commandCatalog}
+                    extensionCompatibility={extensionCompatibility}
+                    onRunCommand={(commandId, commandArguments) =>
+                      void handleCommand(commandId, commandArguments ?? {})
+                    }
+                  />
+                ) : null}
+              </div>
+
+              {showPinnedBottomDockRail ? (
+                <BottomDockPinnedRail
                   commandCatalog={commandCatalog}
-                  extensionCompatibility={extensionCompatibility}
-                  onRunCommand={(commandId, commandArguments) =>
-                    void handleCommand(commandId, commandArguments ?? {})
+                  jobs={jobs}
+                  notices={shellNotices}
+                  onFocusJobObject={(objectId) => void handleSelectAndCommand(objectId, "selection.focus")}
+                  onFocusNoticeObject={(objectId) => void handleSelectAndCommand(objectId, "selection.focus")}
+                  onOpenJobs={() => void handlePanelTabChange("report_dock", "jobs")}
+                  onOpenReport={() => void handlePanelTabChange("report_dock", "report")}
+                  onRunJobCommand={(commandId, targetObjectId) =>
+                    void handleCommand(commandId, {}, targetObjectId)
                   }
+                  onRunNoticeCommand={(commandId, targetObjectId) =>
+                    void handleCommand(commandId, {}, targetObjectId)
+                  }
+                  onSelectJobObject={(objectId) => void handleSelect(objectId)}
+                  onSelectNoticeObject={(objectId) => void handleSelect(objectId)}
                 />
               ) : null}
             </div>
           </section>
           ) : null}
         </section>
+
+        <aside className="panel studio-sidebar-right">
+          <div className="studio-pane-heading studio-pane-heading-right">
+            <div>
+              <span className="dock-strip-label">Inspector</span>
+              <strong>{comboViewTab === "tasks" ? "Workflow" : "Selection"}</strong>
+            </div>
+            <div className="studio-pane-actions">
+              <button
+                className={`dock-tab-button ${comboViewTab === "model" ? "dock-tab-button-active" : ""}`}
+                onClick={() => void handlePanelTabChange("combo_view", "model")}
+                type="button"
+              >
+                Inspect
+              </button>
+              <button
+                className={`dock-tab-button ${comboViewTab === "tasks" ? "dock-tab-button-active" : ""}`}
+                onClick={() => void handlePanelTabChange("combo_view", "tasks")}
+                type="button"
+              >
+                Workflow
+              </button>
+            </div>
+          </div>
+
+          <div className="studio-sidebar-scroll studio-sidebar-scroll-right">
+            {studioInspectorPrimary}
+            <SelectionInspector
+              commandCatalog={commandCatalog}
+              featureHistory={featureHistory}
+              objectTree={objectTree}
+              onRunSelectedCommand={(commandId, commandArguments) =>
+                void handleCommand(commandId, commandArguments ?? {})
+              }
+              onPromotePreselectionCommand={(commandId) =>
+                void handlePromotePreselectionCommand(commandId)
+              }
+              onRunPreselectionCommand={(commandId, commandArguments) =>
+                void handleRunPreselectionCommand(commandId, commandArguments ?? {})
+              }
+              preselectionState={preselectionState}
+              properties={properties}
+              selectedObjectId={selectedObjectId}
+              viewport={viewport}
+            />
+            {studioInspectorSecondary}
+          </div>
+        </aside>
       </main>
 
       <footer className="freecad-statusbar">
